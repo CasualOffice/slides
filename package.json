@@ -10,7 +10,9 @@
     "build:web": "pnpm --filter @point/web build",
     "typecheck": "pnpm -r typecheck",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:collab": "playwright test --config=playwright.collab.config.ts",
+    "dev:server": "pnpm --filter @point/server dev"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

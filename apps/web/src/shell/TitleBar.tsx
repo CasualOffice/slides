@@ -24,6 +24,9 @@ export interface TitleBarProps {
   opening?: boolean;
   status?: string | null;
   error?: string | null;
+  collabStatus?: 'idle' | 'connecting' | 'live' | 'reconnecting' | 'error';
+  collabRoomId?: string | null;
+  collabPeers?: number;
 }
 
 interface MenuItem {
@@ -87,6 +90,9 @@ export function TitleBar({
   opening,
   status,
   error,
+  collabStatus,
+  collabRoomId,
+  collabPeers = 0,
 }: TitleBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [filenameEditing, setFilenameEditing] = useState(false);
@@ -215,6 +221,21 @@ export function TitleBar({
         </nav>
       </div>
       <div className="cs-titlebar__actions">
+        {collabRoomId && (
+          <span
+            className={`cs-titlebar__live cs-titlebar__live--${collabStatus ?? 'idle'}`}
+            data-testid="collab-pill"
+            title={
+              collabStatus === 'live'
+                ? `Live in room "${collabRoomId}" · ${collabPeers + 1} editor${collabPeers ? 's' : ''}`
+                : `Collab room ${collabRoomId} (${collabStatus ?? 'idle'})`
+            }
+          >
+            <span className="cs-titlebar__live-dot" />
+            {collabStatus === 'live' ? 'Live' : (collabStatus ?? 'idle')}
+            {collabStatus === 'live' && collabPeers > 0 && ` · ${collabPeers + 1}`}
+          </span>
+        )}
         <button type="button" className="cs-btn cs-btn--ghost" onClick={onOpen} disabled={opening}>
           <Icon name="folder_open" size={16} />
           <span>{opening ? 'Opening' : 'Open'}</span>

@@ -13,6 +13,7 @@ import { SlideShow } from './shell/SlideShow';
 import { NotesPanel } from './shell/NotesPanel';
 import { ThemePicker } from './shell/ThemePicker';
 import { dispatchSlideCommand } from './univer/commands';
+import { useCollabBridge } from './collab/CollabProvider';
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -69,6 +70,7 @@ export function App() {
 
   const fileName = useMemo(() => deckTitle(snapshot), [snapshot]);
   const slideCount = snapshot.body?.pageOrder?.length ?? 0;
+  const collab = useCollabBridge();
 
   // Global keyboard shortcuts. Each guards on the active element NOT being
   // an editable input (text-frame editor inside Univer manages its own
@@ -179,6 +181,9 @@ export function App() {
         opening={opening}
         status={status}
         error={error}
+        collabStatus={collab.status}
+        collabRoomId={collab.roomId}
+        collabPeers={collab.peers}
       />
       <Toolbar />
       <input

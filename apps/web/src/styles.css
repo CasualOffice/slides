@@ -177,6 +177,64 @@ button:disabled { cursor: not-allowed; }
   flex-shrink: 0;
 }
 
+.cs-titlebar__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-transform: lowercase;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--cs-border-2);
+  background: var(--cs-surface-2);
+  color: var(--cs-text-mute);
+  margin-right: 4px;
+}
+
+.cs-titlebar__live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cs-text-dim);
+}
+
+.cs-titlebar__live--live {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+.cs-titlebar__live--live .cs-titlebar__live-dot {
+  background: #10b981;
+  animation: cs-pulse 1.6s ease-in-out infinite;
+}
+
+.cs-titlebar__live--connecting,
+.cs-titlebar__live--reconnecting {
+  background: #fef3c7;
+  border-color: #fde68a;
+  color: #92400e;
+}
+.cs-titlebar__live--connecting .cs-titlebar__live-dot,
+.cs-titlebar__live--reconnecting .cs-titlebar__live-dot {
+  background: #f59e0b;
+}
+
+.cs-titlebar__live--error {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+.cs-titlebar__live--error .cs-titlebar__live-dot { background: #dc2626; }
+
+@keyframes cs-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .cs-titlebar__avatar {
   width: 32px;
   height: 32px;

@@ -10,7 +10,12 @@ export default defineConfig({
   // captures — they're triage tools, not regression guards. Run them
   // explicitly via `pnpm exec playwright test --config=playwright.diagnostic.config.ts`
   // when needed.
-  testIgnore: ['**/__diagnostic__/**'],
+  testIgnore: [
+    '**/__diagnostic__/**',
+    // collab-multitab spawns its own server + spins up 2 browser contexts.
+    // Run explicitly via `pnpm test:e2e:collab` so the default suite stays fast.
+    '**/collab-multitab.spec.ts',
+  ],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
