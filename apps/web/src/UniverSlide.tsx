@@ -98,6 +98,15 @@ export function UniverSlide({ snapshot }: UniverSlideProps) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (globalThis as any).__casualSlides__IUniverInstanceService = IUniverInstanceService;
 
+      // Expose the pptx export client so e2e tests can call
+      // `exportSlidesToPptx` directly on a hand-built snapshot — needed
+      // for image round-trip tests where we want to verify the produced
+      // zip contains `ppt/media/*` entries.
+      import('./pptx/client').then((m) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (globalThis as any).__casualSlides_getPptxClient = m.getPptxClient;
+      });
+
       // Spike-C runtime probe for the Gap 1 rev-tracking patch. Pre-patch
       // SlideDataModel.getRev() returned 0 forever and incrementRev was a
       // no-op. Post-patch it starts at 1 and bumps by one. Call from the

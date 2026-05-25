@@ -12,7 +12,7 @@ Update this file when an item lands or shifts ownership.
 |---|----------------------------------|---------|----------------------------|------------|-------|
 | 1 | Properties dialog                | main    | `main`                     | ✅ landed   | **Feature**. File → Properties → modal with title / slide count / page size / element count / text length / format. Esc + click-outside close. |
 | 2 | Slide-bar right-click menu       | main    | `main`                     | ✅ landed   | **Feature**. Right-click thumbnail → New / Duplicate / Delete. DOM-walks to find the thumbnail's slide-index span; suppresses native context menu. |
-| 3 | Image export round-trip          | -       | -                          | ⏳ pending  | **Fidelity**. Parallel-agent run blocked by org usage limit. Picking up sequentially next turn. |
+| 3 | Image export round-trip          | main    | `main`                     | ✅ landed   | **Fidelity**. `IMAGE` page elements now embed into `ppt/media/` on export via PptxGenJS `addImage({ data: 'data:image/png;base64,…' })`. Prefer `contentUrl`, fall back to `base64Cache`; default MIME `image/png`. Round-trip test asserts media entries exist after export. |
 
 Parallel agent dispatch hit the org's monthly usage limit (3 spawned, 0 progress). Sprint 1 is being completed sequentially on `main`.
 

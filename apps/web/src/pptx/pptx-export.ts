@@ -1,5 +1,5 @@
 import pptxgen from 'pptxgenjs';
-import type { IPageElement, IShape, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
+import type { IImage, IPageElement, IShape, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
 
 // Convert an ISlideData snapshot into a .pptx Blob via PptxGenJS.
@@ -95,6 +95,53 @@ function emitShapeElement(slide: pptxgen.Slide, element: IPageElement, shape: IS
   }
 }
 
+// Resolve the bytes-or-URL source for an IMAGE element to the form
+// PptxGenJS's addImage() accepts. We prefer contentUrl when it's already a
+// `data:` URI or an http(s) URL; otherwise we synthesize a `data:` URI from
+// base64Cache. Returns null when there's nothing usable.
+//
+// MIME caveat: if base64Cache doesn't have a `data:` prefix we default to
+// `image/png`. That's the most common embed (PowerPoint emits PNG for
+// pastes, screenshots, etc.) — JPEG/GIF/SVG base64 dropped through this
+// path would still embed as `image/png` and survive bytes-wise; viewers
+// sniff the actual content. Tracked in PPTX_PIPELINE.md.
+function imageSource(image: IImage): string | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const props = image.imageProperties as any;
+  if (!props) return null;
+  const contentUrl: unknown = props.contentUrl;
+  if (typeof contentUrl === 'string' && contentUrl.length > 0) {
+    if (contentUrl.startsWith('data:') || /^https?:/i.test(contentUrl)) {
+      return contentUrl;
+    }
+  }
+  const base64: unknown = props.base64Cache;
+  if (typeof base64 === 'string' && base64.length > 0) {
+    if (base64.startsWith('data:')) return base64;
+    return `data:image/png;base64,${base64}`;
+  }
+  return null;
+}
+
+function emitImageElement(slide: pptxgen.Slide, element: IPageElement, image: IImage) {
+  const data = imageSource(image);
+  if (!data) {
+    // eslint-disable-next-line no-console
+    console.warn(`[pptx-export] image element ${element.id} has no usable contentUrl/base64Cache; dropped`);
+    return;
+  }
+  slide.addImage({
+    data,
+    x: px2in(element.left),
+    y: px2in(element.top),
+    w: px2in(element.width),
+    h: px2in(element.height),
+    rotate: element.angle ?? 0,
+    flipH: !!element.flipX,
+    flipV: !!element.flipY,
+  });
+}
+
 function emitTextElement(slide: pptxgen.Slide, element: IPageElement, richText: ISlideRichTextProps) {
   slide.addText(richText.text ?? '', {
     x: px2in(element.left),
@@ -141,8 +188,10 @@ function emitPage(deck: pptxgen, page: ISlidePage) {
       emitShapeElement(slide, element, element.shape);
       continue;
     }
-    // IMAGE — model is in place; export needs base64 hand-off + the
-    // pptxgen `data:image/png;base64,...` shape. Punt to a follow-up.
+    if (element.type === PageElementType.IMAGE && element.image) {
+      emitImageElement(slide, element, element.image);
+      continue;
+    }
     // TABLE / CHART / LINE / VIDEO — blocked on Gap 3 (page-element types
     // missing in Univer Slides). Skipping is the right move.
   }

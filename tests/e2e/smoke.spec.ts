@@ -366,6 +366,84 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     await expect(page.locator('[data-testid="slide-context-menu"]')).toHaveCount(0);
   });
 
+  test('Image export round-trip — image bytes land in ppt/media/', async ({ page }) => {
+    // Build an ISlideData snapshot with one IMAGE element that carries a
+    // 1×1 transparent PNG as a data: URI. Export via the pptx client and
+    // verify the produced zip contains a `ppt/media/image1.png` entry.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+
+    const PNG_1x1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+    // Build the snapshot + export in-page, return the bytes; unzip in Node
+    // (browser can't dynamic-import 'jszip' without Vite pre-bundling it
+    // as a known endpoint).
+    const bytes = await page.evaluate(async (dataUri) => {
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          export(snapshot: unknown): Promise<{ blob: Blob; fileName: string }>;
+        };
+      };
+      const client = (window as unknown as W).__casualSlides_getPptxClient();
+      const snapshot = {
+        id: 'image-round-trip',
+        title: 'image round-trip',
+        pageSize: { width: 960, height: 540 },
+        body: {
+          pageOrder: ['p1'],
+          pages: {
+            p1: {
+              id: 'p1',
+              pageType: 0,                          // PageType.SLIDE
+              zIndex: 1,
+              title: 'p1',
+              description: '',
+              pageBackgroundFill: { rgb: 'rgb(255,255,255)' },
+              pageElements: {
+                'img-1': {
+                  id: 'img-1',
+                  zIndex: 1,
+                  left: 100,
+                  top: 100,
+                  width: 200,
+                  height: 200,
+                  title: 'test image',
+                  description: '',
+                  type: 1,                          // PageElementType.IMAGE
+                  image: { imageProperties: { contentUrl: dataUri } },
+                },
+              },
+            },
+          },
+        },
+      };
+      const { blob } = await client.export(snapshot);
+      const buf = await blob.arrayBuffer();
+      return Array.from(new Uint8Array(buf));
+    }, PNG_1x1);
+
+    const JSZip = (await import('jszip')).default;
+    const zip = await JSZip.loadAsync(new Uint8Array(bytes));
+    const mediaEntries = Object.keys(zip.files).filter((n) => n.startsWith('ppt/media/'));
+
+    // Sanity: at least one media entry was produced and at least one is a
+    // raster image (PNG/JPEG/GIF). PptxGenJS varies its naming
+    // (`image1.png`, `image-1.png`, etc.) across versions — match by
+    // extension rather than the full name.
+    expect(
+      mediaEntries.length,
+      `expected ppt/media/* entries, got: ${mediaEntries.join(', ') || '(none)'}`,
+    ).toBeGreaterThan(0);
+    expect(
+      mediaEntries.some((n) => /\.(png|jpe?g|gif|bmp)$/i.test(n)),
+      `expected an image file under ppt/media/, got: ${mediaEntries.join(', ')}`,
+    ).toBe(true);
+  });
+
   test('File → Properties shows deck metadata', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(

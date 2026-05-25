@@ -22,6 +22,9 @@ importers:
       '@playwright/test':
         specifier: ^1.60.0
         version: 1.60.0
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       tsx:
         specifier: ^4.22.3
         version: 4.22.3
