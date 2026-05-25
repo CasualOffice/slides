@@ -10,9 +10,9 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 4)
+## Snapshot — 2026-05-26 (post wave 4 + 4b)
 
-**13 / 87 items at ✅, 7 at ⚠️.** Wave 4 landed I3 (placeholder geometry inherits from slideLayout, then slideMaster). This was the single biggest visible miss — real-world decks lean heavily on the layout to position title/content placeholders, and skipping inheritance was rendering imported decks as collections of 0×0 elements stacked at origin. **I4** (placeholder default text style — `<a:lstStyle><a:lvl1pPr><a:defRPr>`) is next: title font / size / colour still revert to defaults until that lands.
+**14 / 87 items at ✅, 7 at ⚠️.** Wave 4 landed I3 (placeholder geometry inheritance) and Wave 4b landed I4 (placeholder default text style — `<a:lstStyle><a:lvl1pPr><a:defRPr>` from layout / master). Together these address the dominant "imported decks look empty / unstyled" failure mode in real-world pptx files. Theme-color resolution (J2) is the next high-impact gap — once schemed colours resolve, B11 / D8 / A5 light up at once.
 
 ## A. Slide-level
 
@@ -142,7 +142,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | I1 | Slide layout XML passthrough (resources slot) | ❌ | Med | Low | Carry XML across round-trip even if unused. |
 | I2 | Slide master XML passthrough | ❌ | Med | Low | — |
 | I3 | **Placeholder geometry inheritance** (xfrm from layout / master) | ✅ | **Critical** | Med | Wave 4 — `buildPlaceholderMap` walks slide → layout → master and assembles a `(type\|idx)` → xfrm map. Layout overrides master; matches OOXML's inheritance order. |
-| I4 | Placeholder default text style inheritance | ❌ | High | Med | Title font / size from layout. |
+| I4 | Placeholder default text style inheritance | ✅ | High | Med | Wave 4b — `<a:lstStyle><a:lvl1pPr><a:defRPr>` parsed from layout / master and applied when the slide's run lacks `<a:rPr>`. Level-2+ paragraphs still inherit `lvl1pPr`; multi-level bullets land with wave 6. |
 | I5 | Date / page-number / footer placeholders | ❌ | Med | Med | — |
 | I6 | Layout background fill (when slide inherits) | ❌ | High | Med | — |
 

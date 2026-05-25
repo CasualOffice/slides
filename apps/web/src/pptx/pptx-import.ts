@@ -170,7 +170,10 @@ function parseRunProps(rPr: unknown): Partial<ISlideRichTextProps> {
 // vast majority of slides) survive intact. Mixed-format runs collapse
 // to the first run's style and lose visible distinctions — tracked as
 // Sprint 2 #6 (multi-run rich text).
-function extractTextAndProps(txBody: unknown): { text: string; props: Partial<ISlideRichTextProps> } {
+function extractTextAndProps(
+  txBody: unknown,
+  fallbackProps?: Partial<ISlideRichTextProps>,
+): { text: string; props: Partial<ISlideRichTextProps> } {
   const paragraphs = toArray(findChild(txBody, 'a:p'));
   const lines: string[] = [];
   let firstProps: Partial<ISlideRichTextProps> = {};
@@ -194,7 +197,15 @@ function extractTextAndProps(txBody: unknown): { text: string; props: Partial<IS
     lines.push(inline.join(''));
   }
 
-  return { text: lines.join('\n'), props: firstProps };
+  // I4 — when the slide's run carried no formatting of its own, fall
+  // back to the placeholder's <a:lstStyle><a:lvl1pPr><a:defRPr> from
+  // layout/master. Run-level rPr wins by field when both exist (we
+  // spread fallback first, then the captured first-run props).
+  const props: Partial<ISlideRichTextProps> = fallbackProps
+    ? { ...fallbackProps, ...firstProps }
+    : firstProps;
+
+  return { text: lines.join('\n'), props };
 }
 
 // Read a `<… val="RRGGBB"/>` srgbClr child of a parent node, returning
@@ -264,6 +275,12 @@ interface PlaceholderRect {
   top: number;
   width: number;
   height: number;
+  /**
+   * Default first-level paragraph run properties from the layout/master
+   * placeholder's `<a:lstStyle><a:lvl1pPr><a:defRPr>` — used when the
+   * slide's run has no `<a:rPr>` of its own (I4).
+   */
+  defaultRunProps?: Partial<ISlideRichTextProps>;
 }
 
 // Compose a stable lookup key from `<p:ph type idx>`. Layout/master and
@@ -313,15 +330,41 @@ function extractPlaceholderRects(layoutOrMasterXml: string): Map<string, Placeho
     if (!key) continue;
     const spPr = findChild(sp, 'p:spPr');
     const xfrm = findChild(spPr, 'a:xfrm');
-    if (!xfrm) continue;
-    const off = findChild(xfrm, 'a:off') as XmlNode | undefined;
-    const ext = findChild(xfrm, 'a:ext') as XmlNode | undefined;
-    if (!off || !ext) continue;
+    const off = xfrm ? (findChild(xfrm, 'a:off') as XmlNode | undefined) : undefined;
+    const ext = xfrm ? (findChild(xfrm, 'a:ext') as XmlNode | undefined) : undefined;
+
+    // I4 — default run properties live at
+    // <p:txBody><a:lstStyle><a:lvl1pPr><a:defRPr ...>.
+    // Use lvl1 as our canonical placeholder default; deeper levels
+    // (a:lvl2pPr etc.) matter once bullets land in wave 6.
+    let defaultRunProps: Partial<ISlideRichTextProps> | undefined;
+    const txBody = findChild(sp, 'p:txBody');
+    const lstStyle = findChild(txBody, 'a:lstStyle');
+    const lvl1pPr = findChild(lstStyle, 'a:lvl1pPr');
+    const defRPr = findChild(lvl1pPr, 'a:defRPr');
+    if (defRPr) {
+      const parsed = parseRunProps(defRPr);
+      if (Object.keys(parsed).length > 0) defaultRunProps = parsed;
+    }
+
+    // Either an xfrm rect or text-style defaults is enough to be worth
+    // recording — a placeholder with neither carries no inheritance.
+    if (!off || !ext) {
+      if (defaultRunProps) {
+        map.set(key, {
+          left: 0, top: 0, width: 0, height: 0,
+          defaultRunProps,
+        });
+      }
+      continue;
+    }
+
     map.set(key, {
       left: emu2px(off['@x'] as string | undefined),
       top: emu2px(off['@y'] as string | undefined),
       width: emu2px(ext['@cx'] as string | undefined),
       height: emu2px(ext['@cy'] as string | undefined),
+      defaultRunProps,
     });
   }
   return map;
@@ -361,9 +404,28 @@ async function buildPlaceholderMap(
   }
 
   const layoutMap = extractPlaceholderRects(layoutXml);
-  // Master first, then layout overrides — Map's later .set() wins.
-  const merged = new Map(masterMap);
-  for (const [k, v] of layoutMap) merged.set(k, v);
+  // Master first, then layout overrides. Field-level merge: layout's
+  // rect wins when present; for defaultRunProps, layout > master >
+  // none — so a layout with xfrm but no lstStyle still picks up the
+  // master's default font.
+  const merged = new Map<string, PlaceholderRect>(masterMap);
+  for (const [k, layoutEntry] of layoutMap) {
+    const masterEntry = merged.get(k);
+    if (!masterEntry) {
+      merged.set(k, layoutEntry);
+      continue;
+    }
+    merged.set(k, {
+      left: layoutEntry.left || masterEntry.left,
+      top: layoutEntry.top || masterEntry.top,
+      width: layoutEntry.width || masterEntry.width,
+      height: layoutEntry.height || masterEntry.height,
+      defaultRunProps: {
+        ...(masterEntry.defaultRunProps ?? {}),
+        ...(layoutEntry.defaultRunProps ?? {}),
+      },
+    });
+  }
   return merged;
 }
 
@@ -499,19 +561,18 @@ async function processSpTree(
     let rawW = emu2px(ext?.['@cx'] as string | undefined);
     let rawH = emu2px(ext?.['@cy'] as string | undefined);
 
-    // I3 — inherit geometry from layout / master when the slide leaves
-    // <a:xfrm> off a placeholder. Without this, title placeholders end
-    // up at (0, 0) with (0, 0) size — historically the dominant cause
-    // of "imported decks look empty".
-    if (!xfrm) {
-      const key = getPlaceholderKey(sp);
-      const inherited = key ? reg.placeholderRects.get(key) : null;
-      if (inherited) {
-        rawLeft = inherited.left;
-        rawTop = inherited.top;
-        rawW = inherited.width;
-        rawH = inherited.height;
-      }
+    // I3 + I4 — pull both geometry and default text style off the
+    // matching layout/master placeholder when the slide leaves them
+    // off. Without this, placeholders end up at (0, 0) sized (0, 0)
+    // with default-rendered text — the dominant cause of "imported
+    // decks look empty / unstyled".
+    const phKey = getPlaceholderKey(sp);
+    const phInherited = phKey ? reg.placeholderRects.get(phKey) : null;
+    if (!xfrm && phInherited) {
+      rawLeft = phInherited.left;
+      rawTop = phInherited.top;
+      rawW = phInherited.width;
+      rawH = phInherited.height;
     }
 
     const { x: left, y: top } = applyXfrm(groupXfrm, rawLeft, rawTop);
@@ -523,7 +584,7 @@ async function processSpTree(
 
     const txBody = findChild(sp, 'p:txBody');
     if (txBody) {
-      const { text, props } = extractTextAndProps(txBody);
+      const { text, props } = extractTextAndProps(txBody, phInherited?.defaultRunProps);
       out.push({
         id: `s${pageOrdinal}-el-${zIndex}`,
         zIndex,

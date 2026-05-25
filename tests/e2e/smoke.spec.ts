@@ -768,7 +768,9 @@ test.describe('Casual Slides — P0 spike smoke', () => {
         `<p:spPr/>` +  // <-- intentionally no a:xfrm
         `<p:txBody>` +
         `<a:bodyPr/><a:lstStyle/>` +
-        `<a:p><a:r><a:rPr lang="en-US"/><a:t>Inherited title</a:t></a:r></a:p>` +
+        // Bare run — no a:rPr at all, so I4 has to supply the style
+        // defaults from the layout placeholder's a:lstStyle.
+        `<a:p><a:r><a:t>Inherited title</a:t></a:r></a:p>` +
         `</p:txBody>` +
         `</p:sp>` +
         `</p:spTree></p:cSld>` +
@@ -793,6 +795,21 @@ test.describe('Casual Slides — P0 spike smoke', () => {
         `<p:spPr>` +
         `<a:xfrm><a:off x="914400" y="457200"/><a:ext cx="7315200" cy="1371600"/></a:xfrm>` +
         `</p:spPr>` +
+        // I4 — layout supplies default text style for level-1 paragraphs.
+        // sz="4400" → 44 pt; b="1"; <a:latin typeface="Calibri Light"/>;
+        // colour FF8800.
+        `<p:txBody>` +
+        `<a:bodyPr/>` +
+        `<a:lstStyle>` +
+        `<a:lvl1pPr>` +
+        `<a:defRPr sz="4400" b="1">` +
+        `<a:solidFill><a:srgbClr val="FF8800"/></a:solidFill>` +
+        `<a:latin typeface="Calibri Light"/>` +
+        `</a:defRPr>` +
+        `</a:lvl1pPr>` +
+        `</a:lstStyle>` +
+        `<a:p/>` +
+        `</p:txBody>` +
         `</p:sp>` +
         `</p:spTree></p:cSld>` +
         `</p:sldLayout>`;
@@ -831,6 +848,14 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(title.width, 'width inherited (8 in = 768 px)').toBeCloseTo(768, 0);
     expect(title.height, 'height inherited (1.5 in = 144 px)').toBeCloseTo(144, 0);
     expect(title.richText?.text).toContain('Inherited title');
+
+    // I4 — slide run had no <a:rPr>; layout defRPr supplies size, bold,
+    // colour, font family.
+    expect(title.richText?.fs, 'fs inherited from layout defRPr').toBe(44);
+    expect(title.richText?.bl, 'bold inherited from layout defRPr').toBe(1);
+    expect(title.richText?.ff, 'font family inherited from layout defRPr').toBe('Calibri Light');
+    const colorHex = (title.richText?.cl?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(colorHex, 'color inherited from layout defRPr').toBe('FF8800');
   });
 
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
