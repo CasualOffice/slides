@@ -32,6 +32,35 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(appErrors, `console errors during mount:\n${appErrors.join('\n')}`).toEqual([]);
   });
 
+  test('Univer canvases render with non-zero height (CSS regression guard)', async ({ page }) => {
+    // The Univer workbench layout uses Tailwind-prefixed classes that ship
+    // as per-package CSS side-effect imports (@univerjs/design,
+    // @univerjs/ui, @univerjs/docs-ui, @univerjs/slides-ui). Without those
+    // imports the layout collapses to height: 0, every <canvas> has
+    // height="0", and the editor paints nothing — symptom is a black
+    // canvas with only the slide-bar thumbnails visible.
+    //
+    // This test asserts the import is wired correctly by checking that at
+    // least one render-canvas has a non-trivial height.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __slideRevProbe?: unknown }).__slideRevProbe === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(500);
+
+    const tallest = await page.evaluate(() => {
+      const canvases = Array.from(document.querySelectorAll('canvas')) as HTMLCanvasElement[];
+      const rects = canvases.map((c) => c.getBoundingClientRect());
+      return rects.length === 0 ? 0 : Math.max(...rects.map((r) => r.height));
+    });
+    // 200px is a safe floor — the main render-canvas in a 720p browser is
+    // typically 600px+, and even a thumbnail is at least 128px. Anything
+    // sub-100 means the layout collapsed.
+    expect(tallest, 'expected at least one canvas with non-trivial height (Univer CSS loaded)').toBeGreaterThan(200);
+  });
+
   test('spike banner exposes Save .pptx and Open .pptx', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('button', { name: /save \.pptx/i })).toBeVisible();

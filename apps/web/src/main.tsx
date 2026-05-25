@@ -1,5 +1,6 @@
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
+import './univer-styles';
 import './styles.css';
 
 // Univer manages its own internal React root inside the container we hand it.
