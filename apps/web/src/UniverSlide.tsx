@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { ICommandService, IUniverInstanceService, LocaleType, LogLevel, Univer, UniverInstanceType } from '@univerjs/core';
 import type { ISlideData, SlideDataModel } from '@univerjs/slides';
 import { defaultTheme } from '@univerjs/themes';
@@ -11,37 +11,31 @@ import { UniverDrawingPlugin } from '@univerjs/drawing';
 import { UniverSlidesPlugin } from '@univerjs/slides';
 import { UniverSlidesUIPlugin } from '@univerjs/slides-ui';
 
-import { DEFAULT_SLIDE_DATA } from './default-slide';
 import { LOCALES } from './locale';
 
-// Imperative handle exposed to the parent (App.tsx) so it can hot-swap the
-// active deck (e.g. on `Open .pptx`) without unmounting the whole Univer
-// instance — disposing + recreating the unit keeps the canvas warm.
-export interface UniverSlideHandle {
-  swapDeck(snapshot: ISlideData): void;
+// Mount Univer Slides into a DOM container with a given snapshot. The
+// component is keyed on `snapshot.id` from the parent — when the parent
+// imports a new deck, it bumps the key and React unmounts + remounts the
+// whole Univer instance with the new snapshot.
+//
+// Earlier we tried hot-swapping via disposeUnit + createUnit on the live
+// Univer instance. That works for the data model but Univer's render
+// manager doesn't re-attach a canvas to our container after disposeUnit;
+// the symptom is "after Open .pptx the slide-bar thumbnails go empty and
+// the main canvas vanishes entirely" — verified via the Playwright
+// diagnostic at tests/e2e/__diagnostic__/open-pptx.spec.ts (canvases
+// AFTER open: []).
+//
+// Remount costs ~hundreds of ms (locale composition + plugin lifecycle
+// re-runs) but produces a correct render every time. Tracked as Gap 1.8
+// — the proper fix is to either upstream the render-context rebind or
+// expose a facade method that handles the lifecycle correctly.
+export interface UniverSlideProps {
+  snapshot: ISlideData;
 }
 
-export const UniverSlide = forwardRef<UniverSlideHandle>(function UniverSlide(_, ref) {
+export function UniverSlide({ snapshot }: UniverSlideProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const univerRef = useRef<Univer | null>(null);
-  const activeUnitIdRef = useRef<string | null>(null);
-
-  useImperativeHandle(ref, () => ({
-    swapDeck(snapshot: ISlideData) {
-      const univer = univerRef.current;
-      if (!univer) return;
-      const instances = univer.__getInjector().get(IUniverInstanceService);
-      const oldUnitId = activeUnitIdRef.current;
-      if (oldUnitId) {
-        instances.disposeUnit(oldUnitId);
-      }
-      const model = univer.createUnit<ISlideData, SlideDataModel>(
-        UniverInstanceType.UNIVER_SLIDE,
-        snapshot,
-      );
-      activeUnitIdRef.current = model.getUnitId();
-    },
-  }), []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -49,12 +43,9 @@ export const UniverSlide = forwardRef<UniverSlideHandle>(function UniverSlide(_,
     const univer = new Univer({
       theme: defaultTheme,
       locale: LocaleType.EN_US,
-      // Without `locales`, the LocaleService throws on first plugin string
-      // lookup and the canvas never renders. See ./locale.ts.
       locales: LOCALES,
       logLevel: LogLevel.WARN,
     });
-    univerRef.current = univer;
 
     // Render engine first — every other plugin assumes it exists.
     univer.registerPlugin(UniverRenderEnginePlugin);
@@ -72,7 +63,7 @@ export const UniverSlide = forwardRef<UniverSlideHandle>(function UniverSlide(_,
 
     // Docs + docs-ui are required for richText page elements (text frames are
     // backed by nested doc units). Formula engine is pulled in by docs anyway
-    // — registering it explicitly here keeps initialization order deterministic.
+    // — registering it explicitly keeps initialization order deterministic.
     univer.registerPlugin(UniverDocsPlugin);
     univer.registerPlugin(UniverDocsUIPlugin);
     univer.registerPlugin(UniverFormulaEnginePlugin);
@@ -84,11 +75,10 @@ export const UniverSlide = forwardRef<UniverSlideHandle>(function UniverSlide(_,
     univer.registerPlugin(UniverSlidesPlugin);
     univer.registerPlugin(UniverSlidesUIPlugin);
 
-    const model = univer.createUnit<ISlideData, SlideDataModel>(
+    univer.createUnit<ISlideData, SlideDataModel>(
       UniverInstanceType.UNIVER_SLIDE,
-      DEFAULT_SLIDE_DATA,
+      snapshot,
     );
-    activeUnitIdRef.current = model.getUnitId();
 
     if (typeof window !== 'undefined') {
       const w = window as unknown as {
@@ -97,25 +87,18 @@ export const UniverSlide = forwardRef<UniverSlideHandle>(function UniverSlide(_,
         __capturedMutations?: string[];
       };
       w.univer = univer;
-
-      // Spike-mode collab probe: capture every CommandType.MUTATION the
-      // engine fires through ICommandService.onMutationExecutedForCollab.
-      // Lets Playwright (and dev console) verify Gap 2's refactor — that
-      // slide element edits now route through MUTATION, not OPERATION.
-      // Pre-patch this array stayed empty for SlideAddTextCommand;
-      // post-patch it contains 'slide.mutation.insert-element'.
       w.__capturedMutations = [];
       const cs = univer.__getInjector().get(ICommandService);
       cs.onMutationExecutedForCollab((info) => {
         w.__capturedMutations!.push(info.id);
       });
-      // Expose the ICommandService identifier on globalThis so the e2e
-      // suite can grab the same service without importing the symbol.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (globalThis as any).__casualSlides__ICommandService = ICommandService;
-      // Spike-C probe: confirms the Gap 1 rev-tracking patch is live at runtime.
-      // Pre-patch this returned 0 forever; post-patch it starts at 1 and bumps
-      // on every incrementRev(). Open devtools and call window.__slideRevProbe().
+
+      // Spike-C runtime probe for the Gap 1 rev-tracking patch. Pre-patch
+      // SlideDataModel.getRev() returned 0 forever and incrementRev was a
+      // no-op. Post-patch it starts at 1 and bumps by one. Call from the
+      // devtools console to verify.
       w.__slideRevProbe = () => {
         const instances = univer.__getInjector().get(IUniverInstanceService);
         const m = instances.getCurrentUnitOfType<SlideDataModel>(
@@ -133,10 +116,9 @@ export const UniverSlide = forwardRef<UniverSlideHandle>(function UniverSlide(_,
 
     return () => {
       univer.dispose();
-      univerRef.current = null;
-      activeUnitIdRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return <div ref={containerRef} className="univer-mount" />;
-});
+}

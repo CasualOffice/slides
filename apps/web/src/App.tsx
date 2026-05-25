@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react';
-import { UniverSlide, type UniverSlideHandle } from './UniverSlide';
-import { getPptxClient } from './pptx/client';
-import { DEFAULT_SLIDE_DATA } from './default-slide';
-import type { SlideDataModel } from '@univerjs/slides';
+import type { ISlideData, SlideDataModel } from '@univerjs/slides';
 import { IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { Univer } from '@univerjs/core';
+
+import { UniverSlide } from './UniverSlide';
+import { getPptxClient } from './pptx/client';
+import { DEFAULT_SLIDE_DATA } from './default-slide';
 
 // Triggers a browser download of a Blob by minting an object URL and clicking
 // a synthetic anchor. Object URL is revoked next tick to free memory; the
@@ -20,31 +21,40 @@ function downloadBlob(blob: Blob, fileName: string) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function getCurrentSnapshot() {
-  // window.univer is set in UniverSlide for spike-era diagnostics.
+// Reads the current snapshot off the live Univer instance — used when the
+// user clicks Save .pptx. window.univer is set in UniverSlide for
+// spike-era diagnostics.
+function getCurrentSnapshot(fallback: ISlideData): ISlideData {
   const w = window as unknown as { univer?: Univer };
   const univer = w.univer;
-  if (!univer) return DEFAULT_SLIDE_DATA;
+  if (!univer) return fallback;
   const instances = univer.__getInjector().get(IUniverInstanceService);
   const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
-  return model?.getSnapshot() ?? DEFAULT_SLIDE_DATA;
+  return model?.getSnapshot() ?? fallback;
 }
 
 export function App() {
+  // The active deck. UniverSlide is keyed on this snapshot's id — when
+  // Open .pptx imports a new deck, the state update + key change
+  // forces React to unmount + remount UniverSlide, which spins up a
+  // fresh Univer instance against the new snapshot. Hot-swap via
+  // disposeUnit + createUnit doesn't reliably rebind the canvas to
+  // our container; remount does. See UniverSlide.tsx for the
+  // tradeoff write-up.
+  const [snapshot, setSnapshot] = useState<ISlideData>(DEFAULT_SLIDE_DATA);
   const [saving, setSaving] = useState(false);
   const [opening, setOpening] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const slideRef = useRef<UniverSlideHandle>(null);
 
   async function handleSavePptx() {
     setError(null);
     setStatus(null);
     setSaving(true);
     try {
-      const snapshot = getCurrentSnapshot();
-      const { blob, fileName } = await getPptxClient().export(snapshot);
+      const live = getCurrentSnapshot(snapshot);
+      const { blob, fileName } = await getPptxClient().export(live);
       downloadBlob(blob, fileName);
       setStatus(`Saved ${fileName} (${(blob.size / 1024).toFixed(1)} KB)`);
     } catch (e) {
@@ -63,16 +73,13 @@ export function App() {
     setOpening(true);
     try {
       const buffer = await file.arrayBuffer();
-      const snapshot = await getPptxClient().import(buffer, file.name);
-      const pageCount = snapshot.body?.pageOrder.length ?? 0;
-      // Hot-swap the active deck — disposeUnit + createUnit on the live
-      // Univer instance keeps the canvas warm. Renders immediately.
-      slideRef.current?.swapDeck(snapshot);
-      // Mirror to window for devtools poking.
+      const imported = await getPptxClient().import(buffer, file.name);
+      const pageCount = imported.body?.pageOrder.length ?? 0;
+      setSnapshot(imported);
       const w = window as unknown as { __pptxImportedSnapshot?: unknown };
-      w.__pptxImportedSnapshot = snapshot;
+      w.__pptxImportedSnapshot = imported;
       setStatus(
-        `Loaded ${file.name}: ${pageCount} slides · ${snapshot.pageSize?.width}×${snapshot.pageSize?.height}px`,
+        `Loaded ${file.name}: ${pageCount} slides · ${imported.pageSize?.width}×${imported.pageSize?.height}px`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -85,9 +92,7 @@ export function App() {
     <>
       <div className="spike-banner">
         <strong>P0 Spike A/B</strong>
-        <span>
-          Univer Slides · pptx round-trip via PptxGenJS + JSZip
-        </span>
+        <span>Univer Slides · pptx round-trip via PptxGenJS + JSZip</span>
         <input
           ref={fileInputRef}
           type="file"
@@ -108,7 +113,7 @@ export function App() {
         {status && <span className="spike-status" title={status}>{status}</span>}
         {error && <span className="spike-error" title={error}>⚠ {error}</span>}
       </div>
-      <UniverSlide ref={slideRef} />
+      <UniverSlide key={snapshot.id} snapshot={snapshot} />
     </>
   );
 }
