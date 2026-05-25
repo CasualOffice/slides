@@ -16,7 +16,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     });
 
     await page.goto('/');
-    await expect(page.locator('.spike-banner')).toBeVisible();
+    await expect(page.locator('.cs-titlebar')).toBeVisible();
     await expect(page.locator('.univer-mount')).toBeVisible();
 
     // Give Univer's plugin lifecycle (Starting → Ready → Rendered → Steady)
@@ -61,10 +61,10 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(tallest, 'expected at least one canvas with non-trivial height (Univer CSS loaded)').toBeGreaterThan(200);
   });
 
-  test('spike banner exposes Save .pptx and Open .pptx', async ({ page }) => {
+  test('title bar exposes Save and Open actions', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('button', { name: /save \.pptx/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /open \.pptx/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^save$/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^open$/i })).toBeVisible();
   });
 
   test('Save .pptx triggers a download with a non-trivial blob', async ({ page }) => {
@@ -83,14 +83,14 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // bundle is ~1.9 MB. Plus main.tsx warms the worker on idle, so cold
     // start should already be paid by the time we click.
     const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
-    await page.getByRole('button', { name: /save \.pptx/i }).click();
+    await page.getByRole('button', { name: /^save$/i }).click();
     let download;
     try {
       download = await downloadPromise;
     } catch (e) {
       // Surface the in-page error/state instead of just "timed out".
-      const status = await page.locator('.spike-status').textContent().catch(() => null);
-      const error = await page.locator('.spike-error').textContent().catch(() => null);
+      const status = await page.locator('.cs-titlebar__status').textContent().catch(() => null);
+      const error = await page.locator('.cs-titlebar__error').textContent().catch(() => null);
       throw new Error(
         `Save .pptx did not produce a download.\n  status: ${status}\n  error: ${error}\n  console:\n${errors.map((e) => '    ' + e).join('\n')}`,
       );
@@ -133,7 +133,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Save the default deck, then re-open it to force swapDeck.
     // Same 30 s rationale as above — CI cold start on the worker bundle.
     const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
-    await page.getByRole('button', { name: /save \.pptx/i }).click();
+    await page.getByRole('button', { name: /^save$/i }).click();
     const download = await downloadPromise;
     const downloadedPath = await download.path();
     expect(downloadedPath).toBeTruthy();
@@ -151,7 +151,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     await fileInput.setInputFiles(fixturePath);
 
     // Wait for the import to finish (status pill updates) then settle.
-    await expect(page.locator('.spike-status')).toContainText(/loaded/i, { timeout: 10_000 });
+    await expect(page.locator('.cs-titlebar__status')).toContainText(/loaded/i, { timeout: 10_000 });
     await page.waitForTimeout(500);
 
     const fatal = errors.filter(

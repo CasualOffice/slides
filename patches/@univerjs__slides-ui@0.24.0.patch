@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..cbd88b417dbd731fd79e5d8a0ab81c9214336fb7 100644
+index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..de47bcc9388ac9ae4b7cf57f8f0d925776b8135d 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -156,7 +156,7 @@ let SlideRenderController = class SlideRenderController extends _univerjs_core.R
@@ -119,7 +119,30 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..cbd88b417dbd731fd79e5d8a0ab81c92
  		return true;
  	}
  };
-@@ -510,16 +538,28 @@ const InsertSlideFloatImageCommand = {
+@@ -497,11 +525,20 @@ const InsertSlideFloatImageCommand = {
+ 				image
+ 			} }
+ 		};
+-		activePage.pageElements[imageId] = data;
+-		slideData.updatePage(activePage.id, activePage);
++		const commandService = accessor.get(_univerjs_core.ICommandService);
++		const undoRedoService = accessor.get(_univerjs_core.IUndoRedoService);
++		const insertParams = { unitId, pageId: activePage.id, element: data };
++		const ok = commandService.syncExecuteCommand(SlideInsertElementMutation.id, insertParams);
++		if (!ok) return false;
+ 		const canvasView = accessor.get(CanvasView);
+ 		const sceneObject = canvasView.createObjectToPage(data, activePage.id, unitId);
+ 		if (sceneObject) canvasView.setObjectActiveByPage(sceneObject, activePage.id, unitId);
++		const deleteParams = { unitId, pageId: activePage.id, elementId: imageId };
++		undoRedoService.pushUndoRedo({
++			unitID: unitId,
++			undoMutations: [{ id: SlideDeleteElementMutation.id, params: deleteParams }],
++			redoMutations: [{ id: SlideInsertElementMutation.id, params: insertParams }]
++		});
+ 		return true;
+ 	}
+ };
+@@ -510,16 +547,28 @@ const InsertSlideFloatImageCommand = {
  //#region src/commands/operations/update-element.operation.ts
  const UpdateSlideElementOperation = {
  	id: "slide.operation.update-element",
@@ -157,10 +180,148 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..cbd88b417dbd731fd79e5d8a0ab81c92
  		return true;
  	}
  };
-@@ -995,58 +1035,146 @@ const InsertSlideShapeEllipseOperation = {
+@@ -882,40 +931,51 @@ const InsertSlideShapeRectangleCommand = {
+ 		return commandService.executeCommand(InsertSlideShapeRectangleOperation.id, { unitId });
  	}
  };
- 
++function _insertShape(accessor, unitId, buildElement) {
++	if (!unitId) return false;
++	const commandService = accessor.get(_univerjs_core.ICommandService);
++	const undoRedoService = accessor.get(_univerjs_core.IUndoRedoService);
++	const model = accessor.get(_univerjs_core.IUniverInstanceService).getUnit(unitId);
++	if (!model) return false;
++	const activePage = model.getActivePage();
++	if (!activePage) return false;
++	const elementId = (0, _univerjs_core.generateRandomId)(6);
++	const existing = Object.values(activePage.pageElements);
++	const maxZIndex = existing.length ? Math.max(...existing.map((e) => e.zIndex)) : 20;
++	const element = buildElement(elementId, maxZIndex + 1);
++	const insertParams = { unitId, pageId: activePage.id, element };
++	const ok = commandService.syncExecuteCommand(SlideInsertElementMutation.id, insertParams);
++	if (!ok) return false;
++	const canvasview = accessor.get(CanvasView);
++	const sceneObject = canvasview.createObjectToPage(element, activePage.id, unitId);
++	if (sceneObject) canvasview.setObjectActiveByPage(sceneObject, activePage.id, unitId);
++	const deleteParams = { unitId, pageId: activePage.id, elementId };
++	undoRedoService.pushUndoRedo({
++		unitID: unitId,
++		undoMutations: [{ id: SlideDeleteElementMutation.id, params: deleteParams }],
++		redoMutations: [{ id: SlideInsertElementMutation.id, params: insertParams }]
++	});
++	return true;
++}
+ const InsertSlideShapeRectangleOperation = {
+ 	id: "slide.operation.insert-float-shape.rectangle",
+-	type: _univerjs_core.CommandType.OPERATION,
+-	handler: async (accessor, params) => {
+-		const id = (0, _univerjs_core.generateRandomId)(6);
+-		const univerInstanceService = accessor.get(_univerjs_core.IUniverInstanceService);
+-		const unitId = params.unitId;
+-		const slideData = univerInstanceService.getUnit(unitId);
+-		if (!slideData) return false;
+-		const activePage = slideData.getActivePage();
+-		const elements = Object.values(activePage.pageElements);
+-		const data = {
+-			id,
+-			zIndex: ((elements === null || elements === void 0 ? void 0 : elements.length) ? Math.max(...elements.map((element) => element.zIndex)) : 20) + 1,
+-			left: 378,
+-			top: 142,
+-			width: 250,
+-			height: 250,
+-			title: id,
+-			description: "",
+-			type: _univerjs_slides.PageElementType.SHAPE,
+-			shape: {
+-				shapeType: _univerjs_slides.BasicShapes.Rect,
+-				text: "",
+-				shapeProperties: { shapeBackgroundFill: { rgb: "rgb(0,0,255)" } }
+-			}
+-		};
+-		activePage.pageElements[id] = data;
+-		slideData.updatePage(activePage.id, activePage);
+-		const canvasview = accessor.get(CanvasView);
+-		const sceneObject = canvasview.createObjectToPage(data, activePage.id, unitId);
+-		if (sceneObject) canvasview.setObjectActiveByPage(sceneObject, activePage.id, unitId);
+-		return true;
+-	}
++	type: _univerjs_core.CommandType.COMMAND,
++	handler: (accessor, params) => _insertShape(accessor, params === null || params === void 0 ? void 0 : params.unitId, (id, zIndex) => ({
++		id,
++		zIndex,
++		left: 378,
++		top: 142,
++		width: 250,
++		height: 250,
++		title: id,
++		description: "",
++		type: _univerjs_slides.PageElementType.SHAPE,
++		shape: {
++			shapeType: _univerjs_slides.BasicShapes.Rect,
++			text: "",
++			shapeProperties: { shapeBackgroundFill: { rgb: "rgb(0,0,255)" } }
++		}
++	}))
+ };
+ const ToggleSlideEditSidebarOperation = {
+ 	id: "sidebar.operation.slide-shape",
+@@ -958,95 +1018,168 @@ const InsertSlideShapeEllipseCommand = {
+ };
+ const InsertSlideShapeEllipseOperation = {
+ 	id: "slide.operation.insert-float-shape.ellipse",
+-	type: _univerjs_core.CommandType.OPERATION,
+-	handler: async (accessor, params) => {
+-		const id = (0, _univerjs_core.generateRandomId)(6);
+-		const univerInstanceService = accessor.get(_univerjs_core.IUniverInstanceService);
+-		const unitId = params.unitId;
+-		const slideData = univerInstanceService.getUnit(unitId);
+-		if (!slideData) return false;
+-		const activePage = slideData.getActivePage();
+-		const elements = Object.values(activePage.pageElements);
+-		const data = {
+-			id,
+-			zIndex: ((elements === null || elements === void 0 ? void 0 : elements.length) ? Math.max(...elements.map((element) => element.zIndex)) : 20) + 1,
+-			left: 378,
+-			top: 142,
+-			width: 250,
+-			height: 250,
+-			title: id,
+-			description: "",
+-			type: _univerjs_slides.PageElementType.SHAPE,
+-			shape: {
+-				shapeType: _univerjs_slides.BasicShapes.Ellipse,
+-				text: "",
+-				shapeProperties: {
+-					radius: 100,
+-					shapeBackgroundFill: { rgb: "rgb(0,0,255)" }
+-				}
++	type: _univerjs_core.CommandType.COMMAND,
++	handler: (accessor, params) => _insertShape(accessor, params === null || params === void 0 ? void 0 : params.unitId, (id, zIndex) => ({
++		id,
++		zIndex,
++		left: 378,
++		top: 142,
++		width: 250,
++		height: 250,
++		title: id,
++		description: "",
++		type: _univerjs_slides.PageElementType.SHAPE,
++		shape: {
++			shapeType: _univerjs_slides.BasicShapes.Ellipse,
++			text: "",
++			shapeProperties: {
++				radius: 100,
++				shapeBackgroundFill: { rgb: "rgb(0,0,255)" }
+ 			}
+-		};
+-		activePage.pageElements[id] = data;
+-		slideData.updatePage(activePage.id, activePage);
+-		const canvasview = accessor.get(CanvasView);
+-		const sceneObject = canvasview.createObjectToPage(data, activePage.id, unitId);
+-		if (sceneObject) canvasview.setObjectActiveByPage(sceneObject, activePage.id, unitId);
++		}
++	}))
++};
++
 +//#endregion
 +//#region src/commands/mutations/element.mutation.ts
 +const SlideInsertElementMutation = {
@@ -242,9 +403,10 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..cbd88b417dbd731fd79e5d8a0ab81c92
 +		const orderIdx = snapshot.body.pageOrder.indexOf(params.pageId);
 +		if (orderIdx !== -1) snapshot.body.pageOrder.splice(orderIdx, 1);
 +		model.incrementRev();
-+		return true;
-+	}
-+};
+ 		return true;
+ 	}
+ };
+-
  //#endregion
  //#region src/commands/operations/insert-text.operation.ts
  const SlideAddTextCommand = {
@@ -334,7 +496,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..cbd88b417dbd731fd79e5d8a0ab81c92
  
  //#endregion
  //#region src/commands/operations/set-thumb.operation.ts
-@@ -1549,6 +1677,11 @@ let SlidesUIController = class SlidesUIController extends _univerjs_core.Disposa
+@@ -1549,6 +1682,11 @@ let SlidesUIController = class SlidesUIController extends _univerjs_core.Disposa
  			ToggleSlideEditSidebarOperation,
  			DeleteSlideElementOperation,
  			UpdateSlideElementOperation,
@@ -347,7 +509,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..cbd88b417dbd731fd79e5d8a0ab81c92
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..6aad55e00309209fc6ba6a01b13d3816fd499c16 100644
+index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b952a6c9f4 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -155,7 +155,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
@@ -467,7 +629,30 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..6aad55e00309209fc6ba6a01b13d3816
  		return true;
  	}
  };
-@@ -509,16 +537,28 @@ const InsertSlideFloatImageCommand = {
+@@ -496,11 +524,20 @@ const InsertSlideFloatImageCommand = {
+ 				image
+ 			} }
+ 		};
+-		activePage.pageElements[imageId] = data;
+-		slideData.updatePage(activePage.id, activePage);
++		const commandService = accessor.get(ICommandService);
++		const undoRedoService = accessor.get(IUndoRedoService);
++		const insertParams = { unitId, pageId: activePage.id, element: data };
++		const ok = commandService.syncExecuteCommand(SlideInsertElementMutation.id, insertParams);
++		if (!ok) return false;
+ 		const canvasView = accessor.get(CanvasView);
+ 		const sceneObject = canvasView.createObjectToPage(data, activePage.id, unitId);
+ 		if (sceneObject) canvasView.setObjectActiveByPage(sceneObject, activePage.id, unitId);
++		const deleteParams = { unitId, pageId: activePage.id, elementId: imageId };
++		undoRedoService.pushUndoRedo({
++			unitID: unitId,
++			undoMutations: [{ id: SlideDeleteElementMutation.id, params: deleteParams }],
++			redoMutations: [{ id: SlideInsertElementMutation.id, params: insertParams }]
++		});
+ 		return true;
+ 	}
+ };
+@@ -509,16 +546,28 @@ const InsertSlideFloatImageCommand = {
  //#region src/commands/operations/update-element.operation.ts
  const UpdateSlideElementOperation = {
  	id: "slide.operation.update-element",
@@ -505,7 +690,126 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..6aad55e00309209fc6ba6a01b13d3816
  		return true;
  	}
  };
-@@ -994,58 +1034,146 @@ const InsertSlideShapeEllipseOperation = {
+@@ -881,40 +930,51 @@ const InsertSlideShapeRectangleCommand = {
+ 		return commandService.executeCommand(InsertSlideShapeRectangleOperation.id, { unitId });
+ 	}
+ };
++function _insertShape(accessor, unitId, buildElement) {
++	if (!unitId) return false;
++	const commandService = accessor.get(ICommandService);
++	const undoRedoService = accessor.get(IUndoRedoService);
++	const model = accessor.get(IUniverInstanceService).getUnit(unitId);
++	if (!model) return false;
++	const activePage = model.getActivePage();
++	if (!activePage) return false;
++	const elementId = generateRandomId(6);
++	const existing = Object.values(activePage.pageElements);
++	const maxZIndex = existing.length ? Math.max(...existing.map((e) => e.zIndex)) : 20;
++	const element = buildElement(elementId, maxZIndex + 1);
++	const insertParams = { unitId, pageId: activePage.id, element };
++	const ok = commandService.syncExecuteCommand(SlideInsertElementMutation.id, insertParams);
++	if (!ok) return false;
++	const canvasview = accessor.get(CanvasView);
++	const sceneObject = canvasview.createObjectToPage(element, activePage.id, unitId);
++	if (sceneObject) canvasview.setObjectActiveByPage(sceneObject, activePage.id, unitId);
++	const deleteParams = { unitId, pageId: activePage.id, elementId };
++	undoRedoService.pushUndoRedo({
++		unitID: unitId,
++		undoMutations: [{ id: SlideDeleteElementMutation.id, params: deleteParams }],
++		redoMutations: [{ id: SlideInsertElementMutation.id, params: insertParams }]
++	});
++	return true;
++}
+ const InsertSlideShapeRectangleOperation = {
+ 	id: "slide.operation.insert-float-shape.rectangle",
+-	type: CommandType.OPERATION,
+-	handler: async (accessor, params) => {
+-		const id = generateRandomId(6);
+-		const univerInstanceService = accessor.get(IUniverInstanceService);
+-		const unitId = params.unitId;
+-		const slideData = univerInstanceService.getUnit(unitId);
+-		if (!slideData) return false;
+-		const activePage = slideData.getActivePage();
+-		const elements = Object.values(activePage.pageElements);
+-		const data = {
+-			id,
+-			zIndex: ((elements === null || elements === void 0 ? void 0 : elements.length) ? Math.max(...elements.map((element) => element.zIndex)) : 20) + 1,
+-			left: 378,
+-			top: 142,
+-			width: 250,
+-			height: 250,
+-			title: id,
+-			description: "",
+-			type: PageElementType.SHAPE,
+-			shape: {
+-				shapeType: BasicShapes.Rect,
+-				text: "",
+-				shapeProperties: { shapeBackgroundFill: { rgb: "rgb(0,0,255)" } }
+-			}
+-		};
+-		activePage.pageElements[id] = data;
+-		slideData.updatePage(activePage.id, activePage);
+-		const canvasview = accessor.get(CanvasView);
+-		const sceneObject = canvasview.createObjectToPage(data, activePage.id, unitId);
+-		if (sceneObject) canvasview.setObjectActiveByPage(sceneObject, activePage.id, unitId);
+-		return true;
+-	}
++	type: CommandType.COMMAND,
++	handler: (accessor, params) => _insertShape(accessor, params === null || params === void 0 ? void 0 : params.unitId, (id, zIndex) => ({
++		id,
++		zIndex,
++		left: 378,
++		top: 142,
++		width: 250,
++		height: 250,
++		title: id,
++		description: "",
++		type: PageElementType.SHAPE,
++		shape: {
++			shapeType: BasicShapes.Rect,
++			text: "",
++			shapeProperties: { shapeBackgroundFill: { rgb: "rgb(0,0,255)" } }
++		}
++	}))
+ };
+ const ToggleSlideEditSidebarOperation = {
+ 	id: "sidebar.operation.slide-shape",
+@@ -957,8 +1017,32 @@ const InsertSlideShapeEllipseCommand = {
+ };
+ const InsertSlideShapeEllipseOperation = {
+ 	id: "slide.operation.insert-float-shape.ellipse",
+-	type: CommandType.OPERATION,
+-	handler: async (accessor, params) => {
++	type: CommandType.COMMAND,
++	handler: (accessor, params) => _insertShape(accessor, params === null || params === void 0 ? void 0 : params.unitId, (id, zIndex) => ({
++		id,
++		zIndex,
++		left: 378,
++		top: 142,
++		width: 250,
++		height: 250,
++		title: id,
++		description: "",
++		type: PageElementType.SHAPE,
++		shape: {
++			shapeType: BasicShapes.Ellipse,
++			text: "",
++			shapeProperties: {
++				radius: 100,
++				shapeBackgroundFill: { rgb: "rgb(0,0,255)" }
++			}
++		}
++	}))
++};
++// Tail of the previous OPERATION-typed ellipse handler stubbed out so the
++// trailing close-brace below doesn't break the file. Pre-patch the body
++// continued; we now stop at the factory + helper handles it.
++const _unused_ellipse_tail = {
++	stub: (accessor, params) => {
+ 		const id = generateRandomId(6);
+ 		const univerInstanceService = accessor.get(IUniverInstanceService);
+ 		const unitId = params.unitId;
+@@ -994,58 +1078,146 @@ const InsertSlideShapeEllipseOperation = {
  	}
  };
  
@@ -682,7 +986,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..6aad55e00309209fc6ba6a01b13d3816
  
  //#endregion
  //#region src/commands/operations/set-thumb.operation.ts
-@@ -1548,6 +1676,11 @@ let SlidesUIController = class SlidesUIController extends Disposable {
+@@ -1548,6 +1720,11 @@ let SlidesUIController = class SlidesUIController extends Disposable {
  			ToggleSlideEditSidebarOperation,
  			DeleteSlideElementOperation,
  			UpdateSlideElementOperation,
