@@ -114,6 +114,17 @@ function parseRunProps(rPr: unknown): Partial<ISlideRichTextProps> {
     out.cl = { rgb: `#${valAttr}` };
   }
 
+  // Font family (B3): <a:rPr><a:latin typeface="Calibri"/></a:rPr>.
+  // <a:ea> and <a:cs> are deferred (B4) — currently we use the Latin
+  // typeface as the canonical font; if a deck only declared `<a:ea>`,
+  // it'd fall back to the renderer default. That covers > 95 % of
+  // Western decks today.
+  const latin = findChild(node, 'a:latin') as XmlNode | undefined;
+  const typeface = latin?.['@typeface'];
+  if (typeof typeface === 'string' && typeface.length > 0) {
+    out.ff = typeface;
+  }
+
   return out;
 }
 
@@ -232,104 +243,119 @@ async function readImageAsDataUri(zip: JSZip, path: string): Promise<string | nu
   return `data:${mime};base64,${base64}`;
 }
 
-// Process `<p:pic>` nodes from the spTree. Each has a `<p:blipFill><a:blip
-// r:embed="rIdN"/>` referencing an image in ppt/media/* via the slide's
-// rels file.
-async function extractPicElements(
-  pics: unknown[],
-  reg: ImageRegistry,
-  startZ: number,
-): Promise<IPageElement[]> {
-  const out: IPageElement[] = [];
-  for (let i = 0; i < pics.length; i += 1) {
-    const pic = pics[i];
-    if (!pic || typeof pic !== 'object') continue;
-
-    // Transform.
-    const spPr = findChild(pic, 'p:spPr');
-    const xfrm = findChild(spPr, 'a:xfrm');
-    const off = findChild(xfrm, 'a:off') as XmlNode | undefined;
-    const ext = findChild(xfrm, 'a:ext') as XmlNode | undefined;
-    const left = emu2px(off?.['@x'] as string | undefined);
-    const top = emu2px(off?.['@y'] as string | undefined);
-    const width = emu2px(ext?.['@cx'] as string | undefined);
-    const height = emu2px(ext?.['@cy'] as string | undefined);
-
-    // <p:blipFill><a:blip r:embed="rIdN"/>
-    const blipFill = findChild(pic, 'p:blipFill');
-    const blip = findChild(blipFill, 'a:blip') as XmlNode | undefined;
-    const rEmbed = blip?.['@r:embed'] as string | undefined;
-    if (!rEmbed) continue;
-
-    const relTarget = reg.imageRelMap.get(rEmbed);
-    if (!relTarget) continue;
-    // relTarget like '../media/image1.png' relative to ppt/slides/_rels.
-    // Normalise to a zip-rooted path.
-    const slidesRoot = 'ppt/slides/';
-    const zipPath = relTarget.startsWith('/')
-      ? relTarget.slice(1)
-      : (relTarget.startsWith('..')
-        ? `ppt/${relTarget.replace(/^\.\.\//, '')}`
-        : `${slidesRoot}${relTarget}`);
-
-    let dataUri = reg.cache.get(zipPath) ?? null;
-    if (!dataUri) {
-      dataUri = await readImageAsDataUri(reg.zip, zipPath);
-      if (!dataUri) continue;
-      reg.cache.set(zipPath, dataUri);
-    }
-
-    const id = `pic-${startZ + i}`;
-    out.push({
-      id,
-      zIndex: startZ + i,
-      left,
-      top,
-      width,
-      height,
-      title: '',
-      description: '',
-      type: PageElementType.IMAGE,
-      image: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        imageProperties: { contentUrl: dataUri } as any,
-      },
-    });
-  }
-  return out;
+// Group shape transform (F2). OOXML lets a `<p:grpSp>` apply its own
+// `<a:xfrm>` with `<a:off>`/`<a:ext>` (parent rect on the slide) plus
+// `<a:chOff>`/`<a:chExt>` (the local coordinate space of the group's
+// children). When the two differ, children get scaled + offset.
+//
+// Returns the (scale, offset) you apply to each child's raw (x, y) to
+// land it in slide coordinates:
+//   slideX = off.x + (childX - chOff.x) * (ext.cx / chExt.cx)
+//   slideY = off.y + (childY - chOff.y) * (ext.cy / chExt.cy)
+//
+// When the group has no xfrm we return the identity transform.
+interface GroupXfrm {
+  offX: number;
+  offY: number;
+  chOffX: number;
+  chOffY: number;
+  scaleX: number;
+  scaleY: number;
 }
 
-async function extractElementsFromSlideXml(
-  slideXml: string,
+const IDENTITY_XFRM: GroupXfrm = {
+  offX: 0,
+  offY: 0,
+  chOffX: 0,
+  chOffY: 0,
+  scaleX: 1,
+  scaleY: 1,
+};
+
+function readGroupXfrm(grpSpPr: unknown): GroupXfrm {
+  const xfrm = findChild(grpSpPr, 'a:xfrm');
+  if (!xfrm) return IDENTITY_XFRM;
+  const off = findChild(xfrm, 'a:off') as XmlNode | undefined;
+  const ext = findChild(xfrm, 'a:ext') as XmlNode | undefined;
+  const chOff = findChild(xfrm, 'a:chOff') as XmlNode | undefined;
+  const chExt = findChild(xfrm, 'a:chExt') as XmlNode | undefined;
+
+  const offX = emu2px(off?.['@x'] as string | undefined);
+  const offY = emu2px(off?.['@y'] as string | undefined);
+  const extCx = emu2px(ext?.['@cx'] as string | undefined);
+  const extCy = emu2px(ext?.['@cy'] as string | undefined);
+  const chOffX = emu2px(chOff?.['@x'] as string | undefined);
+  const chOffY = emu2px(chOff?.['@y'] as string | undefined);
+  const chExtCx = emu2px(chExt?.['@cx'] as string | undefined);
+  const chExtCy = emu2px(chExt?.['@cy'] as string | undefined);
+
+  const scaleX = chExtCx > 0 ? extCx / chExtCx : 1;
+  const scaleY = chExtCy > 0 ? extCy / chExtCy : 1;
+
+  return { offX, offY, chOffX, chOffY, scaleX, scaleY };
+}
+
+function composeXfrm(outer: GroupXfrm, inner: GroupXfrm): GroupXfrm {
+  // outer applied after inner. inner places the child in its own
+  // coordinate space; outer then maps that into the slide space.
+  return {
+    offX: outer.offX + (inner.offX - outer.chOffX) * outer.scaleX,
+    offY: outer.offY + (inner.offY - outer.chOffY) * outer.scaleY,
+    chOffX: inner.chOffX,
+    chOffY: inner.chOffY,
+    scaleX: outer.scaleX * inner.scaleX,
+    scaleY: outer.scaleY * inner.scaleY,
+  };
+}
+
+function applyXfrm(g: GroupXfrm, x: number, y: number): { x: number; y: number } {
+  return {
+    x: g.offX + (x - g.chOffX) * g.scaleX,
+    y: g.offY + (y - g.chOffY) * g.scaleY,
+  };
+}
+
+// Counter mutable across the recursive descent so every element on a
+// page gets a strictly increasing z-index — siblings render in tree
+// order, just like PowerPoint paints them.
+interface ZCounter {
+  next: number;
+}
+
+// Recursively process a <p:spTree> (or nested <p:grpSp>) into
+// IPageElements. `groupXfrm` is the accumulated group transform that
+// maps from the current node's child-coordinate-space into slide space.
+async function processSpTree(
+  spTree: unknown,
   reg: ImageRegistry,
   pageOrdinal: number,
-): Promise<IPageElement[]> {
-  const parsed = parser.parse(slideXml) as XmlNode;
-  const spTree = findChild(findChild(findChild(parsed, 'p:sld'), 'p:cSld'), 'p:spTree');
-  const shapes = toArray(findChild(spTree, 'p:sp'));
-  const pics = toArray(findChild(spTree, 'p:pic'));
-
-  const elements: IPageElement[] = [];
-  let zIndex = 1;
-
-  for (const sp of shapes) {
+  groupXfrm: GroupXfrm,
+  z: ZCounter,
+  out: IPageElement[],
+): Promise<void> {
+  // <p:sp>
+  for (const sp of toArray(findChild(spTree, 'p:sp'))) {
     if (!sp || typeof sp !== 'object') continue;
     const spPr = findChild(sp, 'p:spPr');
     const xfrm = findChild(spPr, 'a:xfrm');
     const off = findChild(xfrm, 'a:off') as XmlNode | undefined;
     const ext = findChild(xfrm, 'a:ext') as XmlNode | undefined;
-    const left = emu2px(off?.['@x'] as string | undefined);
-    const top = emu2px(off?.['@y'] as string | undefined);
-    const width = emu2px(ext?.['@cx'] as string | undefined);
-    const height = emu2px(ext?.['@cy'] as string | undefined);
+    const rawLeft = emu2px(off?.['@x'] as string | undefined);
+    const rawTop = emu2px(off?.['@y'] as string | undefined);
+    const rawW = emu2px(ext?.['@cx'] as string | undefined);
+    const rawH = emu2px(ext?.['@cy'] as string | undefined);
+    const { x: left, y: top } = applyXfrm(groupXfrm, rawLeft, rawTop);
+    const width = rawW * groupXfrm.scaleX;
+    const height = rawH * groupXfrm.scaleY;
+
+    const zIndex = z.next;
+    z.next += 1;
 
     const txBody = findChild(sp, 'p:txBody');
     if (txBody) {
       const { text, props } = extractTextAndProps(txBody);
-      // Per-page-unique id (otherwise el-1 collides across slides).
-      const id = `s${pageOrdinal}-el-${zIndex}`;
-      elements.push({
-        id,
+      out.push({
+        id: `s${pageOrdinal}-el-${zIndex}`,
         zIndex,
         left,
         top,
@@ -340,26 +366,22 @@ async function extractElementsFromSlideXml(
         type: PageElementType.TEXT,
         richText: { text, ...props } as ISlideRichTextProps,
       });
-      zIndex += 1;
       continue;
     }
 
     if (spPr) {
-      const id = `s${pageOrdinal}-shape-${zIndex}`;
       const { shapeType, fillRgb, outlineRgb, outlineWeightPx } = parseShapeAppearance(spPr);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shapeProperties: any = {};
-      if (fillRgb) {
-        shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
-      }
+      if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
       if (outlineRgb || outlineWeightPx !== null) {
         shapeProperties.outline = {
           outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
           weight: outlineWeightPx ?? 1,
         };
       }
-      elements.push({
-        id,
+      out.push({
+        id: `s${pageOrdinal}-shape-${zIndex}`,
         zIndex,
         left,
         top,
@@ -368,18 +390,118 @@ async function extractElementsFromSlideXml(
         title: '',
         description: '',
         type: PageElementType.SHAPE,
-        shape: {
-          shapeType: shapeType as never,
-          text: '',
-          shapeProperties,
-        },
+        shape: { shapeType: shapeType as never, text: '', shapeProperties },
       });
-      zIndex += 1;
     }
   }
 
-  const picElements = await extractPicElements(pics, reg, zIndex);
-  return elements.concat(picElements);
+  // <p:pic>
+  for (const pic of toArray(findChild(spTree, 'p:pic'))) {
+    if (!pic || typeof pic !== 'object') continue;
+    const result = await processPicNode(pic, reg, groupXfrm, pageOrdinal, z);
+    if (result) out.push(result);
+  }
+
+  // <p:grpSp> — recurse. Compose this group's xfrm with the inherited
+  // group transform so nested groups stack correctly.
+  for (const grp of toArray(findChild(spTree, 'p:grpSp'))) {
+    if (!grp || typeof grp !== 'object') continue;
+    const grpSpPr = findChild(grp, 'p:grpSpPr');
+    const innerXfrm = readGroupXfrm(grpSpPr);
+    const childXfrm = composeXfrm(groupXfrm, innerXfrm);
+    // The group itself is structural — only its children produce
+    // IPageElements. Univer has no native "group" page-element type in
+    // the OSS model (Gap 3 candidate), so we flatten and let z-order
+    // preserve the visual stack.
+    await processSpTree(grp, reg, pageOrdinal, childXfrm, z, out);
+  }
+}
+
+// Pic processing factored out of processSpTree so group recursion can
+// reuse it. Returns the IPageElement (or null on missing media).
+async function processPicNode(
+  pic: unknown,
+  reg: ImageRegistry,
+  groupXfrm: GroupXfrm,
+  pageOrdinal: number,
+  z: ZCounter,
+): Promise<IPageElement | null> {
+  const spPr = findChild(pic, 'p:spPr');
+  const xfrm = findChild(spPr, 'a:xfrm');
+  const off = findChild(xfrm, 'a:off') as XmlNode | undefined;
+  const ext = findChild(xfrm, 'a:ext') as XmlNode | undefined;
+  const rawLeft = emu2px(off?.['@x'] as string | undefined);
+  const rawTop = emu2px(off?.['@y'] as string | undefined);
+  const rawW = emu2px(ext?.['@cx'] as string | undefined);
+  const rawH = emu2px(ext?.['@cy'] as string | undefined);
+  const { x: left, y: top } = applyXfrm(groupXfrm, rawLeft, rawTop);
+  const width = rawW * groupXfrm.scaleX;
+  const height = rawH * groupXfrm.scaleY;
+
+  const blipFill = findChild(pic, 'p:blipFill');
+  const blip = findChild(blipFill, 'a:blip') as XmlNode | undefined;
+  const rEmbed = blip?.['@r:embed'] as string | undefined;
+  if (!rEmbed) return null;
+  const relTarget = reg.imageRelMap.get(rEmbed);
+  if (!relTarget) return null;
+  const slidesRoot = 'ppt/slides/';
+  const zipPath = relTarget.startsWith('/')
+    ? relTarget.slice(1)
+    : (relTarget.startsWith('..')
+      ? `ppt/${relTarget.replace(/^\.\.\//, '')}`
+      : `${slidesRoot}${relTarget}`);
+
+  let dataUri = reg.cache.get(zipPath) ?? null;
+  if (!dataUri) {
+    dataUri = await readImageAsDataUri(reg.zip, zipPath);
+    if (!dataUri) return null;
+    reg.cache.set(zipPath, dataUri);
+  }
+
+  const zIndex = z.next;
+  z.next += 1;
+  return {
+    id: `s${pageOrdinal}-pic-${zIndex}`,
+    zIndex,
+    left,
+    top,
+    width,
+    height,
+    title: '',
+    description: '',
+    type: PageElementType.IMAGE,
+    image: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      imageProperties: { contentUrl: dataUri } as any,
+    },
+  };
+}
+
+async function extractElementsFromSlideXml(
+  slideXml: string,
+  reg: ImageRegistry,
+  pageOrdinal: number,
+): Promise<IPageElement[]> {
+  const parsed = parser.parse(slideXml) as XmlNode;
+  const spTree = findChild(findChild(findChild(parsed, 'p:sld'), 'p:cSld'), 'p:spTree');
+  const elements: IPageElement[] = [];
+  const z: ZCounter = { next: 1 };
+  await processSpTree(spTree, reg, pageOrdinal, IDENTITY_XFRM, z, elements);
+  return elements;
+}
+
+// A2 — read `<p:cSld><p:bg>` for the slide background. Today we resolve
+// `<p:bgPr><a:solidFill><a:srgbClr>` only; gradient (`<a:gradFill>`),
+// picture (`<a:blipFill>`), and theme-referenced (`<p:bgRef>`)
+// backgrounds are deferred to later waves (A3 / A4 / A5).
+function extractSlideBackground(slideXml: string): string | null {
+  const parsed = parser.parse(slideXml) as XmlNode;
+  const cSld = findChild(findChild(parsed, 'p:sld'), 'p:cSld');
+  const bg = findChild(cSld, 'p:bg');
+  if (!bg) return null;
+  const bgPr = findChild(bg, 'p:bgPr');
+  if (!bgPr) return null;
+  return parseSrgbColor(bgPr);
 }
 
 export async function importPptxToSlides(file: ArrayBuffer, fileName: string): Promise<ISlideData> {
@@ -436,13 +558,18 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     const elementMap: Record<string, IPageElement> = {};
     for (const el of elements) elementMap[el.id] = el;
 
+    // A2 — slide background. Theme- and layout-inherited backgrounds
+    // are still TODO (A5 / I6); when this slide has no `<p:bg>` we
+    // keep the historical white default.
+    const slideBg = extractSlideBackground(slideXml);
+
     pages[pageId] = {
       id: pageId,
       pageType: PageType.SLIDE,
       zIndex: pageOrdinal,
       title: `Slide ${pageOrdinal}`,
       description: '',
-      pageBackgroundFill: { rgb: 'rgb(255, 255, 255)' },
+      pageBackgroundFill: { rgb: slideBg ?? 'rgb(255, 255, 255)' },
       pageElements: elementMap,
     };
     pageOrder.push(pageId);

@@ -574,6 +574,163 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect((img as any).image?.imageProperties?.contentUrl).toMatch(/^data:image\//);
   });
 
+  test('pptx import wave 2 — bg fill + font family survives round-trip', async ({ page }) => {
+    // A2 + B3 in one round-trip. PptxGenJS export honors `background`
+    // and per-text `fontFace`; the new importer reads them back.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const result = await page.evaluate(async () => {
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          export(snapshot: unknown): Promise<{ blob: Blob; fileName: string }>;
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      const client = (window as unknown as W).__casualSlides_getPptxClient();
+      const snapshot = {
+        id: 'wave2-bg-font',
+        title: 'wave2 bg font',
+        pageSize: { width: 960, height: 540 },
+        body: {
+          pageOrder: ['p1'],
+          pages: {
+            p1: {
+              id: 'p1',
+              pageType: 0,
+              zIndex: 1,
+              title: 'p1',
+              description: '',
+              pageBackgroundFill: { rgb: '#112244' },
+              pageElements: {
+                't': {
+                  id: 't',
+                  zIndex: 1,
+                  left: 80, top: 100, width: 800, height: 100,
+                  title: '', description: '',
+                  type: 2,
+                  richText: { text: 'Custom font', fs: 22, ff: 'Georgia' },
+                },
+              },
+            },
+          },
+        },
+      };
+      const { blob } = await client.export(snapshot);
+      const reimported = await client.import(await blob.arrayBuffer(), 'wave2-bg-font.pptx');
+      return reimported;
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = result;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    expect(firstPage, 'first page').toBeTruthy();
+
+    // A2: bg color survives. PptxGenJS writes a normalised uppercase hex,
+    // we read it back as `#RRGGBB`.
+    const bgHex = (firstPage.pageBackgroundFill?.rgb ?? '').toUpperCase().replace(/^#/, '');
+    expect(bgHex, 'slide bg srgbClr round-trips').toBe('112244');
+
+    // B3: ff is now populated on the first re-imported text element.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text = Object.values(firstPage.pageElements ?? {}).find((e: any) => e.type === 2) as any;
+    expect(text?.richText?.ff, 'font family survives').toBe('Georgia');
+  });
+
+  test('pptx import wave 2 — group shape recursion flattens nested shapes', async ({ page }) => {
+    // PptxGenJS can't author <p:grpSp>, so we build a minimal valid
+    // pptx by hand. The group's xfrm offsets the child by (1in, 1in)
+    // with a child-coord-space matching its content rect, so the
+    // shape's slide-space top-left lands at exactly 96 px, 96 px.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      // Minimal pptx skeleton, hand-rolled. Univer's importer needs:
+      //   ppt/presentation.xml + its rels
+      //   ppt/slides/slide1.xml + its rels (empty is fine)
+      //   [Content_Types].xml is not consulted but kept for sanity
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="9144000" cy="6858000"/><a:chOff x="0" y="0"/><a:chExt cx="9144000" cy="6858000"/></a:xfrm></p:grpSpPr>` +
+        // Inner group — offset by (914400, 914400) = (96 px, 96 px) at 9525 EMU/px,
+        // with a child-coord-space that matches so children render 1:1 inside.
+        `<p:grpSp>` +
+        `<p:nvGrpSpPr><p:cNvPr id="2" name="grp"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr><a:xfrm><a:off x="914400" y="914400"/><a:ext cx="3810000" cy="2857500"/><a:chOff x="0" y="0"/><a:chExt cx="3810000" cy="2857500"/></a:xfrm></p:grpSpPr>` +
+        // Nested shape at child-origin — should land at slide (96, 96) after the group offset.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="3" name="inside"/><p:cNvSpPr/><p:nvSpPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="0" y="0"/><a:ext cx="3810000" cy="2857500"/></a:xfrm>` +
+        `<a:prstGeom prst="ellipse"/>` +
+        `<a:solidFill><a:srgbClr val="FF8800"/></a:solidFill>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        `</p:grpSp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'group.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    expect(firstPage, 'first page extracted').toBeTruthy();
+    const elements = Object.values(firstPage.pageElements ?? {});
+    expect(elements.length, 'group flattened to its inner shape').toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const inner: any = elements[0];
+    // Group's <a:off x=914400 y=914400/> → 96 px each. Child's local
+    // offset is 0 so slide-space top-left lands at (96, 96).
+    expect(inner.left, 'child top-left x after group xfrm').toBeCloseTo(96, 0);
+    expect(inner.top, 'child top-left y after group xfrm').toBeCloseTo(96, 0);
+    expect(inner.shape?.shapeType, 'preset geometry survives').toBe('ellipse');
+    const fill = (inner.shape?.shapeProperties?.shapeBackgroundFill?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(fill, 'inner shape fill survives recursion').toBe('FF8800');
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

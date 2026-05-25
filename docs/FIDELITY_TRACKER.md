@@ -10,16 +10,16 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26
+## Snapshot — 2026-05-26 (post wave 2)
 
-Honest count, today: **9 / 87 items at ✅, 6 at ⚠️ — ~10% effective fidelity.** Matches the user's read. Everything below is fixable; the next sprints work top-down by visual impact × complexity.
+**12 / 87 items at ✅, 7 at ⚠️.** Wave 2 landed A2 (slide bg fill, read side), B3 (font family from `<a:latin>`), and F1+F2 (group shape recursion with composed `<a:chOff>`/`<a:chExt>` transforms). The biggest visible miss now is **I3** (placeholder geometry inherited from slide layouts) — titles still come back at 0,0 size when the deck inherits from a layout instead of declaring `<a:xfrm>` directly.
 
 ## A. Slide-level
 
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
 | A1 | Slide dimensions (`<p:sldSz>`) | ✅ | High | Low | Round-trips via `pageSize`. |
-| A2 | Background — solid fill (`<p:bg><p:bgPr><a:solidFill><a:srgbClr>`) | ⚠️ | High | Low | Export writes `slide.background = {color}`; import ignores `<p:bg>`. Every imported slide reverts to white. |
+| A2 | Background — solid fill (`<p:bg><p:bgPr><a:solidFill><a:srgbClr>`) | ✅ | High | Low | Read in wave 2 via `extractSlideBackground`. Gradient / picture / theme-ref bg still TODO (A3-A5). |
 | A3 | Background — gradient (`<a:gradFill>`) | ❌ | High | Med | Common in business templates. |
 | A4 | Background — picture (`<a:blipFill>`) | ❌ | High | Med | Photo backgrounds. |
 | A5 | Background — theme reference (`<p:bgRef idx>`) | ❌ | High | Med | Depends on theme resolution (J2). |
@@ -36,7 +36,7 @@ Honest count, today: **9 / 87 items at ✅, 6 at ⚠️ — ~10% effective fidel
 |------|------|--------|--------|-----------|-------|
 | B1 | Text content (`<a:t>`) | ✅ | Critical | — | — |
 | B2 | Font size (`<a:rPr sz>`) | ✅ | High | — | First run only; multi-run = B16. |
-| B3 | **Font family** (`<a:rPr><a:latin typeface>`) | ❌ | **High** | Low | All text reverts to default sans. Highest single-item ROI for "looks like the original deck". |
+| B3 | **Font family** (`<a:rPr><a:latin typeface>`) | ✅ | High | Low | Wave 2 — `IStyleBase.ff` populated from `<a:latin typeface>`. Export side now passes `fontFace` to PptxGenJS so the round-trip is symmetric. |
 | B4 | Font East-Asian / complex-script (`<a:ea>`, `<a:cs>`) | ❌ | Med | Low | Same parse path as B3. |
 | B5 | Bold (`<a:rPr b>`) | ✅ | High | — | First run only. |
 | B6 | Italic (`<a:rPr i>`) | ✅ | Med | — | First run only. |
@@ -113,8 +113,8 @@ Honest count, today: **9 / 87 items at ✅, 6 at ⚠️ — ~10% effective fidel
 
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
-| F1 | **Group shapes** (`<p:grpSp>`) | ❌ | **High** | Low | Currently dropped — logos, icon clusters, callouts made of grouped paths vanish. |
-| F2 | Group transform (offset+ext+chOff+chExt) | ❌ | High | Med | Needed for accurate F1. |
+| F1 | **Group shapes** (`<p:grpSp>`) | ✅ | High | Low | Wave 2 — recursive descent through nested groups; children flatten into the page's z-ordered element list. Univer has no native group `IPageElement` (Gap 3); we lose the group binding for editing but the visuals survive. |
+| F2 | Group transform (offset+ext+chOff+chExt) | ✅ | High | Med | Wave 2 — `readGroupXfrm` + `composeXfrm` map child coords → slide space; verified by an e2e fixture with `chOff`/`chExt`. |
 | F3 | Connector lines (`<p:cxnSp>`) | ❌ | Med | Low | — |
 | F4 | Line shapes (prstGeom `line`) | ⚠️ | Med | Low | Works as a 0-height rect — not a line. |
 
@@ -174,11 +174,12 @@ Working top-down by **visual impact × low-to-mid complexity**, fork-patch-free 
 
 1. **Wave 2 — instant visual wins** (one PR)
    - **A2** Slide background solid fill (read side)
+   - **B3** Font family from `<a:latin typeface>` (free: `IStyleBase.ff` already exists)
    - **F1+F2** Group shape recursion
-   - **C2** Paragraph alignment
+   - ~~**C2** Paragraph alignment~~ → moved to **Wave 6**. `ISlideRichTextProps` extends `IStyleBase`, which has no horizontal-alignment slot; cells have `ht` on `IStyleData`. Alignment for slides text means either (a) shipping multi-run via `IDocumentData` (which has `pPr.horizontalAlign`) or (b) a fork patch to widen `IStyleBase` — either way it belongs with wave 6's rich-text work.
    - **D21** Keep shape-bound text bound when round-tripping
-2. **Wave 3 — fonts**
-   - **B3 / B4** Font family from `<a:latin>` / `<a:ea>` (highest-ROI single item)
+2. **Wave 3 — extended fonts**
+   - **B4** East-Asian / complex-script font fallback (`<a:ea>`, `<a:cs>`)
 3. **Wave 4 — placeholder inheritance**
    - **A10 / A11** Slide → layout → master rels chain
    - **I3** Placeholder geometry inheritance

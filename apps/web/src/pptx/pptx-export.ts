@@ -149,6 +149,7 @@ function emitTextElement(slide: pptxgen.Slide, element: IPageElement, richText: 
     w: px2in(element.width),
     h: px2in(element.height),
     fontSize: richText.fs ?? 18,
+    fontFace: richText.ff || undefined,
     color: normalizeColor(richText.cl?.rgb, '111827'),
     bold: !!richText.bl,
     italic: !!richText.it,
