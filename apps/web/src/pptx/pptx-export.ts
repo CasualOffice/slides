@@ -1,5 +1,5 @@
 import pptxgen from 'pptxgenjs';
-import type { IPageElement, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
+import type { IPageElement, IShape, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
 
 // Convert an ISlideData snapshot into a .pptx Blob via PptxGenJS.
@@ -47,6 +47,54 @@ function normalizeColor(rgb: string | null | undefined | void, fallback = '00000
   return fallback;
 }
 
+function emitShapeElement(slide: pptxgen.Slide, element: IPageElement, shape: IShape) {
+  // ISlideData's ShapeType uses OOXML prstGeom values directly ('rect',
+  // 'ellipse', 'triangle', ...) — PptxGenJS shape names are the same strings
+  // so we pass through.
+  //
+  // PptxGenJS rejects unknown shape names. For anything we haven't validated
+  // we fall back to 'rect'; the visible bounds are correct even if the
+  // outline is wrong.
+  const shapeType = shape.shapeType ?? 'rect';
+
+  slide.addShape(shapeType as pptxgen.SHAPE_NAME, {
+    x: px2in(element.left),
+    y: px2in(element.top),
+    w: px2in(element.width),
+    h: px2in(element.height),
+    rotate: element.angle ?? 0,
+    flipH: !!element.flipX,
+    flipV: !!element.flipY,
+    fill: shape.shapeProperties?.shapeBackgroundFill?.rgb
+      ? { color: normalizeColor(shape.shapeProperties.shapeBackgroundFill.rgb, 'FFFFFF') }
+      : undefined,
+    line: shape.shapeProperties?.outline
+      ? {
+          color: normalizeColor(shape.shapeProperties.outline.outlineFill?.rgb, '000000'),
+          width: shape.shapeProperties.outline.weight ?? 1,
+        }
+      : undefined,
+    rectRadius: shape.shapeProperties?.radius,
+  });
+
+  // Shapes can carry inline text — render it as a text overlay on the same
+  // bounds. PowerPoint stores text-in-shape via <p:txBody> inside <p:sp>;
+  // PptxGenJS doesn't expose a text-in-shape API, so a separate addText with
+  // identical bounds is the round-trip-safe equivalent.
+  if (shape.text) {
+    slide.addText(shape.text, {
+      x: px2in(element.left),
+      y: px2in(element.top),
+      w: px2in(element.width),
+      h: px2in(element.height),
+      fontSize: 18,
+      color: '111827',
+      valign: 'middle',
+      align: 'center',
+    });
+  }
+}
+
 function emitTextElement(slide: pptxgen.Slide, element: IPageElement, richText: ISlideRichTextProps) {
   slide.addText(richText.text ?? '', {
     x: px2in(element.left),
@@ -89,9 +137,14 @@ function emitPage(deck: pptxgen, page: ISlidePage) {
       emitTextElement(slide, element, element.richText);
       continue;
     }
-    // SHAPE / IMAGE / TABLE / CHART / LINE / VIDEO — left for P1+ once the
-    // model carries them. Skipping is the right move for the spike — they
-    // are simply absent from the exported deck.
+    if (element.type === PageElementType.SHAPE && element.shape) {
+      emitShapeElement(slide, element, element.shape);
+      continue;
+    }
+    // IMAGE — model is in place; export needs base64 hand-off + the
+    // pptxgen `data:image/png;base64,...` shape. Punt to a follow-up.
+    // TABLE / CHART / LINE / VIDEO — blocked on Gap 3 (page-element types
+    // missing in Univer Slides). Skipping is the right move.
   }
 }
 

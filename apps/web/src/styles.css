@@ -52,6 +52,19 @@ html, body, #root {
   cursor: progress;
 }
 
+.spike-banner .spike-button + .spike-button {
+  margin-left: 6px;
+}
+
+.spike-banner .spike-status {
+  max-width: 48ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  opacity: 0.9;
+}
+
 .spike-banner .spike-error {
   max-width: 32ch;
   overflow: hidden;
