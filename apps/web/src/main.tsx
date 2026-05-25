@@ -3,6 +3,24 @@ import { App } from './App';
 import './univer-styles';
 import './styles.css';
 
+// Warm the pptx Web Worker on idle so the first Save/Open click doesn't pay
+// the ~1.9 MB worker bundle's cold-start cost. The client lazily instantiates
+// the worker on first call — kicking it here means the worker is already
+// resolved + ready when the user clicks. Without this, the first Save in CI
+// timed out the Playwright download event (15 s) on slower runners.
+import { getPptxClient } from './pptx/client';
+const warmPptxClient = () => {
+  // Resolving the singleton imports client.ts which imports types.ts which
+  // pulls in the worker URL — Vite/Rollup hoists the worker chunk into the
+  // initial graph and starts streaming it. Cheap, side-effect free.
+  void getPptxClient();
+};
+if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+  (window as Window & { requestIdleCallback: (cb: () => void) => number }).requestIdleCallback(warmPptxClient);
+} else {
+  setTimeout(warmPptxClient, 200);
+}
+
 // Univer manages its own internal React root inside the container we hand it.
 // React.StrictMode's double-invocation of effects in dev unmounts/remounts the
 // Univer instance before its first render completes, which leaves the DOM in

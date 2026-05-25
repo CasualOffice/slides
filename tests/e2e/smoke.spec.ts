@@ -79,7 +79,10 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // on that instead of an arbitrary sleep.
     await page.waitForFunction(() => typeof (window as { __slideRevProbe?: unknown }).__slideRevProbe === 'function', null, { timeout: 15_000 });
 
-    const downloadPromise = page.waitForEvent('download', { timeout: 15_000 });
+    // 30 s, not 15 s — CI runners are slower than local + the pptx worker
+    // bundle is ~1.9 MB. Plus main.tsx warms the worker on idle, so cold
+    // start should already be paid by the time we click.
+    const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
     await page.getByRole('button', { name: /save \.pptx/i }).click();
     let download;
     try {
@@ -128,7 +131,8 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     );
 
     // Save the default deck, then re-open it to force swapDeck.
-    const downloadPromise = page.waitForEvent('download', { timeout: 15_000 });
+    // Same 30 s rationale as above — CI cold start on the worker bundle.
+    const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
     await page.getByRole('button', { name: /save \.pptx/i }).click();
     const download = await downloadPromise;
     const downloadedPath = await download.path();
