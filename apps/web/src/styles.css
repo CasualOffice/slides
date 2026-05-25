@@ -1,28 +1,33 @@
 /* Casual Slides — chrome stylesheet.
-   Office 365 / Google Slides idiom: white surfaces with subtle borders,
-   PowerPoint orange-red (#B7472A) as the brand accent, Inter for UI text,
-   Material Symbols Outlined for inline icons. */
+   Aesthetic: Google Slides / Google Docs. Compact two-row title bar,
+   single-row icon toolbar, gray canvas stage. PowerPoint orange-red
+   (#B7472A) as the brand accent. Inter for UI text. Material Symbols
+   Outlined (preloaded via index.html) for inline icons. */
 
 :root {
-  --cs-bg:        #f3f3f3;
+  --cs-bg:        #f8f9fa;
+  --cs-stage:     #f1f3f4;
   --cs-surface:   #ffffff;
   --cs-surface-2: #fafafa;
   --cs-text:      #1f2328;
-  --cs-text-mute: #57606a;
-  --cs-text-dim:  #8c959f;
-  --cs-border:    #d0d7de;
-  --cs-border-2:  #e7ebef;
-  --cs-hover:     #f3f4f6;
-  --cs-active:    #eaeef2;
+  --cs-text-mute: #5f6368;
+  --cs-text-dim:  #80868b;
+  --cs-border:    #dadce0;
+  --cs-border-2:  #e8eaed;
+  --cs-hover:     #f1f3f4;
+  --cs-active:    #e8eaed;
   --cs-accent:    #b7472a;
   --cs-accent-dk: #8b3520;
   --cs-accent-bg: #fef3ef;
-  --cs-shadow:    0 1px 3px rgba(15, 20, 25, 0.06), 0 1px 2px rgba(15, 20, 25, 0.04);
+  --cs-focus:     #1a73e8;
+  --cs-shadow-1:  0 1px 2px rgba(60, 64, 67, 0.1), 0 1px 3px rgba(60, 64, 67, 0.05);
+  --cs-shadow-2:  0 2px 6px rgba(60, 64, 67, 0.12), 0 1px 2px rgba(60, 64, 67, 0.06);
   --cs-radius:    4px;
-  --cs-titlebar-h: 76px;
-  --cs-ribbon-h:   90px;
+  --cs-radius-lg: 8px;
+  --cs-titlebar-h: 64px;
+  --cs-toolbar-h:  44px;
   --cs-statusbar-h: 28px;
-  --cs-font: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --cs-font: 'Inter', 'Segoe UI', Roboto, Arial, system-ui, -apple-system, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -43,7 +48,7 @@ html, body, #root {
 
 #root {
   display: grid;
-  grid-template-rows: var(--cs-titlebar-h) var(--cs-ribbon-h) 1fr var(--cs-statusbar-h);
+  grid-template-rows: var(--cs-titlebar-h) var(--cs-toolbar-h) 1fr var(--cs-statusbar-h);
   min-height: 0;
 }
 
@@ -57,161 +62,181 @@ button {
 }
 button:disabled { cursor: not-allowed; }
 
+/* ============================================================= Icon */
+
+.cs-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  flex-shrink: 0;
+}
+
 /* ============================================================= TitleBar */
 
 .cs-titlebar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: stretch;
+  gap: 12px;
+  padding: 0 16px;
   background: var(--cs-surface);
   border-bottom: 1px solid var(--cs-border);
   user-select: none;
 }
 
-.cs-titlebar__top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 44px;
-  padding: 0 12px;
-  gap: 12px;
-}
-
 .cs-titlebar__brand {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.cs-titlebar__center {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 4px 0;
+  gap: 0;
+}
+
+.cs-titlebar__row {
   display: flex;
   align-items: center;
-  gap: 8px;
   min-width: 0;
-  flex: 1 1 auto;
+  gap: 4px;
 }
 
-.cs-titlebar__logo { display: inline-flex; align-items: center; }
-
-.cs-titlebar__product {
-  font-weight: 600;
+.cs-titlebar__row--top {
+  height: 26px;
   font-size: 14px;
-  letter-spacing: -0.01em;
-  color: var(--cs-text);
 }
 
-.cs-titlebar__sep { color: var(--cs-text-dim); font-weight: 400; }
+.cs-titlebar__row--menus {
+  height: 28px;
+  font-size: 13px;
+}
 
-.cs-titlebar__filename {
+.cs-titlebar__filename,
+.cs-titlebar__filename-input {
+  padding: 0 6px;
+  height: 22px;
+  margin-left: -6px;
+  display: inline-flex;
+  align-items: center;
   font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  line-height: 1;
   color: var(--cs-text);
-  padding: 4px 8px;
   border-radius: var(--cs-radius);
-  border: 1px solid transparent;
   background: transparent;
-  cursor: text;
+  border: 1px solid transparent;
   max-width: 360px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cs-titlebar__filename:hover { background: var(--cs-hover); }
 
+.cs-titlebar__filename:hover { background: var(--cs-hover); }
 .cs-titlebar__filename-input {
-  font-family: inherit;
-  font-size: 14px;
-  color: var(--cs-text);
-  padding: 4px 8px;
-  border: 1px solid var(--cs-accent);
-  border-radius: var(--cs-radius);
   background: var(--cs-surface);
+  border-color: var(--cs-focus);
   outline: 0;
-  width: 240px;
-  max-width: 360px;
+  min-width: 220px;
 }
 
-.cs-titlebar__status,
-.cs-titlebar__error {
+.cs-titlebar__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
-  color: var(--cs-text-mute);
-  margin-left: 8px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--cs-surface-2);
   border: 1px solid var(--cs-border-2);
-  max-width: 32ch;
+  background: var(--cs-surface-2);
+  color: var(--cs-text-mute);
+  max-width: 28ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-left: 8px;
 }
-.cs-titlebar__error {
+
+.cs-titlebar__pill--error {
   color: #b54708;
   background: #fff7ed;
   border-color: #fed7aa;
 }
 
 .cs-titlebar__actions {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .cs-titlebar__avatar {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--cs-accent) 0%, var(--cs-accent-dk) 100%);
   color: #fff;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   margin-left: 4px;
   user-select: none;
 }
+
+/* ============================================================= Buttons */
 
 .cs-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 28px;
-  padding: 0 12px;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
   border-radius: var(--cs-radius);
-  border: 1px solid var(--cs-border);
-  background: var(--cs-surface);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--cs-text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
-  transition: background 80ms ease, border-color 80ms ease;
+  transition: background 80ms ease, box-shadow 80ms ease;
 }
 .cs-btn:hover:not(:disabled) { background: var(--cs-hover); }
-.cs-btn:disabled { opacity: 0.55; }
+.cs-btn:disabled { opacity: 0.45; }
 
-.cs-btn--ghost { border-color: transparent; background: transparent; }
-.cs-btn--ghost:hover:not(:disabled) { background: var(--cs-hover); border-color: var(--cs-border); }
+.cs-btn--ghost { color: var(--cs-text); }
 
 .cs-btn--primary {
+  background: var(--cs-accent-bg);
+  color: var(--cs-accent);
+}
+.cs-btn--primary:hover:not(:disabled) { background: #fde2d4; }
+
+.cs-btn--accent {
   background: var(--cs-accent);
   color: #fff;
-  border-color: var(--cs-accent);
 }
-.cs-btn--primary:hover:not(:disabled) {
-  background: var(--cs-accent-dk);
-  border-color: var(--cs-accent-dk);
-}
+.cs-btn--accent:hover:not(:disabled) { background: var(--cs-accent-dk); }
+.cs-btn--accent:disabled { background: var(--cs-accent); opacity: 0.45; }
 
 /* ============================================================= Menus */
-
-.cs-titlebar__menus {
-  display: flex;
-  align-items: stretch;
-  height: 32px;
-  padding: 0 8px;
-  gap: 2px;
-  background: var(--cs-surface);
-  border-top: 1px solid var(--cs-border-2);
-}
 
 .cs-menu { position: relative; }
 
 .cs-menu__trigger {
-  height: 100%;
-  padding: 0 10px;
-  font-size: 12px;
+  height: 24px;
+  margin: 0;
+  padding: 0 6px;
+  font-size: 13px;
   color: var(--cs-text);
   border-radius: var(--cs-radius);
   white-space: nowrap;
@@ -219,18 +244,20 @@ button:disabled { cursor: not-allowed; }
 .cs-menu__trigger:hover { background: var(--cs-hover); }
 .cs-menu__trigger.is-open { background: var(--cs-active); }
 
+.cs-titlebar__row--menus > .cs-menu:first-child .cs-menu__trigger { margin-left: -6px; }
+
 .cs-menu__list {
   position: absolute;
   top: 100%;
   left: 0;
   margin: 4px 0 0;
-  padding: 4px;
-  min-width: 200px;
+  padding: 6px 0;
+  min-width: 220px;
   list-style: none;
   background: var(--cs-surface);
-  border: 1px solid var(--cs-border);
-  border-radius: 6px;
-  box-shadow: 0 10px 24px rgba(15, 20, 25, 0.1);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-2);
   z-index: 50;
 }
 
@@ -239,10 +266,9 @@ button:disabled { cursor: not-allowed; }
   width: 100%;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
-  font-size: 12px;
+  padding: 6px 16px;
+  font-size: 13px;
   color: var(--cs-text);
-  border-radius: var(--cs-radius);
   text-align: left;
 }
 .cs-menu__item:hover:not(:disabled) { background: var(--cs-hover); }
@@ -250,131 +276,94 @@ button:disabled { cursor: not-allowed; }
 .cs-menu__shortcut {
   font-size: 11px;
   color: var(--cs-text-mute);
-  font-family: ui-monospace, 'JetBrains Mono', monospace;
+  font-family: 'Roboto Mono', ui-monospace, monospace;
 }
 
-.cs-menu__sep { height: 1px; background: var(--cs-border-2); margin: 4px 6px; }
+.cs-menu__sep { height: 1px; background: var(--cs-border-2); margin: 4px 0; }
 
-/* ============================================================= Ribbon */
+/* ============================================================= Toolbar */
 
-.cs-ribbon {
+.cs-toolbar {
+  position: relative;
   background: var(--cs-surface);
   border-bottom: 1px solid var(--cs-border);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
 }
 
-.cs-ribbon__tabs {
+.cs-toolbar__row {
   display: flex;
-  align-items: stretch;
-  height: 30px;
+  align-items: center;
+  height: var(--cs-toolbar-h);
   padding: 0 12px;
   gap: 2px;
-  background: var(--cs-surface);
-  border-bottom: 1px solid var(--cs-border-2);
-}
-
-.cs-ribbon__tab {
-  height: 100%;
-  padding: 0 14px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--cs-text-mute);
-  position: relative;
-  border-radius: var(--cs-radius) var(--cs-radius) 0 0;
-}
-.cs-ribbon__tab:hover:not(.is-active) { background: var(--cs-hover); color: var(--cs-text); }
-.cs-ribbon__tab.is-active {
-  color: var(--cs-accent);
-  background: var(--cs-accent-bg);
-}
-.cs-ribbon__tab.is-active::after {
-  content: '';
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: -1px;
-  height: 2px;
-  background: var(--cs-accent);
-  border-radius: 2px;
-}
-
-.cs-ribbon__body {
-  display: flex;
-  align-items: stretch;
-  height: 60px;
-  padding: 4px 8px;
-  gap: 4px;
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: thin;
+  scrollbar-width: none;
 }
+.cs-toolbar__row::-webkit-scrollbar { display: none; }
 
-.cs-ribbon__group {
-  display: flex;
-  flex-direction: column;
-  padding: 0 8px;
-  border-right: 1px solid var(--cs-border-2);
-  min-width: 0;
-}
-.cs-ribbon__group:last-child { border-right: 0; }
-
-.cs-ribbon__group-buttons {
-  display: flex;
-  gap: 2px;
-  flex: 1 1 auto;
-  align-items: stretch;
-}
-
-.cs-ribbon__group-title {
-  font-size: 10px;
-  color: var(--cs-text-dim);
-  text-align: center;
-  padding-top: 2px;
-  letter-spacing: 0.02em;
-}
-
-.cs-ribbon__btn {
-  display: flex;
-  flex-direction: column;
+.cs-toolbar__btn {
+  position: relative;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 6px;
-  min-width: 38px;
+  gap: 1px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--cs-radius);
   color: var(--cs-text);
-  font-size: 10px;
-  line-height: 1.2;
-  gap: 1px;
-  white-space: nowrap;
 }
-.cs-ribbon__btn:hover:not(:disabled) { background: var(--cs-hover); }
-.cs-ribbon__btn:disabled { color: var(--cs-text-dim); opacity: 0.55; }
+.cs-toolbar__btn:hover:not(:disabled) { background: var(--cs-hover); }
+.cs-toolbar__btn:active:not(:disabled) { background: var(--cs-active); }
+.cs-toolbar__btn:disabled { color: var(--cs-text-dim); opacity: 0.55; }
 
-.cs-ribbon__btn--primary .cs-ribbon__icon {
-  font-size: 24px;
+.cs-toolbar__btn--split { width: auto; padding: 0 4px 0 6px; }
+
+.cs-toolbar__caret {
+  color: var(--cs-text-mute);
+  margin-left: -2px;
 }
 
-.cs-ribbon__icon {
-  font-size: 18px;
+.cs-toolbar__sep {
+  width: 1px;
+  height: 20px;
+  background: var(--cs-border-2);
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+.cs-toolbar__spacer { flex: 1 1 auto; min-width: 16px; }
+
+.cs-toolbar__popover {
+  position: fixed;
+  z-index: 60;
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-2);
+  padding: 6px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+}
+
+.cs-toolbar__popover-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
   color: var(--cs-text);
-  font-variation-settings: 'wght' 400, 'opsz' 24;
+  border-radius: var(--cs-radius);
+  text-align: left;
+  width: 100%;
 }
-.cs-ribbon__btn:disabled .cs-ribbon__icon { color: var(--cs-text-dim); }
-
-.cs-ribbon__btn-label {
-  display: block;
-  max-width: 64px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.cs-toolbar__popover-item:hover { background: var(--cs-hover); }
 
 /* ============================================================= Workspace */
 
 .cs-workspace {
   position: relative;
-  background: var(--cs-bg);
+  background: var(--cs-stage);
   min-height: 0;
   overflow: hidden;
   display: flex;
@@ -384,7 +373,7 @@ button:disabled { cursor: not-allowed; }
   flex: 1 1 auto;
   min-height: 0;
   position: relative;
-  background: var(--cs-bg);
+  background: var(--cs-stage);
 }
 
 /* ============================================================= StatusBar */
@@ -413,11 +402,13 @@ button:disabled { cursor: not-allowed; }
   width: 1px;
   height: 14px;
   background: var(--cs-border-2);
+  margin: 0 2px;
 }
 
 .cs-statusbar__slide-count { font-weight: 500; color: var(--cs-text); }
 
-.cs-statusbar__view-btn {
+.cs-statusbar__view-btn,
+.cs-statusbar__zoom-btn {
   width: 24px;
   height: 22px;
   display: inline-flex;
@@ -426,25 +417,14 @@ button:disabled { cursor: not-allowed; }
   border-radius: var(--cs-radius);
   color: var(--cs-text-mute);
 }
-.cs-statusbar__view-btn:hover:not(:disabled) { background: var(--cs-hover); color: var(--cs-text); }
+.cs-statusbar__view-btn:hover:not(:disabled),
+.cs-statusbar__zoom-btn:hover:not(:disabled) { background: var(--cs-hover); color: var(--cs-text); }
 .cs-statusbar__view-btn.is-active { background: var(--cs-accent-bg); color: var(--cs-accent); }
-.cs-statusbar__view-btn:disabled { opacity: 0.45; }
-.cs-statusbar__view-btn .material-symbols-outlined { font-size: 14px; }
-
-.cs-statusbar__zoom-btn {
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--cs-radius);
-  color: var(--cs-text-mute);
-}
-.cs-statusbar__zoom-btn:hover { background: var(--cs-hover); color: var(--cs-text); }
-.cs-statusbar__zoom-btn .material-symbols-outlined { font-size: 14px; }
+.cs-statusbar__view-btn:disabled,
+.cs-statusbar__zoom-btn:disabled { opacity: 0.45; }
 
 .cs-statusbar__zoom-slider {
-  width: 140px;
+  width: 120px;
   height: 4px;
   accent-color: var(--cs-accent);
   cursor: pointer;
@@ -463,16 +443,9 @@ button:disabled { cursor: not-allowed; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: var(--cs-border);
+  background: #c1c5cb;
   border-radius: 999px;
   border: 2px solid var(--cs-surface);
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--cs-text-dim); }
 ::-webkit-scrollbar-corner { background: transparent; }
-
-/* Backwards-compat hooks kept around for older e2e selectors. The new
-   chrome owns its own classnames, but tests still pattern-match these. */
-.spike-banner,
-.spike-button,
-.spike-status,
-.spike-error { display: none; }

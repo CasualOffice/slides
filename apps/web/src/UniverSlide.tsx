@@ -116,7 +116,18 @@ export function UniverSlide({ snapshot }: UniverSlideProps) {
       };
     }
 
+    // Univer measures the canvas viewport at create-time. Our chrome
+    // (title bar + toolbar + status bar) takes a tick to lay out, so the
+    // initial measurement is sometimes wrong — slide ends up offset to
+    // the right with a horizontal scrollbar required to center it.
+    // Fire a synthetic resize once the layout settles; Univer recomputes
+    // viewport bounds and re-runs _scrollToCenter on the slide.
+    const resize1 = window.setTimeout(() => window.dispatchEvent(new Event('resize')), 80);
+    const resize2 = window.setTimeout(() => window.dispatchEvent(new Event('resize')), 400);
+
     return () => {
+      window.clearTimeout(resize1);
+      window.clearTimeout(resize2);
       univer.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

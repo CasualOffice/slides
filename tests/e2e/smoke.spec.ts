@@ -89,8 +89,8 @@ test.describe('Casual Slides — P0 spike smoke', () => {
       download = await downloadPromise;
     } catch (e) {
       // Surface the in-page error/state instead of just "timed out".
-      const status = await page.locator('.cs-titlebar__status').textContent().catch(() => null);
-      const error = await page.locator('.cs-titlebar__error').textContent().catch(() => null);
+      const status = await page.locator('.cs-titlebar__pill--status').textContent().catch(() => null);
+      const error = await page.locator('.cs-titlebar__pill--error').textContent().catch(() => null);
       throw new Error(
         `Save .pptx did not produce a download.\n  status: ${status}\n  error: ${error}\n  console:\n${errors.map((e) => '    ' + e).join('\n')}`,
       );
@@ -151,7 +151,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     await fileInput.setInputFiles(fixturePath);
 
     // Wait for the import to finish (status pill updates) then settle.
-    await expect(page.locator('.cs-titlebar__status')).toContainText(/loaded/i, { timeout: 10_000 });
+    await expect(page.locator('.cs-titlebar__pill--status')).toContainText(/loaded/i, { timeout: 10_000 });
     await page.waitForTimeout(500);
 
     const fatal = errors.filter(
@@ -279,6 +279,28 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // operation id, which was the OPERATION-typed escape hatch).
     expect(captured.after).toContain('slide.mutation.insert-element');
     expect(captured.after.length).toBeGreaterThan(captured.before.length);
+  });
+
+  test('Toolbar → Text box dispatches insert-element', async ({ page }) => {
+    // The toolbar's "Text box" button should dispatch slide.command.add-text
+    // → slide.mutation.insert-element. Regression guard for the toolbar
+    // wiring layer (apps/web/src/univer/commands.ts).
+    await page.goto('/');
+    await page.waitForFunction(
+      () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(800);
+
+    await page.evaluate(() => {
+      (window as { __capturedMutations: string[] }).__capturedMutations = [];
+    });
+    await page.getByRole('button', { name: /^text box$/i }).click();
+    await page.waitForTimeout(200);
+
+    const captured = await page.evaluate(() => [...(window as { __capturedMutations: string[] }).__capturedMutations]);
+    expect(captured).toContain('slide.mutation.insert-element');
   });
 
   test('rev-tracking patch is live (Gap 1)', async ({ page }) => {

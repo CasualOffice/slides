@@ -7,7 +7,7 @@ import { UniverSlide } from './UniverSlide';
 import { getPptxClient } from './pptx/client';
 import { DEFAULT_SLIDE_DATA } from './default-slide';
 import { TitleBar } from './shell/TitleBar';
-import { Ribbon } from './shell/Ribbon';
+import { Toolbar } from './shell/Toolbar';
 import { StatusBar } from './shell/StatusBar';
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -110,7 +110,7 @@ export function App() {
         status={status}
         error={error}
       />
-      <Ribbon />
+      <Toolbar />
       <input
         ref={fileInputRef}
         type="file"

@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { Icon } from './icons';
 
-// PowerPoint-style status bar. Slide count + view-mode toggle on the left,
-// zoom controls on the right. Zoom is visual-only in v0.0.x; wiring to
+// Bottom status bar. Slide count + locale on the left, view-mode toggles
+// + zoom slider on the right. Zoom is visual-only in v0.0.x; wiring to
 // Univer's scale API follows in P1.
 
 export interface StatusBarProps {
@@ -23,16 +24,13 @@ export function StatusBar({ slideCount, activeSlideIndex = 0 }: StatusBarProps) 
       </div>
       <div className="cs-statusbar__right">
         <button type="button" className="cs-statusbar__view-btn is-active" title="Normal view">
-          <span className="material-symbols-outlined">view_agenda</span>
+          <Icon name="view_agenda" size={14} />
         </button>
         <button type="button" className="cs-statusbar__view-btn" disabled title="Slide sorter — coming soon">
-          <span className="material-symbols-outlined">view_module</span>
+          <Icon name="view_module" size={14} />
         </button>
         <button type="button" className="cs-statusbar__view-btn" disabled title="Notes page — coming soon">
-          <span className="material-symbols-outlined">sticky_note_2</span>
-        </button>
-        <button type="button" className="cs-statusbar__view-btn" disabled title="Slide show — coming soon">
-          <span className="material-symbols-outlined">play_arrow</span>
+          <Icon name="sticky_note_2" size={14} />
         </button>
         <span className="cs-statusbar__sep" aria-hidden="true" />
         <button
@@ -41,7 +39,7 @@ export function StatusBar({ slideCount, activeSlideIndex = 0 }: StatusBarProps) 
           title="Zoom out"
           onClick={() => setZoom(Math.max(25, zoom - 10))}
         >
-          <span className="material-symbols-outlined">remove</span>
+          <Icon name="remove" size={14} />
         </button>
         <input
           type="range"
@@ -59,7 +57,7 @@ export function StatusBar({ slideCount, activeSlideIndex = 0 }: StatusBarProps) 
           title="Zoom in"
           onClick={() => setZoom(Math.min(400, zoom + 10))}
         >
-          <span className="material-symbols-outlined">add</span>
+          <Icon name="add" size={14} />
         </button>
         <span className="cs-statusbar__zoom-value">{zoom}%</span>
       </div>
