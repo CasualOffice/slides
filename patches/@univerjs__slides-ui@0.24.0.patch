@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..590fa4c8f21926a92ce90854745bcbe3f9d59b86 100644
+index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..f95b690180985d4849d1b43a275c8b06ab5a7743 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -156,7 +156,7 @@ let SlideRenderController = class SlideRenderController extends _univerjs_core.R
@@ -142,7 +142,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..590fa4c8f21926a92ce90854745bcbe3
  		return true;
  	}
  };
-@@ -510,16 +547,28 @@ const InsertSlideFloatImageCommand = {
+@@ -510,16 +547,97 @@ const InsertSlideFloatImageCommand = {
  //#region src/commands/operations/update-element.operation.ts
  const UpdateSlideElementOperation = {
  	id: "slide.operation.update-element",
@@ -177,10 +177,79 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..590fa4c8f21926a92ce90854745bcbe3
 +			undoMutations: [{ id: SlideUpdateElementMutation.id, params: inverse }],
 +			redoMutations: [{ id: SlideUpdateElementMutation.id, params: forward }]
 +		});
++		return true;
++	}
++};
++const SlideDuplicateSlideCommand = {
++	id: "slide.command.duplicate-slide",
++	type: _univerjs_core.CommandType.COMMAND,
++	handler: (accessor, params) => {
++		var _focused;
++		const commandService = accessor.get(_univerjs_core.ICommandService);
++		const undoRedoService = accessor.get(_univerjs_core.IUndoRedoService);
++		const instances = accessor.get(_univerjs_core.IUniverInstanceService);
++		const unitId = (params === null || params === void 0 ? void 0 : params.unitId)
++			|| ((_focused = instances.getFocusedUnit()) === null || _focused === void 0 ? void 0 : _focused.getUnitId());
++		if (!unitId) return false;
++		const model = instances.getUnit(unitId);
++		if (!model) return false;
++		const source = (params === null || params === void 0 ? void 0 : params.pageId) ? model.getPage(params.pageId) : model.getActivePage();
++		if (!source) return false;
++		const order = model.getPageOrder();
++		if (!order) return false;
++		const sourceIdx = order.indexOf(source.id);
++		const newPageId = (0, _univerjs_core.generateRandomId)(6);
++		const clonedElements = {};
++		for (const original of Object.values(source.pageElements || {})) {
++			const newId = (0, _univerjs_core.generateRandomId)(6);
++			clonedElements[newId] = { ...original, id: newId };
++		}
++		const clone = { ...source, id: newPageId, pageElements: clonedElements };
++		const insertParams = { unitId, page: clone, index: sourceIdx === -1 ? void 0 : sourceIdx + 1 };
++		const deleteParams = { unitId, pageId: newPageId };
++		const ok = commandService.syncExecuteCommand(SlideInsertPageMutation.id, insertParams);
++		if (!ok) return false;
++		accessor.get(CanvasView).appendPage(unitId);
++		undoRedoService.pushUndoRedo({
++			unitID: unitId,
++			undoMutations: [{ id: SlideDeletePageMutation.id, params: deleteParams }],
++			redoMutations: [{ id: SlideInsertPageMutation.id, params: insertParams }]
++		});
++		return true;
++	}
++};
++const SlideDeleteSlideCommand = {
++	id: "slide.command.delete-slide",
++	type: _univerjs_core.CommandType.COMMAND,
++	handler: (accessor, params) => {
++		var _focused;
++		const commandService = accessor.get(_univerjs_core.ICommandService);
++		const undoRedoService = accessor.get(_univerjs_core.IUndoRedoService);
++		const instances = accessor.get(_univerjs_core.IUniverInstanceService);
++		const unitId = (params === null || params === void 0 ? void 0 : params.unitId)
++			|| ((_focused = instances.getFocusedUnit()) === null || _focused === void 0 ? void 0 : _focused.getUnitId());
++		if (!unitId) return false;
++		const model = instances.getUnit(unitId);
++		if (!model) return false;
++		const page = (params === null || params === void 0 ? void 0 : params.pageId) ? model.getPage(params.pageId) : model.getActivePage();
++		if (!page) return false;
++		const order = model.getPageOrder();
++		if (!order || order.length <= 1) return false;
++		const sourceIdx = order.indexOf(page.id);
++		const captured = JSON.parse(JSON.stringify(page));
++		const deleteParams = { unitId, pageId: page.id };
++		const insertParams = { unitId, page: captured, index: sourceIdx };
++		const ok = commandService.syncExecuteCommand(SlideDeletePageMutation.id, deleteParams);
++		if (!ok) return false;
++		undoRedoService.pushUndoRedo({
++			unitID: unitId,
++			undoMutations: [{ id: SlideInsertPageMutation.id, params: insertParams }],
++			redoMutations: [{ id: SlideDeletePageMutation.id, params: deleteParams }]
++		});
  		return true;
  	}
  };
-@@ -882,40 +931,51 @@ const InsertSlideShapeRectangleCommand = {
+@@ -882,40 +1000,51 @@ const InsertSlideShapeRectangleCommand = {
  		return commandService.executeCommand(InsertSlideShapeRectangleOperation.id, { unitId });
  	}
  };
@@ -264,7 +333,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..590fa4c8f21926a92ce90854745bcbe3
  };
  const ToggleSlideEditSidebarOperation = {
  	id: "sidebar.operation.slide-shape",
-@@ -958,95 +1018,183 @@ const InsertSlideShapeEllipseCommand = {
+@@ -958,95 +1087,183 @@ const InsertSlideShapeEllipseCommand = {
  };
  const InsertSlideShapeEllipseOperation = {
  	id: "slide.operation.insert-float-shape.ellipse",
@@ -511,10 +580,12 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..590fa4c8f21926a92ce90854745bcbe3
  
  //#endregion
  //#region src/commands/operations/set-thumb.operation.ts
-@@ -1549,6 +1697,12 @@ let SlidesUIController = class SlidesUIController extends _univerjs_core.Disposa
+@@ -1549,6 +1766,14 @@ let SlidesUIController = class SlidesUIController extends _univerjs_core.Disposa
  			ToggleSlideEditSidebarOperation,
  			DeleteSlideElementOperation,
  			UpdateSlideElementOperation,
++			SlideDuplicateSlideCommand,
++			SlideDeleteSlideCommand,
 +			SlideInsertElementMutation,
 +			SlideDeleteElementMutation,
 +			SlideUpdateElementMutation,
@@ -524,7 +595,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..590fa4c8f21926a92ce90854745bcbe3
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
-@@ -2711,6 +2865,7 @@ Object.defineProperty(exports, 'SlideCanvasPopMangerService', {
+@@ -2711,6 +2936,7 @@ Object.defineProperty(exports, 'SlideCanvasPopMangerService', {
    }
  });
  exports.SlideEditorContainer = SlideEditorContainer;
@@ -533,7 +604,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..590fa4c8f21926a92ce90854745bcbe3
  Object.defineProperty(exports, 'SlidesUIController', {
    enumerable: true,
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..531c78980b7c0a41f1835b29ecc5bfc294f8b164 100644
+index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5f417a4d5705d33146c926425e825b93fff16e70 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -135,7 +135,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
@@ -695,7 +766,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..531c78980b7c0a41f1835b29ecc5bfc2
  		return true;
  	}
  };
-@@ -509,16 +549,28 @@ const InsertSlideFloatImageCommand = {
+@@ -509,16 +549,97 @@ const InsertSlideFloatImageCommand = {
  //#region src/commands/operations/update-element.operation.ts
  const UpdateSlideElementOperation = {
  	id: "slide.operation.update-element",
@@ -730,10 +801,79 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..531c78980b7c0a41f1835b29ecc5bfc2
 +			undoMutations: [{ id: SlideUpdateElementMutation.id, params: inverse }],
 +			redoMutations: [{ id: SlideUpdateElementMutation.id, params: forward }]
 +		});
++		return true;
++	}
++};
++const SlideDuplicateSlideCommand = {
++	id: "slide.command.duplicate-slide",
++	type: CommandType.COMMAND,
++	handler: (accessor, params) => {
++		var _focused;
++		const commandService = accessor.get(ICommandService);
++		const undoRedoService = accessor.get(IUndoRedoService);
++		const instances = accessor.get(IUniverInstanceService);
++		const unitId = (params === null || params === void 0 ? void 0 : params.unitId)
++			|| ((_focused = instances.getFocusedUnit()) === null || _focused === void 0 ? void 0 : _focused.getUnitId());
++		if (!unitId) return false;
++		const model = instances.getUnit(unitId);
++		if (!model) return false;
++		const source = (params === null || params === void 0 ? void 0 : params.pageId) ? model.getPage(params.pageId) : model.getActivePage();
++		if (!source) return false;
++		const order = model.getPageOrder();
++		if (!order) return false;
++		const sourceIdx = order.indexOf(source.id);
++		const newPageId = generateRandomId(6);
++		const clonedElements = {};
++		for (const original of Object.values(source.pageElements || {})) {
++			const newId = generateRandomId(6);
++			clonedElements[newId] = { ...original, id: newId };
++		}
++		const clone = { ...source, id: newPageId, pageElements: clonedElements };
++		const insertParams = { unitId, page: clone, index: sourceIdx === -1 ? void 0 : sourceIdx + 1 };
++		const deleteParams = { unitId, pageId: newPageId };
++		const ok = commandService.syncExecuteCommand(SlideInsertPageMutation.id, insertParams);
++		if (!ok) return false;
++		accessor.get(CanvasView).appendPage(unitId);
++		undoRedoService.pushUndoRedo({
++			unitID: unitId,
++			undoMutations: [{ id: SlideDeletePageMutation.id, params: deleteParams }],
++			redoMutations: [{ id: SlideInsertPageMutation.id, params: insertParams }]
++		});
++		return true;
++	}
++};
++const SlideDeleteSlideCommand = {
++	id: "slide.command.delete-slide",
++	type: CommandType.COMMAND,
++	handler: (accessor, params) => {
++		var _focused;
++		const commandService = accessor.get(ICommandService);
++		const undoRedoService = accessor.get(IUndoRedoService);
++		const instances = accessor.get(IUniverInstanceService);
++		const unitId = (params === null || params === void 0 ? void 0 : params.unitId)
++			|| ((_focused = instances.getFocusedUnit()) === null || _focused === void 0 ? void 0 : _focused.getUnitId());
++		if (!unitId) return false;
++		const model = instances.getUnit(unitId);
++		if (!model) return false;
++		const page = (params === null || params === void 0 ? void 0 : params.pageId) ? model.getPage(params.pageId) : model.getActivePage();
++		if (!page) return false;
++		const order = model.getPageOrder();
++		if (!order || order.length <= 1) return false;
++		const sourceIdx = order.indexOf(page.id);
++		const captured = JSON.parse(JSON.stringify(page));
++		const deleteParams = { unitId, pageId: page.id };
++		const insertParams = { unitId, page: captured, index: sourceIdx };
++		const ok = commandService.syncExecuteCommand(SlideDeletePageMutation.id, deleteParams);
++		if (!ok) return false;
++		undoRedoService.pushUndoRedo({
++			unitID: unitId,
++			undoMutations: [{ id: SlideInsertPageMutation.id, params: insertParams }],
++			redoMutations: [{ id: SlideDeletePageMutation.id, params: deleteParams }]
++		});
  		return true;
  	}
  };
-@@ -881,40 +933,51 @@ const InsertSlideShapeRectangleCommand = {
+@@ -881,40 +1002,51 @@ const InsertSlideShapeRectangleCommand = {
  		return commandService.executeCommand(InsertSlideShapeRectangleOperation.id, { unitId });
  	}
  };
@@ -817,7 +957,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..531c78980b7c0a41f1835b29ecc5bfc2
  };
  const ToggleSlideEditSidebarOperation = {
  	id: "sidebar.operation.slide-shape",
-@@ -957,8 +1020,32 @@ const InsertSlideShapeEllipseCommand = {
+@@ -957,8 +1089,32 @@ const InsertSlideShapeEllipseCommand = {
  };
  const InsertSlideShapeEllipseOperation = {
  	id: "slide.operation.insert-float-shape.ellipse",
@@ -852,7 +992,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..531c78980b7c0a41f1835b29ecc5bfc2
  		const id = generateRandomId(6);
  		const univerInstanceService = accessor.get(IUniverInstanceService);
  		const unitId = params.unitId;
-@@ -994,58 +1081,161 @@ const InsertSlideShapeEllipseOperation = {
+@@ -994,58 +1150,161 @@ const InsertSlideShapeEllipseOperation = {
  	}
  };
  
@@ -1044,10 +1184,12 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..531c78980b7c0a41f1835b29ecc5bfc2
  
  //#endregion
  //#region src/commands/operations/set-thumb.operation.ts
-@@ -1548,6 +1738,12 @@ let SlidesUIController = class SlidesUIController extends Disposable {
+@@ -1548,6 +1807,14 @@ let SlidesUIController = class SlidesUIController extends Disposable {
  			ToggleSlideEditSidebarOperation,
  			DeleteSlideElementOperation,
  			UpdateSlideElementOperation,
++			SlideDuplicateSlideCommand,
++			SlideDeleteSlideCommand,
 +			SlideInsertElementMutation,
 +			SlideDeleteElementMutation,
 +			SlideUpdateElementMutation,
@@ -1057,7 +1199,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..531c78980b7c0a41f1835b29ecc5bfc2
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
-@@ -2682,4 +2878,4 @@ UniverSlidesUIPlugin = __decorate([
+@@ -2682,4 +2949,4 @@ UniverSlidesUIPlugin = __decorate([
  ], UniverSlidesUIPlugin);
  
  //#endregion

@@ -106,7 +106,30 @@ export function App() {
       } else if (k === 'o') {
         e.preventDefault();
         handleOpenClick();
+      } else if (k === 'd') {
+        // Ctrl+D — duplicate active slide. Overrides browser bookmark
+        // (Google Slides does the same).
+        e.preventDefault();
+        void dispatchSlideCommand('slide.command.duplicate-slide');
       }
+    };
+    const deleteSlideHandler = (e: KeyboardEvent) => {
+      // Bare Delete key. Skip if focus is in any editable surface — the
+      // text-frame editor uses Delete for character deletion.
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const target = e.target as HTMLElement | null;
+      const inEditable = !!target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      );
+      if (inEditable) return;
+      // Shift+Delete acts on the active slide as a guarded variant —
+      // bare Delete should not delete slides unless focus is on the
+      // slide-bar, which we don't track today.
+      if (!e.shiftKey) return;
+      e.preventDefault();
+      void dispatchSlideCommand('slide.command.delete-slide');
     };
     const f5Handler = (e: KeyboardEvent) => {
       if (e.key === 'F5') {
@@ -116,9 +139,11 @@ export function App() {
     };
     window.addEventListener('keydown', handler);
     window.addEventListener('keydown', f5Handler);
+    window.addEventListener('keydown', deleteSlideHandler);
     return () => {
       window.removeEventListener('keydown', handler);
       window.removeEventListener('keydown', f5Handler);
+      window.removeEventListener('keydown', deleteSlideHandler);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
