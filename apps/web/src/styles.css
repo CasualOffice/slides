@@ -930,6 +930,144 @@ button:disabled { cursor: not-allowed; }
   gap: 8px;
 }
 
+/* ============================================================= Recent files dialog */
+
+.cs-recent__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: rgba(15, 20, 25, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+}
+
+.cs-recent {
+  width: min(540px, calc(100vw - 48px));
+  max-height: min(560px, calc(100vh - 80px));
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-2);
+  display: flex;
+  flex-direction: column;
+}
+
+.cs-recent__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--cs-border-2);
+  flex-shrink: 0;
+}
+
+.cs-recent__title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+  color: var(--cs-text);
+}
+
+.cs-recent__close {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cs-radius);
+  color: var(--cs-text-mute);
+}
+.cs-recent__close:hover { background: var(--cs-hover); color: var(--cs-text); }
+
+.cs-recent__empty {
+  margin: 0;
+  padding: 28px 18px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--cs-text-mute);
+}
+
+.cs-recent__list {
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.cs-recent__item {
+  display: flex;
+  align-items: stretch;
+  border-radius: var(--cs-radius);
+}
+.cs-recent__item:hover { background: var(--cs-hover); }
+
+.cs-recent__open {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: var(--cs-text);
+  font: inherit;
+}
+.cs-recent__open:disabled { cursor: progress; opacity: 0.6; }
+
+.cs-recent__name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-recent__meta {
+  font-size: 11px;
+  color: var(--cs-text-mute);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cs-recent__remove {
+  width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--cs-text-mute);
+  cursor: pointer;
+  border-radius: var(--cs-radius);
+  margin-right: 6px;
+}
+.cs-recent__remove:hover { background: var(--cs-border-2); color: var(--cs-text); }
+
+.cs-recent__error {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: #b3261e;
+  background: #fdecea;
+  border-top: 1px solid var(--cs-border-2);
+}
+
+.cs-recent__footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid var(--cs-border-2);
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 /* ============================================================= SlideShow */
 
 .cs-slideshow {

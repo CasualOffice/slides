@@ -597,6 +597,76 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     await expect(page.locator('[data-testid="properties-dialog"]')).toHaveCount(0);
   });
 
+  test('File → Recent files reopens a deck across reloads (IndexedDB)', async ({ page }, testInfo) => {
+    // 1. Save the default deck, 2. Open it (writes to IndexedDB),
+    // 3. Reload (clears in-memory state but not IDB), 4. File → Recent
+    // files, 5. Click the entry → status reads "Loaded · N slides".
+    await page.goto('/');
+    await page.waitForFunction(
+      () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
+      null,
+      { timeout: 15_000 },
+    );
+
+    // Export the default deck.
+    const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
+    await page.getByRole('button', { name: /^save$/i }).click();
+    const download = await downloadPromise;
+    const downloadedPath = await download.path();
+    expect(downloadedPath).toBeTruthy();
+
+    const fixturePath = testInfo.outputPath('recent-fixture.pptx');
+    const { copyFileSync } = await import('node:fs');
+    copyFileSync(downloadedPath!, fixturePath);
+
+    // Open via the hidden file input — same path the Open button uses.
+    // This fires addRecent under the hood.
+    await page.locator('input[type="file"]').setInputFiles(fixturePath);
+    await expect(page.locator('.cs-titlebar__pill--status')).toContainText(/loaded/i, { timeout: 10_000 });
+
+    // Probe IDB directly pre-reload — proves persistence is durable
+    // before we trust the round-trip across a page lifecycle.
+    const preReloadRows = await page.evaluate(async () => {
+      const req = indexedDB.open('casual-slides', 1);
+      const db: IDBDatabase = await new Promise((resolve, reject) => {
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      const rows = await new Promise<unknown[]>((resolve, reject) => {
+        const r = db.transaction('recent', 'readonly').objectStore('recent').getAll();
+        r.onsuccess = () => resolve(r.result as unknown[]);
+        r.onerror = () => reject(r.error);
+      });
+      db.close();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return rows.map((row: any) => ({ name: row.name, size: row.size }));
+    });
+    expect(preReloadRows.length).toBeGreaterThan(0);
+
+    // Reload — wipes in-memory state, keeps IDB.
+    await page.reload();
+    await page.waitForFunction(
+      () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
+      null,
+      { timeout: 15_000 },
+    );
+
+    // File menu → Recent files. Use the data-menu-item hook to avoid
+    // matching the menubar "File" button label.
+    await page.getByRole('button', { name: 'File' }).click();
+    await page.locator('button[data-menu="file"][data-menu-item="recent"]').click();
+    await expect(page.locator('[data-testid="recent-dialog"]')).toBeVisible();
+
+    // The entry from the prior open should be listed.
+    const entry = page.locator('[data-testid="recent-item"][data-recent-name="recent-fixture.pptx"]');
+    await expect(entry).toBeVisible();
+
+    // Click it → modal closes + status updates to "Loaded".
+    await entry.click();
+    await expect(page.locator('[data-testid="recent-dialog"]')).toHaveCount(0);
+    await expect(page.locator('.cs-titlebar__pill--status')).toContainText(/loaded/i, { timeout: 10_000 });
+  });
+
   test('rev-tracking patch is live (Gap 1)', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => typeof (window as { __slideRevProbe?: unknown }).__slideRevProbe === 'function', null, { timeout: 15_000 });

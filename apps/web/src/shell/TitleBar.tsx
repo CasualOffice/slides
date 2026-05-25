@@ -21,6 +21,7 @@ export interface TitleBarProps {
   onOpen: () => void;
   onSave: () => void;
   onOpenProperties: () => void;
+  onOpenRecent: () => void;
   saving?: boolean;
   opening?: boolean;
   status?: string | null;
@@ -46,6 +47,7 @@ const MENUS: MenuDef[] = [
   { id: 'file', label: 'File', items: [
     { id: 'new', label: 'New', shortcut: 'Ctrl+N' },
     { id: 'open', label: 'Open', shortcut: 'Ctrl+O' },
+    { id: 'recent', label: 'Recent files' },
     { id: 'save', label: 'Save', shortcut: 'Ctrl+S' },
     { id: 'sep1', label: '---' },
     { id: 'properties', label: 'Properties' },
@@ -88,6 +90,7 @@ export function TitleBar({
   onOpen,
   onSave,
   onOpenProperties,
+  onOpenRecent,
   saving,
   opening,
   status,
@@ -125,8 +128,9 @@ export function TitleBar({
       if (menuId === 'file' && itemId === 'open') onOpen();
       if (menuId === 'file' && itemId === 'save') onSave();
       if (menuId === 'file' && itemId === 'properties') onOpenProperties();
+      if (menuId === 'file' && itemId === 'recent') onOpenRecent();
     },
-    [onOpen, onSave, onOpenProperties],
+    [onOpen, onSave, onOpenProperties, onOpenRecent],
   );
 
   return (
@@ -207,6 +211,8 @@ export function TitleBar({
                         <button
                           type="button"
                           className="cs-menu__item"
+                          data-menu={menu.id}
+                          data-menu-item={item.id}
                           onClick={() => handleMenuItem(menu.id, item.id)}
                         >
                           <span>{item.label}</span>

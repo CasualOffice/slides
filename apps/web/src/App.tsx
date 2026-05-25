@@ -13,9 +13,11 @@ import { SlideShow } from './shell/SlideShow';
 import { NotesPanel } from './shell/NotesPanel';
 import { ThemePicker } from './shell/ThemePicker';
 import { PropertiesDialog } from './shell/PropertiesDialog';
+import { RecentFilesDialog } from './shell/RecentFilesDialog';
 import { SlideContextMenu } from './shell/SlideContextMenu';
 import { dispatchSlideCommand } from './univer/commands';
 import { useCollabBridge } from './collab/CollabProvider';
+import { addRecent } from './storage/recent-files';
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -76,6 +78,7 @@ export function App() {
   }, [notesVisible]);
   const [themesOpen, setThemesOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const [recentOpen, setRecentOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Expose to the Toolbar (which lives outside App's prop tree).
@@ -191,26 +194,57 @@ export function App() {
     fileInputRef.current?.click();
   }
 
-  async function handleOpenPptx(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
+  // Shared import path. `persist` controls whether we save the bytes to
+  // IndexedDB — true for disk opens, also true for recent-list opens so
+  // openedAt refreshes (addRecent de-dups on name+size).
+  //
+  // Buffer ownership caveat: JSZip / PptxGenJS internally transfer the
+  // input ArrayBuffer to a worker, which detaches it. Snapshot a copy
+  // BEFORE handing the original to the importer so the IDB persist (or
+  // any other consumer) gets durable bytes.
+  async function importBuffer(buffer: ArrayBuffer, name: string, persist: boolean) {
     setError(null);
     setStatus(null);
     setOpening(true);
+    const persistCopy = persist ? buffer.slice(0) : null;
     try {
-      const buffer = await file.arrayBuffer();
-      const imported = await getPptxClient().import(buffer, file.name);
+      const imported = await getPptxClient().import(buffer, name);
       const pageCount = imported.body?.pageOrder.length ?? 0;
       setSnapshot(imported);
       const w = window as unknown as { __pptxImportedSnapshot?: unknown };
       w.__pptxImportedSnapshot = imported;
+      if (persistCopy) {
+        // Persist BEFORE the status pill flips to "Loaded" — that's the
+        // signal e2e (and callers) use to know the deck is ready,
+        // including its recent-files entry. IDB writes are sub-ms for
+        // small decks; quota/private-mode failures get swallowed since
+        // the import itself already succeeded.
+        try {
+          await addRecent(name, persistCopy);
+        } catch {
+          /* swallow — failure is "won't show in recent", not data loss */
+        }
+      }
       setStatus(`Loaded · ${pageCount} slide${pageCount === 1 ? '' : 's'}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setOpening(false);
     }
+  }
+
+  async function handleOpenPptx(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const buffer = await file.arrayBuffer();
+    await importBuffer(buffer, file.name, /* persist */ true);
+  }
+
+  async function handleOpenRecent(buffer: ArrayBuffer, name: string) {
+    // Re-store via importBuffer's persist=true so the entry's openedAt
+    // refreshes (de-dup on name+size means we don't duplicate the row).
+    await importBuffer(buffer, name, /* persist */ true);
   }
 
   function handleFileNameChange(next: string) {
@@ -225,6 +259,7 @@ export function App() {
         onOpen={handleOpenClick}
         onSave={handleSavePptx}
         onOpenProperties={() => setPropertiesOpen(true)}
+        onOpenRecent={() => setRecentOpen(true)}
         saving={saving}
         opening={opening}
         status={status}
@@ -258,6 +293,13 @@ export function App() {
         open={propertiesOpen}
         onClose={() => setPropertiesOpen(false)}
         fallback={snapshot}
+      />
+      <RecentFilesDialog
+        open={recentOpen}
+        onClose={() => setRecentOpen(false)}
+        onOpen={(bytes, name) => {
+          void handleOpenRecent(bytes, name);
+        }}
       />
       <SlideContextMenu />
     </>
