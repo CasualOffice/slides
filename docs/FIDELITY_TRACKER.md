@@ -1,0 +1,202 @@
+# PPTX fidelity tracker
+
+What every real `.pptx` carries vs. what our importer/exporter currently round-trips. Single source of truth — `docs/PIPELINE_TRACKER.md` references back here.
+
+## Legend
+
+- ✅ round-trips (export + import preserve the value)
+- ⚠️ partial (export writes it OR import reads it, not both; OR a degraded form survives)
+- ❌ dropped (lost entirely on round-trip)
+
+Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
+
+## Snapshot — 2026-05-26
+
+Honest count, today: **9 / 87 items at ✅, 6 at ⚠️ — ~10% effective fidelity.** Matches the user's read. Everything below is fixable; the next sprints work top-down by visual impact × complexity.
+
+## A. Slide-level
+
+| Code | Item | Status | Impact | Complexity | Notes |
+|------|------|--------|--------|-----------|-------|
+| A1 | Slide dimensions (`<p:sldSz>`) | ✅ | High | Low | Round-trips via `pageSize`. |
+| A2 | Background — solid fill (`<p:bg><p:bgPr><a:solidFill><a:srgbClr>`) | ⚠️ | High | Low | Export writes `slide.background = {color}`; import ignores `<p:bg>`. Every imported slide reverts to white. |
+| A3 | Background — gradient (`<a:gradFill>`) | ❌ | High | Med | Common in business templates. |
+| A4 | Background — picture (`<a:blipFill>`) | ❌ | High | Med | Photo backgrounds. |
+| A5 | Background — theme reference (`<p:bgRef idx>`) | ❌ | High | Med | Depends on theme resolution (J2). |
+| A6 | Slide hidden flag (`<p:sld show="0">`) | ❌ | Low | Low | Rare. |
+| A7 | Slide transitions (`<p:transition>`) | ❌ | Low | Med | Skip for v0; deferred behind playback. |
+| A8 | Slide animations (`<p:timing>`) | ❌ | Med | High | Defer. |
+| A9 | Speaker notes (`<p:notesSlide>`) | ⚠️ | Med | Med | Stored in `page.description` round-trip via resources passthrough — not an actual notesSlide. |
+| A10 | Slide layout reference (`r:id` in slide rels) | ❌ | High | Med | Needed for I3 / I4. |
+| A11 | Slide master reference | ❌ | High | Med | Needed for I3 / I4. |
+
+## B. Text — runs
+
+| Code | Item | Status | Impact | Complexity | Notes |
+|------|------|--------|--------|-----------|-------|
+| B1 | Text content (`<a:t>`) | ✅ | Critical | — | — |
+| B2 | Font size (`<a:rPr sz>`) | ✅ | High | — | First run only; multi-run = B16. |
+| B3 | **Font family** (`<a:rPr><a:latin typeface>`) | ❌ | **High** | Low | All text reverts to default sans. Highest single-item ROI for "looks like the original deck". |
+| B4 | Font East-Asian / complex-script (`<a:ea>`, `<a:cs>`) | ❌ | Med | Low | Same parse path as B3. |
+| B5 | Bold (`<a:rPr b>`) | ✅ | High | — | First run only. |
+| B6 | Italic (`<a:rPr i>`) | ✅ | Med | — | First run only. |
+| B7 | Underline (`<a:rPr u>`) | ✅ | Low | — | First run only. |
+| B8 | Strikethrough (`<a:rPr strike>`) | ❌ | Low | Low | — |
+| B9 | Subscript / superscript (`<a:rPr baseline>`) | ❌ | Low | Low | — |
+| B10 | Font color — srgbClr | ✅ | High | — | First run only. |
+| B11 | Font color — schemeClr (theme) | ❌ | High | Med | Depends on J2. |
+| B12 | Font color — prstClr / sysClr | ❌ | Low | Low | — |
+| B13 | Highlight color (`<a:rPr highlight>`) | ❌ | Low | Low | — |
+| B14 | Letter spacing (`<a:rPr spc>`) | ❌ | Low | Low | — |
+| B15 | Text outline (`<a:rPr><a:ln>`) | ❌ | Low | Med | — |
+| B16 | **Multi-run paragraphs** (mixed bold / color / size mid-line) | ❌ | **High** | Med | Currently collapses to first-run style. Needs `IDocumentData`. |
+| B17 | Hyperlinks (`<a:hlinkClick>`) | ❌ | Med | Med | — |
+
+## C. Text — paragraphs / frame
+
+| Code | Item | Status | Impact | Complexity | Notes |
+|------|------|--------|--------|-----------|-------|
+| C1 | Multi-paragraph (`<a:p>` repeats) | ✅ | High | — | Joined with `\n`. |
+| C2 | Paragraph alignment (`<a:pPr algn=l\|ctr\|r\|just\|dist>`) | ❌ | **High** | Low | Title alignment is the most-noticed miss. |
+| C3 | Paragraph indentation (`<a:pPr indent / marL>`) | ❌ | Med | Low | — |
+| C4 | Line spacing (`<a:lnSpc>`) | ❌ | Med | Low | — |
+| C5 | Space before / after paragraph (`<a:spcBef>` `<a:spcAft>`) | ❌ | Med | Low | — |
+| C6 | Bullets — char (`<a:buChar>`) | ❌ | High | Med | Many decks use bulleted content. |
+| C7 | Bullets — auto-numbered (`<a:buAutoNum>`) | ❌ | Med | Med | — |
+| C8 | Bullet indent levels (`<a:pPr lvl>`) | ❌ | Med | Med | — |
+| C9 | RTL paragraphs (`<a:pPr rtl="1">`) | ❌ | Low | Low | — |
+| C10 | Text frame insets (`<a:bodyPr ins{L,T,R,B}>`) | ❌ | Low | Low | — |
+| C11 | Text frame vertical anchor (`<a:bodyPr anchor>`) | ❌ | Med | Low | — |
+| C12 | Text frame rotation (`<a:bodyPr rot>`) | ❌ | Low | Low | — |
+| C13 | Text frame autofit (`<a:normAutofit>`) | ❌ | Med | Med | — |
+| C14 | Text wrap (`<a:bodyPr wrap>`) | ❌ | Low | Low | — |
+
+## D. Shape geometry / appearance
+
+| Code | Item | Status | Impact | Complexity | Notes |
+|------|------|--------|--------|-----------|-------|
+| D1 | Position (`<a:xfrm><a:off>`) | ✅ | Critical | — | — |
+| D2 | Size (`<a:xfrm><a:ext>`) | ✅ | Critical | — | — |
+| D3 | Rotation (`<a:xfrm @rot>`) | ❌ | Med | Low | — |
+| D4 | Flip H / V (`<a:xfrm @flipH/@flipV>`) | ❌ | Low | Low | — |
+| D5 | Preset geometry (`<a:prstGeom prst>`) | ✅ | High | — | 100+ values; we pass the string through. |
+| D6 | Custom geometry (`<a:custGeom>`) | ❌ | Med | High | Vector paths. |
+| D7 | Solid fill — srgbClr | ✅ | High | — | — |
+| D8 | Solid fill — schemeClr (theme) | ❌ | **High** | Med | Most templates use theme accents. |
+| D9 | Gradient fill (`<a:gradFill>`) | ❌ | High | Med | Common in modern templates. |
+| D10 | Pattern fill (`<a:pattFill>`) | ❌ | Low | Med | — |
+| D11 | Picture fill on shape | ❌ | Low | Med | — |
+| D12 | No fill (`<a:noFill>`) | ⚠️ | High | Low | Currently treated as white. Need to distinguish from missing fill. |
+| D13 | Outline color (srgbClr) | ✅ | High | — | — |
+| D14 | Outline weight | ✅ | High | — | EMU → px. |
+| D15 | Outline dash pattern (`<a:prstDash>`) | ❌ | Med | Low | — |
+| D16 | Outline cap (`<a:ln @cap>`) | ❌ | Low | Low | — |
+| D17 | Arrowheads (`<a:headEnd>` `<a:tailEnd>`) | ❌ | Med | Low | — |
+| D18 | Shape shadow (`<a:effectLst><a:outerShdw>`) | ❌ | Med | Med | — |
+| D19 | Glow / reflection / blur | ❌ | Low | Med | — |
+| D20 | 3D rotation / extrusion | ❌ | Low | High | Defer. |
+| D21 | Inline shape text (`<p:sp>` with `<p:txBody>`) | ⚠️ | High | Low | We extract the text into a separate TEXT element instead of keeping it bound to the shape — visually OK but loses the shape-text binding for editing. |
+
+## E. Images
+
+| Code | Item | Status | Impact | Complexity | Notes |
+|------|------|--------|--------|-----------|-------|
+| E1 | Embedded bytes (`<a:blip r:embed>`) | ✅ | Critical | — | data: URI. |
+| E2 | Linked images (`<a:blip r:link>`) | ❌ | Low | Low | — |
+| E3 | Image cropping (`<a:srcRect>`) | ❌ | Med | Low | — |
+| E4 | Image transparency (`<a:alphaModFix>`) | ❌ | Low | Low | — |
+| E5 | Image colour adjust (lum/duotone/grayscale) | ❌ | Low | Med | — |
+| E6 | Image effects (`<a:effectLst>`) | ❌ | Low | Med | — |
+| E7 | Image rotation / flip | ❌ | Med | Low | Same as D3 / D4. |
+
+## F. Groups / connectors / lines
+
+| Code | Item | Status | Impact | Complexity | Notes |
+|------|------|--------|--------|-----------|-------|
+| F1 | **Group shapes** (`<p:grpSp>`) | ❌ | **High** | Low | Currently dropped — logos, icon clusters, callouts made of grouped paths vanish. |
+| F2 | Group transform (offset+ext+chOff+chExt) | ❌ | High | Med | Needed for accurate F1. |
+| F3 | Connector lines (`<p:cxnSp>`) | ❌ | Med | Low | — |
+| F4 | Line shapes (prstGeom `line`) | ⚠️ | Med | Low | Works as a 0-height rect — not a line. |
+
+## G. Tables
+
+| Code | Item | Status | Impact | Complexity | Notes |
+|------|------|--------|--------|-----------|-------|
+| G1 | Table presence (`<a:tbl>`) | ❌ | High | High | Univer has no native TABLE `IPageElement` — needs fork patch (UNIVER_SLIDES_GAPS.md Gap 3). |
+| G2 | Cells / rows / cols | ❌ | High | High | Blocked on G1. |
+| G3 | Cell fill / borders / text | ❌ | Med | High | Blocked on G1. |
+| G4 | Merged cells (`gridSpan` / `rowSpan`) | ❌ | Med | High | Blocked on G1. |
+
+## H. Charts
+
+| Code | Item | Status | Impact | Complexity | Notes |
+|------|------|--------|--------|-----------|-------|
+| H1 | Chart presence (`<p:graphicFrame>` → chart) | ❌ | High | High | Blocked on Univer chart `IPageElement` (Gap 3). |
+| H2 | Chart data | ❌ | High | High | — |
+| H3 | Chart type / style | ❌ | Med | High | — |
+
+## I. Layouts / masters (inheritance)
+
+| Code | Item | Status | Impact | Complexity | Notes |
+|------|------|--------|--------|-----------|-------|
+| I1 | Slide layout XML passthrough (resources slot) | ❌ | Med | Low | Carry XML across round-trip even if unused. |
+| I2 | Slide master XML passthrough | ❌ | Med | Low | — |
+| I3 | **Placeholder geometry inheritance** (xfrm from layout / master) | ❌ | **Critical** | Med | Single biggest visual miss — titles render at 0,0 size when the slide xml leaves `<a:xfrm>` off the placeholder. |
+| I4 | Placeholder default text style inheritance | ❌ | High | Med | Title font / size from layout. |
+| I5 | Date / page-number / footer placeholders | ❌ | Med | Med | — |
+| I6 | Layout background fill (when slide inherits) | ❌ | High | Med | — |
+
+## J. Theme
+
+| Code | Item | Status | Impact | Complexity | Notes |
+|------|------|--------|--------|-----------|-------|
+| J1 | Theme XML passthrough | ❌ | Med | Low | Carry across round-trip even if unused. |
+| J2 | **Color scheme resolution** (`<a:schemeClr>` → hex) | ❌ | **High** | Med | Unlocks B11, D8, A5. |
+| J3 | Font scheme (major / minor typefaces) | ❌ | Med | Med | Falls back from B3 when `<a:latin>` is absent. |
+| J4 | Format scheme (default fills / lines / effects) | ❌ | Low | High | Defer. |
+
+## K. Document-level
+
+| Code | Item | Status | Impact | Complexity | Notes |
+|------|------|--------|--------|-----------|-------|
+| K1 | Title / author / company metadata | ⚠️ | Low | Low | Set on export (`Casual Slides` author); not read on import. |
+| K2 | Custom properties | ❌ | Low | Low | — |
+| K3 | Default text style (`<p:defaultTextStyle>`) | ❌ | Med | Med | — |
+| K4 | Headers / footers | ❌ | Low | Med | — |
+| K5 | Comments (`<p:cm>`) | ❌ | Med | Med | Tracked also as feature work. |
+| K6 | Audio / video | ❌ | Low | Med | — |
+| K7 | SmartArt (`<a:graphicData>` diagram) | ❌ | Med | High | Renders to image at best. |
+| K8 | Ink | ❌ | Low | High | — |
+
+## Proceed order
+
+Working top-down by **visual impact × low-to-mid complexity**, fork-patch-free where possible. Sequence the next several waves should land in:
+
+1. **Wave 2 — instant visual wins** (one PR)
+   - **A2** Slide background solid fill (read side)
+   - **F1+F2** Group shape recursion
+   - **C2** Paragraph alignment
+   - **D21** Keep shape-bound text bound when round-tripping
+2. **Wave 3 — fonts**
+   - **B3 / B4** Font family from `<a:latin>` / `<a:ea>` (highest-ROI single item)
+3. **Wave 4 — placeholder inheritance**
+   - **A10 / A11** Slide → layout → master rels chain
+   - **I3** Placeholder geometry inheritance
+   - **I4** Placeholder default text style inheritance
+4. **Wave 5 — theme**
+   - **J1** Theme XML passthrough
+   - **J2** Color scheme resolution → unlocks B11 / D8 / A5
+   - **J3** Font scheme fallback
+5. **Wave 6 — rich text**
+   - **B16** Multi-run paragraphs (needs `IDocumentData`)
+   - **C6 / C7** Bullets
+6. **Wave 7 — geometry polish**
+   - **D3 / D4 / E7** Rotation, flips
+   - **D15 / D17** Dash patterns, arrowheads
+   - **F3 / F4** Connector + line shapes
+7. **Wave 8 — gradients + effects**
+   - **A3 / D9** Gradient fills
+   - **D18** Shadows
+8. **Wave 9 — tables / charts** (fork-patch blocked, Gap 3)
+
+Each wave ships with at least one round-trip e2e in `tests/e2e/smoke.spec.ts`. Update this file as items land.

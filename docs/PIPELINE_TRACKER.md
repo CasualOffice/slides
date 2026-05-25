@@ -6,6 +6,11 @@ git worktree, branched off `main`, pushed under its `branch` name.
 
 Update this file when an item lands or shifts ownership.
 
+> **Fidelity-first directive (2026-05-26):** features are pointless if the
+> imported deck can't be seen. `docs/FIDELITY_TRACKER.md` enumerates every
+> pptx feature and its round-trip status; new feature work (Sprint 2 #5,
+> #8, #9) is on hold until the fidelity waves there land.
+
 ## Sprint 1 — small parallel features
 
 | # | Feature                          | Owner   | Branch                     | Status     | Notes |
