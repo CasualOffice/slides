@@ -10,9 +10,9 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7b)
+## Snapshot — 2026-05-26 (post wave 7c)
 
-**32 / 87 items at ✅, 7 at ⚠️.** Wave 7b lands the text-frame layout pair: C10 (`<a:bodyPr lIns/tIns/rIns/bIns>` → `documentStyle.margin*`) and C11 (`<a:bodyPr anchor>` → `renderConfig.verticalAlign`). Combined with waves 4 → 7, every common content surface — placeholder titles, bulleted bodies with mixed-style runs, centered headers, themed shapes with rotation and dashed borders, gradient backgrounds, multi-inset framed text — now survives a real-world pptx round-trip. The remaining gaps are either fork-patch territory (D9/A3 true gradients, D18-D20 effects, G1/H1 tables/charts) or low-frequency in business decks (D6 custGeom, K5-K8 comments / ink / SmartArt).
+**34 / 87 items at ✅, 7 at ⚠️.** Wave 7c lands F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch — outline + dash + rotation all flow through unchanged) and E3 (`<a:srcRect l/t/r/b>` → `image.cropProperties` normalised offsets). With this, the only bounded items left are fork-patch territory (true gradients, shape shadow/glow effects, tables, charts) or vanishingly rare in business decks (custGeom, ink, SmartArt). The fidelity climb on import is effectively done for non-Univer-blocked content.
 
 ## A. Slide-level
 
@@ -103,7 +103,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 |------|------|--------|--------|-----------|-------|
 | E1 | Embedded bytes (`<a:blip r:embed>`) | ✅ | Critical | — | data: URI. |
 | E2 | Linked images (`<a:blip r:link>`) | ❌ | Low | Low | — |
-| E3 | Image cropping (`<a:srcRect>`) | ❌ | Med | Low | — |
+| E3 | Image cropping (`<a:srcRect>`) | ✅ | Med | Low | Wave 7c — `srcRect @l/@t/@r/@b` (percent * 1000) → `cropProperties.offsetLeft/Top/Right/Bottom` (0..1 fractions). |
 | E4 | Image transparency (`<a:alphaModFix>`) | ❌ | Low | Low | — |
 | E5 | Image colour adjust (lum/duotone/grayscale) | ❌ | Low | Med | — |
 | E6 | Image effects (`<a:effectLst>`) | ❌ | Low | Med | — |
@@ -115,7 +115,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 |------|------|--------|--------|-----------|-------|
 | F1 | **Group shapes** (`<p:grpSp>`) | ✅ | High | Low | Wave 2 — recursive descent through nested groups; children flatten into the page's z-ordered element list. Univer has no native group `IPageElement` (Gap 3); we lose the group binding for editing but the visuals survive. |
 | F2 | Group transform (offset+ext+chOff+chExt) | ✅ | High | Med | Wave 2 — `readGroupXfrm` + `composeXfrm` map child coords → slide space; verified by an e2e fixture with `chOff`/`chExt`. |
-| F3 | Connector lines (`<p:cxnSp>`) | ❌ | Med | Low | — |
+| F3 | Connector lines (`<p:cxnSp>`) | ✅ | Med | Low | Wave 7c — processSpTree iterates `<p:cxnSp>` alongside `<p:sp>` and reuses the SHAPE branch (prstGeom + outline + dash + rotation all flow through). |
 | F4 | Line shapes (prstGeom `line`) | ⚠️ | Med | Low | Works as a 0-height rect — not a line. |
 
 ## G. Tables

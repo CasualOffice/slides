@@ -1247,6 +1247,57 @@ async function processSpTree(
     }
   }
 
+  // F3 — `<p:cxnSp>` connectors. Same geometry shape as `<p:sp>` minus
+  // the text body. PowerPoint emits `prst="line"`, `"straightConnector1"`,
+  // `"bentConnector3"`, etc. — pass through to Univer's shapeType so
+  // future renderer work picks them up. Position + outline + flips all
+  // flow through the same branches as a regular shape.
+  for (const cxn of toArray(findChild(spTree, 'p:cxnSp'))) {
+    if (!cxn || typeof cxn !== 'object') continue;
+    const spPr = findChild(cxn, 'p:spPr');
+    if (!spPr) continue;
+    const xfrm = findChild(spPr, 'a:xfrm');
+    const off = findChild(xfrm, 'a:off') as XmlNode | undefined;
+    const ext = findChild(xfrm, 'a:ext') as XmlNode | undefined;
+    const rawLeft = emu2px(off?.['@x'] as string | undefined);
+    const rawTop = emu2px(off?.['@y'] as string | undefined);
+    const rawW = emu2px(ext?.['@cx'] as string | undefined);
+    const rawH = emu2px(ext?.['@cy'] as string | undefined);
+    const { x: left, y: top } = applyXfrm(groupXfrm, rawLeft, rawTop);
+    const width = rawW * groupXfrm.scaleX;
+    const height = rawH * groupXfrm.scaleY;
+    const { angle, flipX, flipY } = readXfrmExtras(xfrm);
+
+    const zIndex = z.next;
+    z.next += 1;
+    const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash } = parseShapeAppearance(spPr, reg.theme);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shapeProperties: any = {};
+    if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
+    if (outlineRgb || outlineWeightPx !== null || outlineDash !== null) {
+      shapeProperties.outline = {
+        outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
+        weight: outlineWeightPx ?? 1,
+        ...(outlineDash !== null ? { dashStyle: outlineDash } : {}),
+      };
+    }
+    out.push({
+      id: `s${pageOrdinal}-cxn-${zIndex}`,
+      zIndex,
+      left,
+      top,
+      width,
+      height,
+      angle,
+      flipX,
+      flipY,
+      title: '',
+      description: '',
+      type: PageElementType.SHAPE,
+      shape: { shapeType: shapeType as never, text: '', shapeProperties },
+    });
+  }
+
   // <p:pic>
   for (const pic of toArray(findChild(spTree, 'p:pic'))) {
     if (!pic || typeof pic !== 'object') continue;
@@ -1292,6 +1343,33 @@ async function processPicNode(
   const { angle, flipX, flipY } = readXfrmExtras(xfrm);
 
   const blipFill = findChild(pic, 'p:blipFill');
+  // E3 — image cropping. `<a:srcRect l="…" t="…" r="…" b="…"/>` carries
+  // crop offsets as percentages * 1000 (e.g. l="25000" = 25 % from
+  // left). Univer's `cropProperties` uses normalised fractions (0..1)
+  // matching what the renderer expects.
+  const srcRect = findChild(blipFill, 'a:srcRect') as XmlNode | undefined;
+  let cropProperties: { offsetLeft: number; offsetRight: number; offsetTop: number; offsetBottom: number; angle: number } | null = null;
+  if (srcRect) {
+    const readPct = (key: string): number => {
+      const v = srcRect[key];
+      if (v === undefined) return 0;
+      const n = parseInt(String(v), 10);
+      return Number.isFinite(n) ? n / 100_000 : 0;
+    };
+    const cropL = readPct('@l');
+    const cropT = readPct('@t');
+    const cropR = readPct('@r');
+    const cropB = readPct('@b');
+    if (cropL || cropT || cropR || cropB) {
+      cropProperties = {
+        offsetLeft: cropL,
+        offsetRight: cropR,
+        offsetTop: cropT,
+        offsetBottom: cropB,
+        angle: 0,
+      };
+    }
+  }
   const blip = findChild(blipFill, 'a:blip') as XmlNode | undefined;
   const rEmbed = blip?.['@r:embed'] as string | undefined;
   if (!rEmbed) return null;
@@ -1328,7 +1406,10 @@ async function processPicNode(
     type: PageElementType.IMAGE,
     image: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      imageProperties: { contentUrl: dataUri } as any,
+      imageProperties: {
+        contentUrl: dataUri,
+        ...(cropProperties ? { cropProperties } : {}),
+      } as any,
     },
   };
 }

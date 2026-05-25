@@ -1518,6 +1518,109 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(docStyle.renderConfig?.verticalAlign, 'anchor=ctr → MIDDLE (2)').toBe(2);
   });
 
+  test('pptx import wave 7c — connectors + image crop (F3 + E3)', async ({ page }) => {
+    // <p:cxnSp> connector (straight line) survives import as a SHAPE
+    // with prstGeom=line. <p:pic> with <a:srcRect l/t/r/b> populates
+    // image.cropProperties offsets (normalised 0..1).
+    const PNG_1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async (png) => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        // F3 — straight connector.
+        `<p:cxnSp>` +
+        `<p:nvCxnSpPr><p:cNvPr id="2" name="cxn1"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="3000000" cy="0"/></a:xfrm>` +
+        `<a:prstGeom prst="line"/>` +
+        `<a:ln w="19050"><a:solidFill><a:srgbClr val="333333"/></a:solidFill></a:ln>` +
+        `</p:spPr>` +
+        `</p:cxnSp>` +
+        // E3 — pic with srcRect cropping 25% from the left and 10% from the bottom.
+        `<p:pic>` +
+        `<p:nvPicPr><p:cNvPr id="3" name="img"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>` +
+        `<p:blipFill>` +
+        `<a:blip r:embed="rId1"/>` +
+        `<a:srcRect l="25000" t="0" r="0" b="10000"/>` +
+        `</p:blipFill>` +
+        `<p:spPr><a:xfrm><a:off x="914400" y="2000000"/><a:ext cx="2000000" cy="1500000"/></a:xfrm></p:spPr>` +
+        `</p:pic>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>` +
+        `</Relationships>`;
+
+      // Decode the base64 PNG into bytes for the zip.
+      const binary = atob(png);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/media/image1.png', bytes);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave7c.pptx');
+    }, PNG_1x1);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    const elements = Object.values(firstPage.pageElements ?? {});
+
+    // F3 — connector survives as a SHAPE with prstGeom=line.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cxn = elements.find((e: any) => e.shape?.shapeType === 'line') as any;
+    expect(cxn, 'connector extracted as line shape').toBeTruthy();
+    const outlineHex = (cxn.shape?.shapeProperties?.outline?.outlineFill?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(outlineHex, 'connector outline color').toBe('333333');
+
+    // E3 — image carries cropProperties.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const img = elements.find((e: any) => e.image) as any;
+    const crop = img?.image?.imageProperties?.cropProperties;
+    expect(crop, 'cropProperties populated from srcRect').toBeTruthy();
+    expect(crop.offsetLeft, 'l=25000 → 0.25').toBeCloseTo(0.25, 3);
+    expect(crop.offsetTop, 't=0 → 0').toBe(0);
+    expect(crop.offsetRight, 'r=0 → 0').toBe(0);
+    expect(crop.offsetBottom, 'b=10000 → 0.1').toBeCloseTo(0.1, 3);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.
