@@ -443,6 +443,17 @@ button:disabled { cursor: not-allowed; }
   background: var(--cs-surface);
   border-top: 1px solid var(--cs-border);
   min-height: 0;
+  overflow: hidden;
+  transition: height 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-top-color 180ms ease;
+}
+
+.cs-notes.is-hidden {
+  /* Collapse to zero height; border merges away so the status bar sits
+     flush against the canvas instead of looking like a 1-px gap. */
+  height: 0;
+  border-top-color: transparent;
+  pointer-events: none;
 }
 
 .cs-notes__header {

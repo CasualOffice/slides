@@ -87,14 +87,20 @@ export function NotesPanel({ visible, onToggle }: NotesPanelProps) {
     };
   }, [visible, sync]);
 
-  if (!visible) return null;
-
+  // Render the panel even when collapsed so the height transition is
+  // smooth — pure-CSS slide on `.cs-notes`. Returning null would snap the
+  // status bar up by 140 px and the user sees a jarring jump.
   return (
-    <div className="cs-notes" role="region" aria-label="Speaker notes">
+    <div
+      className={`cs-notes ${visible ? 'is-visible' : 'is-hidden'}`}
+      role="region"
+      aria-label="Speaker notes"
+      aria-hidden={!visible}
+    >
       <div className="cs-notes__header">
         <Icon name="sticky_note_2" size={14} />
         <span className="cs-notes__title">Speaker notes</span>
-        <span className="cs-notes__hint">Visible only in presenter view</span>
+        <span className="cs-notes__hint">Private — your own reference, not exported</span>
         <button
           type="button"
           className="cs-notes__close"

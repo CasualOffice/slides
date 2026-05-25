@@ -54,7 +54,26 @@ export function App() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [slideshowOpen, setSlideshowOpen] = useState(false);
-  const [notesVisible, setNotesVisible] = useState(true);
+  // Speaker notes default to hidden — most users never write them on a
+  // fresh deck. Once the user enables them, we persist via localStorage
+  // so reload restores the preference. Key is intentionally narrow
+  // (`cs.notesVisible`) so we don't collide with the future profile
+  // settings layer.
+  const [notesVisible, setNotesVisible] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem('cs.notesVisible') === '1';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('cs.notesVisible', notesVisible ? '1' : '0');
+    } catch {
+      /* private mode etc — ignore */
+    }
+  }, [notesVisible]);
   const [themesOpen, setThemesOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
