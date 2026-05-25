@@ -1,0 +1,75 @@
+diff --git a/lib/cjs/index.js b/lib/cjs/index.js
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..77eed202a80e615bc90a91424f4df7bc43d4ddce 100644
+--- a/lib/cjs/index.js
++++ b/lib/cjs/index.js
+@@ -136,10 +136,15 @@ var SlideDataModel = class extends _univerjs_core.UnitModel {
+ 		this._unitId = (_this$_snapshot$id2 = this._snapshot.id) !== null && _this$_snapshot$id2 !== void 0 ? _this$_snapshot$id2 : (0, _univerjs_core.generateRandomId)(6);
+ 	}
+ 	getRev() {
+-		return 0;
++		var _this$_snapshot$rev;
++		return (_this$_snapshot$rev = this._snapshot.rev) !== null && _this$_snapshot$rev !== void 0 ? _this$_snapshot$rev : 1;
++	}
++	incrementRev() {
++		this._snapshot.rev = this.getRev() + 1;
++	}
++	setRev(rev) {
++		this._snapshot.rev = rev;
+ 	}
+-	incrementRev() {}
+-	setRev(_rev) {}
+ 	getSnapshot() {
+ 		return this._snapshot;
+ 	}
+diff --git a/lib/es/index.js b/lib/es/index.js
+index dcfd4547354becd08a18a870e3d74d68fc076e09..0d9df3b37ff47b3f2d785781af261e945f36f2c0 100644
+--- a/lib/es/index.js
++++ b/lib/es/index.js
+@@ -135,10 +135,15 @@ var SlideDataModel = class extends UnitModel {
+ 		this._unitId = (_this$_snapshot$id2 = this._snapshot.id) !== null && _this$_snapshot$id2 !== void 0 ? _this$_snapshot$id2 : generateRandomId(6);
+ 	}
+ 	getRev() {
+-		return 0;
++		var _this$_snapshot$rev;
++		return (_this$_snapshot$rev = this._snapshot.rev) !== null && _this$_snapshot$rev !== void 0 ? _this$_snapshot$rev : 1;
++	}
++	incrementRev() {
++		this._snapshot.rev = this.getRev() + 1;
++	}
++	setRev(rev) {
++		this._snapshot.rev = rev;
+ 	}
+-	incrementRev() {}
+-	setRev(_rev) {}
+ 	getSnapshot() {
+ 		return this._snapshot;
+ 	}
+diff --git a/lib/types/data-model/slide-data-model.d.ts b/lib/types/data-model/slide-data-model.d.ts
+index f22ab09ec126799709980b2d50cf54585e2d634d..c4d21f0b7baee04bc3b5e19295ca0c09464151af 100644
+--- a/lib/types/data-model/slide-data-model.d.ts
++++ b/lib/types/data-model/slide-data-model.d.ts
+@@ -31,7 +31,7 @@ export declare class SlideDataModel extends UnitModel<ISlideData, UniverInstance
+     setName(name: string): void;
+     getRev(): number;
+     incrementRev(): void;
+-    setRev(_rev: number): void;
++    setRev(rev: number): void;
+     getSnapshot(): ISlideData;
+     getUnitId(): string;
+     getPages(): {
+diff --git a/lib/types/types/interfaces/i-slide-data.d.ts b/lib/types/types/interfaces/i-slide-data.d.ts
+index 88df969eec8ab5685575597e40aaa007d4eb0823..4e90cbf33aac9cb33e044c54559785f85cd19f56 100644
+--- a/lib/types/types/interfaces/i-slide-data.d.ts
++++ b/lib/types/types/interfaces/i-slide-data.d.ts
+@@ -17,6 +17,11 @@ import type { IColorStyle, ICustomBlock, IDocumentData, IImageProperties, ILists
+ import type { ShapeType } from '../enum/prst-geom-type';
+ export interface ISlideData extends IReferenceSource {
+     id: string;
++    /**
++     * Revision of this slide deck. Used in collaborative editing. Starts from one.
++     * @ignore
++     */
++    rev?: number;
+     locale?: LocaleType;
+     title: string;
+     pageSize: ISize;

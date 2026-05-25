@@ -1,0 +1,7 @@
+packages:
+  - "apps/*"
+
+# The fork at ../univer-revamp/ is a separate pnpm workspace and is NOT
+# included here. We consume @univerjs/* from npm at the pinned version
+# (currently 0.24.0, matching the fork). Patches land via `pnpm patch`
+# and are captured in patches/ — see docs/UNIVER_SLIDES_GAPS.md.
