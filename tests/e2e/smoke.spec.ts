@@ -366,6 +366,35 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     await expect(page.locator('[data-testid="slide-context-menu"]')).toHaveCount(0);
   });
 
+  test('Background picker → preset chip dispatches update-page', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(
+      () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(800);
+
+    // Click the Background toolbar button.
+    await page.getByRole('button', { name: /^background$/i }).click();
+    await expect(page.locator('[data-testid="bg-picker"]')).toBeVisible();
+
+    // Reset capture; click the "Red" chip in the palette.
+    await page.evaluate(() => {
+      (window as { __capturedMutations: string[] }).__capturedMutations = [];
+    });
+    await page.locator('[data-testid="bg-picker"]').getByRole('button', { name: 'Red' }).click();
+    await page.waitForTimeout(200);
+
+    const captured = await page.evaluate(() => [...(window as { __capturedMutations: string[] }).__capturedMutations]);
+    expect(captured).toContain('slide.mutation.update-page');
+    // Default = active slide only → exactly one update-page dispatch.
+    expect(captured.filter((m) => m === 'slide.mutation.update-page')).toHaveLength(1);
+
+    // Picker closed after selection.
+    await expect(page.locator('[data-testid="bg-picker"]')).toHaveCount(0);
+  });
+
   test('Image export round-trip — image bytes land in ppt/media/', async ({ page }) => {
     // Build an ISlideData snapshot with one IMAGE element that carries a
     // 1×1 transparent PNG as a data: URI. Export via the pptx client and

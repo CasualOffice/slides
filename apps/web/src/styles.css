@@ -678,6 +678,115 @@ button:disabled { cursor: not-allowed; }
   text-align: left;
 }
 
+/* ============================================================= Background picker */
+
+.cs-bg-picker {
+  position: fixed;
+  z-index: 80;
+  width: 296px;
+  padding: 14px 14px 12px;
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-2);
+}
+
+.cs-bg-picker__header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.cs-bg-picker__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cs-text);
+}
+
+.cs-bg-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.cs-bg-picker__chip {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--cs-radius);
+  border: 1px solid var(--cs-border-2);
+  cursor: pointer;
+  transition: transform 80ms ease, border-color 80ms ease;
+}
+.cs-bg-picker__chip:hover {
+  transform: scale(1.08);
+  border-color: var(--cs-accent);
+}
+
+.cs-bg-picker__custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--cs-border-2);
+  padding-top: 10px;
+}
+
+.cs-bg-picker__custom-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--cs-text-mute);
+  cursor: pointer;
+  flex: 1;
+}
+
+.cs-bg-picker__custom-input {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius);
+  background: transparent;
+  cursor: pointer;
+}
+
+.cs-bg-picker__apply {
+  height: 28px;
+  padding: 0 14px;
+  font-size: 12px;
+}
+
+.cs-bg-picker__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--cs-text-mute);
+  cursor: pointer;
+  user-select: none;
+}
+
+.cs-bg-picker__option input {
+  accent-color: var(--cs-accent);
+}
+
+.cs-bg-picker__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cs-radius);
+  color: var(--cs-text-mute);
+}
+.cs-bg-picker__close:hover { background: var(--cs-hover); color: var(--cs-text); }
+
 /* ============================================================= Slide context menu */
 
 .cs-slide-context {
