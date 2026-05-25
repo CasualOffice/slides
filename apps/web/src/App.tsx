@@ -11,6 +11,7 @@ import { Toolbar } from './shell/Toolbar';
 import { StatusBar } from './shell/StatusBar';
 import { SlideShow } from './shell/SlideShow';
 import { NotesPanel } from './shell/NotesPanel';
+import { ThemePicker } from './shell/ThemePicker';
 import { dispatchSlideCommand } from './univer/commands';
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -51,15 +52,18 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [slideshowOpen, setSlideshowOpen] = useState(false);
   const [notesVisible, setNotesVisible] = useState(true);
+  const [themesOpen, setThemesOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Expose to the Toolbar (which lives outside App's prop tree).
   useEffect(() => {
     window.__casualSlides_openSlideshow = () => setSlideshowOpen(true);
     window.__casualSlides_toggleNotes = () => setNotesVisible((v) => !v);
+    window.__casualSlides_openThemes = () => setThemesOpen(true);
     return () => {
       delete window.__casualSlides_openSlideshow;
       delete window.__casualSlides_toggleNotes;
+      delete window.__casualSlides_openThemes;
     };
   }, []);
 
@@ -196,6 +200,7 @@ export function App() {
       {slideshowOpen && (
         <SlideShow snapshot={snapshot} onExit={() => setSlideshowOpen(false)} />
       )}
+      <ThemePicker open={themesOpen} onClose={() => setThemesOpen(false)} />
     </>
   );
 }
@@ -206,5 +211,6 @@ declare global {
   interface Window {
     __casualSlides_openSlideshow?: () => void;
     __casualSlides_toggleNotes?: () => void;
+    __casualSlides_openThemes?: () => void;
   }
 }

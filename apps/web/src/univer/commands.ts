@@ -40,9 +40,11 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   if (!univer) return false;
   const cs = univer.__getInjector().get(ICommandService);
   // univer.command.undo / .redo don't take a unitId param; only auto-supply
-  // for slide.* commands that need one.
+  // for slide.* commands that need one. If the caller already provided a
+  // unitId in params, that wins.
   const needsUnitId = id.startsWith('slide.');
-  const unitId = needsUnitId ? getFocusedSlideUnitId() : null;
+  const hasUnitId = !!(params && typeof params === 'object' && 'unitId' in params);
+  const unitId = needsUnitId && !hasUnitId ? getFocusedSlideUnitId() : null;
   const merged = unitId ? { unitId, ...(params ?? {}) } : params;
   try {
     return await cs.executeCommand(id, merged);

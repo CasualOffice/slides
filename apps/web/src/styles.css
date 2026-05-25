@@ -505,6 +505,121 @@ button:disabled { cursor: not-allowed; }
   color: var(--cs-text);
 }
 
+/* ============================================================= Theme picker */
+
+.cs-themepicker__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: rgba(15, 20, 25, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+}
+
+.cs-themepicker {
+  width: min(580px, calc(100vw - 48px));
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-2);
+  overflow: hidden;
+}
+
+.cs-themepicker__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--cs-border-2);
+}
+
+.cs-themepicker__title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--cs-text);
+}
+
+.cs-themepicker__hint {
+  flex: 1;
+  font-size: 12px;
+  color: var(--cs-text-dim);
+}
+
+.cs-themepicker__close {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cs-radius);
+  color: var(--cs-text-mute);
+}
+.cs-themepicker__close:hover { background: var(--cs-hover); color: var(--cs-text); }
+
+.cs-themepicker__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 16px;
+}
+
+.cs-themepicker__card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius);
+  overflow: hidden;
+  transition: border-color 80ms ease, transform 80ms ease;
+  cursor: pointer;
+}
+.cs-themepicker__card:hover {
+  border-color: var(--cs-accent);
+  transform: translateY(-1px);
+}
+
+.cs-themepicker__swatch {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 14px 16px;
+  gap: 6px;
+}
+
+.cs-themepicker__pip {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.cs-themepicker__line {
+  width: 65%;
+  height: 6px;
+  border-radius: 2px;
+}
+
+.cs-themepicker__line--short { width: 40%; }
+
+.cs-themepicker__name {
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--cs-text);
+  background: var(--cs-surface);
+  border-top: 1px solid var(--cs-border-2);
+  text-align: left;
+}
+
 /* ============================================================= SlideShow */
 
 .cs-slideshow {

@@ -37,7 +37,7 @@ const TOOLS: (ToolButton | { sep: true })[] = [
   { sep: true },
   { id: 'new-slide', icon: 'add_to_photos', label: 'New slide (Ctrl+M)', cmd: 'slide.operation.append-slide' },
   { id: 'layout', icon: 'view_compact', label: 'Layout', disabled: true },
-  { id: 'theme', icon: 'palette', label: 'Theme', disabled: true },
+  { id: 'theme', icon: 'palette', label: 'Theme' /* handled inline below */ },
   { id: 'transition', icon: 'auto_awesome_motion', label: 'Transition', disabled: true },
 ];
 
@@ -59,6 +59,10 @@ export function Toolbar() {
   function onClick(btn: ToolButton, anchorEl: HTMLButtonElement) {
     if (btn.menu) {
       setShapesAnchor(shapesAnchor ? null : anchorEl.getBoundingClientRect());
+      return;
+    }
+    if (btn.id === 'theme') {
+      (window as Window & { __casualSlides_openThemes?: () => void }).__casualSlides_openThemes?.();
       return;
     }
     if (btn.cmd) void dispatchSlideCommand(btn.cmd, btn.cmdParams);
