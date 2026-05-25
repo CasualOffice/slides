@@ -12,6 +12,7 @@ import { StatusBar } from './shell/StatusBar';
 import { SlideShow } from './shell/SlideShow';
 import { NotesPanel } from './shell/NotesPanel';
 import { ThemePicker } from './shell/ThemePicker';
+import { PropertiesDialog } from './shell/PropertiesDialog';
 import { dispatchSlideCommand } from './univer/commands';
 import { useCollabBridge } from './collab/CollabProvider';
 
@@ -54,6 +55,7 @@ export function App() {
   const [slideshowOpen, setSlideshowOpen] = useState(false);
   const [notesVisible, setNotesVisible] = useState(true);
   const [themesOpen, setThemesOpen] = useState(false);
+  const [propertiesOpen, setPropertiesOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Expose to the Toolbar (which lives outside App's prop tree).
@@ -202,6 +204,7 @@ export function App() {
         onFileNameChange={handleFileNameChange}
         onOpen={handleOpenClick}
         onSave={handleSavePptx}
+        onOpenProperties={() => setPropertiesOpen(true)}
         saving={saving}
         opening={opening}
         status={status}
@@ -231,6 +234,11 @@ export function App() {
         <SlideShow snapshot={snapshot} onExit={() => setSlideshowOpen(false)} />
       )}
       <ThemePicker open={themesOpen} onClose={() => setThemesOpen(false)} />
+      <PropertiesDialog
+        open={propertiesOpen}
+        onClose={() => setPropertiesOpen(false)}
+        fallback={snapshot}
+      />
     </>
   );
 }

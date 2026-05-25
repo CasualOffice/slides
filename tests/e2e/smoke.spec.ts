@@ -336,6 +336,29 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(captured).toContain('slide.mutation.delete-element');
   });
 
+  test('File → Properties shows deck metadata', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(
+      () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(400);
+
+    // Open File menu, click Properties.
+    await page.getByRole('button', { name: 'File' }).click();
+    await page.getByRole('button', { name: /^Properties$/ }).click();
+    await expect(page.locator('[data-testid="properties-dialog"]')).toBeVisible();
+
+    // Default deck has 3 slides at 960×540 px.
+    await expect(page.locator('[data-testid="prop-slides"] .cs-properties__value')).toHaveText('3');
+    await expect(page.locator('[data-testid="prop-page-size"] .cs-properties__value')).toContainText('960 × 540 px');
+
+    // Escape closes.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-testid="properties-dialog"]')).toHaveCount(0);
+  });
+
   test('rev-tracking patch is live (Gap 1)', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => typeof (window as { __slideRevProbe?: unknown }).__slideRevProbe === 'function', null, { timeout: 15_000 });

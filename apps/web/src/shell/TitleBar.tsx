@@ -20,6 +20,7 @@ export interface TitleBarProps {
   onFileNameChange: (next: string) => void;
   onOpen: () => void;
   onSave: () => void;
+  onOpenProperties: () => void;
   saving?: boolean;
   opening?: boolean;
   status?: string | null;
@@ -86,6 +87,7 @@ export function TitleBar({
   onFileNameChange,
   onOpen,
   onSave,
+  onOpenProperties,
   saving,
   opening,
   status,
@@ -122,8 +124,9 @@ export function TitleBar({
       setOpenMenu(null);
       if (menuId === 'file' && itemId === 'open') onOpen();
       if (menuId === 'file' && itemId === 'save') onSave();
+      if (menuId === 'file' && itemId === 'properties') onOpenProperties();
     },
-    [onOpen, onSave],
+    [onOpen, onSave, onOpenProperties],
   );
 
   return (

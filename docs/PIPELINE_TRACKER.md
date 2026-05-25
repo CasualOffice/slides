@@ -10,9 +10,11 @@ Update this file when an item lands or shifts ownership.
 
 | # | Feature                          | Owner   | Branch                     | Status     | Notes |
 |---|----------------------------------|---------|----------------------------|------------|-------|
-| 1 | Properties dialog                | agent-A | `feat/properties-dialog`   | 🤖 in flight | **Feature**. File → Properties menu item; modal with title / slide count / page size / created / modified |
-| 2 | Slide-bar right-click menu       | agent-B | `feat/context-menu`        | 🤖 in flight | **Feature**. Right-click on a thumbnail → New / Duplicate / Delete (dispatches existing slide commands) |
-| 3 | Image export round-trip          | agent-C | `feat/image-export`        | 🤖 in flight | **Fidelity**. Embed image bytes into the pptx `/media/` folder + rels so saved decks keep images on re-open in PowerPoint/Keynote |
+| 1 | Properties dialog                | main    | `main`                     | ✅ landed   | **Feature**. File → Properties → modal with title / slide count / page size / element count / text length / format. Esc + click-outside close. |
+| 2 | Slide-bar right-click menu       | -       | -                          | ⏳ pending  | **Feature**. Parallel-agent run blocked by org usage limit. Picking up sequentially next turn. |
+| 3 | Image export round-trip          | -       | -                          | ⏳ pending  | **Fidelity**. Parallel-agent run blocked by org usage limit. Picking up sequentially next turn. |
+
+Parallel agent dispatch hit the org's monthly usage limit (3 spawned, 0 progress). Sprint 1 is being completed sequentially on `main`.
 
 Each sprint balances feature + fidelity work — we are an editor as well as a pptx reader; parity on both axes.
 
