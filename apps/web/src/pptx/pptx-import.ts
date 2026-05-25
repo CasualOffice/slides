@@ -160,6 +160,114 @@ function parseThemeColors(themeXml: string): ThemeMap {
   return map;
 }
 
+// Wave 5b — colour modifiers. OOXML lets you stack `<a:lumMod>`,
+// `<a:lumOff>`, `<a:tint>`, `<a:shade>` (etc.) inside an srgbClr or
+// schemeClr to lighten / darken the base. PowerPoint themes lean
+// heavily on this: accent1 with `lumMod="60000" lumOff="40000"` is a
+// common "lighter accent1" used for backgrounds. Without these the
+// extracted hex is the dark base — bg shapes look wrong tone.
+//
+// Implemented modifiers (the 80 %):
+//   lumMod val=N → L' = L * (N / 100000)
+//   lumOff val=N → L' = L + (N / 100000), clamped 0..1
+//   tint   val=N → blend toward white   by N / 100000
+//   shade  val=N → blend toward black   by N / 100000
+// Skipped: satMod, satOff, satTo, hueMod, hueOff, hueTo, alpha — rare,
+// and partial support is worse than none (gives the impression we
+// nailed it). Tracked as a follow-up if a deck surfaces issues.
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+  switch (max) {
+    case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+    case g: h = ((b - r) / d + 2) / 6; break;
+    default: h = ((r - g) / d + 4) / 6;
+  }
+  return [h, s, l];
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  if (s === 0) {
+    const v = Math.round(l * 255);
+    return [v, v, v];
+  }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const hue2rgb = (t: number): number => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  return [
+    Math.round(hue2rgb(h + 1 / 3) * 255),
+    Math.round(hue2rgb(h) * 255),
+    Math.round(hue2rgb(h - 1 / 3) * 255),
+  ];
+}
+
+function clamp01(n: number): number { return Math.max(0, Math.min(1, n)); }
+
+function applyColorModifiers(hex: string, colourNode: XmlNode | undefined): string {
+  if (!colourNode) return hex;
+  // Read children in document order so lumMod * lumOff composes
+  // correctly. fast-xml-parser groups same-named children into arrays;
+  // we walk the known modifier slots and apply each. Order between
+  // *different* modifiers is the OOXML default (lumMod → lumOff →
+  // tint/shade) — matches what PowerPoint emits in practice.
+  let [r, g, b] = [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+  let [h, s, l] = rgbToHsl(r, g, b);
+
+  const readPct = (key: string): number | null => {
+    const node = findChild(colourNode, key) as XmlNode | undefined;
+    const v = node?.['@val'];
+    if (v === undefined) return null;
+    const n = parseInt(String(v), 10);
+    return Number.isFinite(n) ? n / 100_000 : null;
+  };
+
+  const lumMod = readPct('a:lumMod');
+  if (lumMod !== null) l = clamp01(l * lumMod);
+  const lumOff = readPct('a:lumOff');
+  if (lumOff !== null) l = clamp01(l + lumOff);
+
+  if (lumMod !== null || lumOff !== null) {
+    [r, g, b] = hslToRgb(h, s, l);
+  }
+
+  const tint = readPct('a:tint');
+  if (tint !== null) {
+    // Blend toward white by `tint`. PowerPoint's actual formula uses
+    // luminance, but the linear-RGB approximation is visually
+    // indistinguishable for the modifier ranges actually used.
+    r = Math.round(r + (255 - r) * tint);
+    g = Math.round(g + (255 - g) * tint);
+    b = Math.round(b + (255 - b) * tint);
+  }
+  const shade = readPct('a:shade');
+  if (shade !== null) {
+    // Blend toward black.
+    r = Math.round(r * (1 - shade));
+    g = Math.round(g * (1 - shade));
+    b = Math.round(b * (1 - shade));
+  }
+
+  const toHex = (n: number): string => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0').toUpperCase();
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
 // Resolve a `<a:schemeClr val="accent1"/>` reference. Returns the hex
 // (with leading "#") or null when unresolvable.
 function resolveSchemeColor(node: unknown, theme: ThemeMap | null): string | null {
@@ -169,7 +277,8 @@ function resolveSchemeColor(node: unknown, theme: ThemeMap | null): string | nul
   const raw = schemeClr['@val'];
   if (typeof raw !== 'string') return null;
   const resolved = theme.get(resolveSchemeName(raw));
-  return resolved ? `#${resolved}` : null;
+  if (!resolved) return null;
+  return applyColorModifiers(`#${resolved}`, schemeClr);
 }
 
 // Combined "read any colour" — srgbClr first, schemeClr as fallback.
@@ -181,7 +290,7 @@ function readColor(parent: unknown, theme: ThemeMap | null): string | null {
     const srgb = findChild(solid, 'a:srgbClr') as XmlNode | undefined;
     const srgbVal = srgb?.['@val'];
     if (typeof srgbVal === 'string' && /^[0-9a-fA-F]{6}$/.test(srgbVal)) {
-      return `#${srgbVal.toUpperCase()}`;
+      return applyColorModifiers(`#${srgbVal.toUpperCase()}`, srgb);
     }
     const schemed = resolveSchemeColor(solid, theme);
     if (schemed) return schemed;
@@ -665,6 +774,28 @@ function applyXfrm(g: GroupXfrm, x: number, y: number): { x: number; y: number }
   };
 }
 
+// D3 / D4 / E7 — read rotation + horizontal/vertical flip off an
+// <a:xfrm>. OOXML's `@rot` is 60000ths-of-a-degree; Univer's
+// `IPageElement.angle` is degrees. `@flipH="1"` and `@flipV="1"` map
+// to `.flipX` / `.flipY` booleans.
+function readXfrmExtras(xfrm: unknown): { angle: number; flipX: boolean; flipY: boolean } {
+  if (!xfrm || typeof xfrm !== 'object') return { angle: 0, flipX: false, flipY: false };
+  const node = xfrm as XmlNode;
+  let angle = 0;
+  const rotRaw = node['@rot'];
+  if (typeof rotRaw === 'string' || typeof rotRaw === 'number') {
+    const r = parseInt(String(rotRaw), 10);
+    if (Number.isFinite(r)) angle = r / 60_000;
+  }
+  const fH = node['@flipH'];
+  const fV = node['@flipV'];
+  return {
+    angle,
+    flipX: fH === '1' || fH === 1 || fH === 'true',
+    flipY: fV === '1' || fV === 1 || fV === 'true',
+  };
+}
+
 // Counter mutable across the recursive descent so every element on a
 // page gets a strictly increasing z-index — siblings render in tree
 // order, just like PowerPoint paints them.
@@ -712,6 +843,7 @@ async function processSpTree(
     const { x: left, y: top } = applyXfrm(groupXfrm, rawLeft, rawTop);
     const width = rawW * groupXfrm.scaleX;
     const height = rawH * groupXfrm.scaleY;
+    const { angle, flipX, flipY } = readXfrmExtras(xfrm);
 
     const zIndex = z.next;
     z.next += 1;
@@ -730,6 +862,9 @@ async function processSpTree(
         top,
         width,
         height,
+        angle,
+        flipX,
+        flipY,
         title: '',
         description: '',
         type: PageElementType.TEXT,
@@ -756,6 +891,9 @@ async function processSpTree(
         top,
         width,
         height,
+        angle,
+        flipX,
+        flipY,
         title: '',
         description: '',
         type: PageElementType.SHAPE,
@@ -806,6 +944,7 @@ async function processPicNode(
   const { x: left, y: top } = applyXfrm(groupXfrm, rawLeft, rawTop);
   const width = rawW * groupXfrm.scaleX;
   const height = rawH * groupXfrm.scaleY;
+  const { angle, flipX, flipY } = readXfrmExtras(xfrm);
 
   const blipFill = findChild(pic, 'p:blipFill');
   const blip = findChild(blipFill, 'a:blip') as XmlNode | undefined;
@@ -836,6 +975,9 @@ async function processPicNode(
     top,
     width,
     height,
+    angle,
+    flipX,
+    flipY,
     title: '',
     description: '',
     type: PageElementType.IMAGE,

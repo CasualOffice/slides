@@ -10,9 +10,9 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 5)
+## Snapshot — 2026-05-26 (post wave 5b)
 
-**18 / 87 items at ✅, 5 at ⚠️.** Wave 5 landed J2 (theme color scheme resolution) and lit up B11 (text scheme color) + D8 (shape scheme fill) + the schemeClr branch of A5 in one shot. With waves 4 / 4b / 5 stacked, the modern-business-deck failure mode ("title invisible, brand colour shapes plain white, layouts ignored") is fixed. Modifiers (`<a:lumMod>` / `<a:lumOff>` / `<a:tint>` / `<a:shade>`) still drop — placeholder for **wave 5b**. Next-biggest visible miss remaining: **B16** (multi-run rich text) and **C2 + C6** (alignment + bullets) — all live in **wave 6** behind `IDocumentData`.
+**21 / 87 items at ✅, 5 at ⚠️.** Wave 5b polish: color modifiers (lumMod / lumOff / tint / shade) on both srgbClr and schemeClr — corrects "lighter accent" backgrounds that were rendering as the dark base colour — plus D3 / D4 / E7 (shape + image rotation and horizontal/vertical flips). Next-biggest visible miss remaining: **B16** (multi-run rich text) and **C2 + C6** (alignment + bullets) — all live in **wave 6** behind `IDocumentData`. Modifier coverage is the 80 %: satMod / hueMod / alpha still drop.
 
 ## A. Slide-level
 
@@ -77,8 +77,8 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 |------|------|--------|--------|-----------|-------|
 | D1 | Position (`<a:xfrm><a:off>`) | ✅ | Critical | — | — |
 | D2 | Size (`<a:xfrm><a:ext>`) | ✅ | Critical | — | — |
-| D3 | Rotation (`<a:xfrm @rot>`) | ❌ | Med | Low | — |
-| D4 | Flip H / V (`<a:xfrm @flipH/@flipV>`) | ❌ | Low | Low | — |
+| D3 | Rotation (`<a:xfrm @rot>`) | ✅ | Med | Low | Wave 5b — `readXfrmExtras` decodes `@rot` (60000ths-of-a-degree → degrees) into `IPageElement.angle`. |
+| D4 | Flip H / V (`<a:xfrm @flipH/@flipV>`) | ✅ | Low | Low | Wave 5b — `flipX` / `flipY` populated for shapes, text frames, and images. |
 | D5 | Preset geometry (`<a:prstGeom prst>`) | ✅ | High | — | 100+ values; we pass the string through. |
 | D6 | Custom geometry (`<a:custGeom>`) | ❌ | Med | High | Vector paths. |
 | D7 | Solid fill — srgbClr | ✅ | High | — | — |
@@ -107,7 +107,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | E4 | Image transparency (`<a:alphaModFix>`) | ❌ | Low | Low | — |
 | E5 | Image colour adjust (lum/duotone/grayscale) | ❌ | Low | Med | — |
 | E6 | Image effects (`<a:effectLst>`) | ❌ | Low | Med | — |
-| E7 | Image rotation / flip | ❌ | Med | Low | Same as D3 / D4. |
+| E7 | Image rotation / flip | ✅ | Med | Low | Wave 5b — same `readXfrmExtras` plumb feeds `processPicNode`. |
 
 ## F. Groups / connectors / lines
 
@@ -151,7 +151,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
 | J1 | Theme XML passthrough | ❌ | Med | Low | Carry across round-trip even if unused. |
-| J2 | **Color scheme resolution** (`<a:schemeClr>` → hex) | ✅ | High | Med | Wave 5 — `resolveThemeForSlide` walks slide → layout → master → theme; `parseThemeColors` reads `<a:clrScheme>`; `resolveSchemeColor` handles tx/bg aliases. lumMod / lumOff / tint / shade not yet applied. |
+| J2 | **Color scheme resolution** (`<a:schemeClr>` → hex) | ✅ | High | Med | Wave 5 — `resolveThemeForSlide` walks slide → layout → master → theme; `parseThemeColors` reads `<a:clrScheme>`; `resolveSchemeColor` handles tx/bg aliases. Wave 5b layered lumMod / lumOff / tint / shade on top. satMod / hueMod / alpha still drop. |
 | J3 | Font scheme (major / minor typefaces) | ❌ | Med | Med | Falls back from B3 when `<a:latin>` is absent. |
 | J4 | Format scheme (default fills / lines / effects) | ❌ | Low | High | Defer. |
 

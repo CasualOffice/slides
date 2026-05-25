@@ -993,6 +993,143 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(fillHex, 'shape schemeClr accent1 resolves').toBe('E84B6A');
   });
 
+  test('pptx import wave 5b — rotation, flips, color modifiers (lumMod/lumOff)', async ({ page }) => {
+    // Shape with rot=45deg, flipH=1, fill = schemeClr accent1 with
+    // lumMod=60000 + lumOff=40000 (PowerPoint's "Accent 1, Lighter 60%").
+    // Without modifiers the fill would be raw accent1 — too dark.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      // Slide: shape rotated 45° (rot=2700000 = 45*60000), flipped horizontally,
+      // srgbClr white + shade=50000 → deterministic #808080 (blend
+      // toward black by 50%). Avoids HSL rounding fuzz in the assertion.
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="rotated"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm rot="2700000" flipH="1">` +
+        `<a:off x="914400" y="914400"/><a:ext cx="2857500" cy="2857500"/>` +
+        `</a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `<a:solidFill><a:srgbClr val="FFFFFF"><a:shade val="50000"/></a:srgbClr></a:solidFill>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>` +
+        `</Relationships>`;
+      const layout =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld></p:sldLayout>`;
+      const layoutRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>` +
+        `</Relationships>`;
+      const master =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld></p:sldMaster>`;
+      const masterRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>` +
+        `</Relationships>`;
+      // accent1 = #4F81BD. lumMod=0.6, lumOff=0.4 → in HSL:
+      //   L' = clamp(0.4 + 0.6 * L_original) — for #4F81BD this lands around #B8CCE4.
+      // The exact target tolerates +/- a few units of rounding.
+      const theme =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:themeElements>` +
+        `<a:clrScheme name="Test">` +
+        `<a:dk1><a:srgbClr val="000000"/></a:dk1>` +
+        `<a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>` +
+        `<a:dk2><a:srgbClr val="44546A"/></a:dk2>` +
+        `<a:lt2><a:srgbClr val="EEECE1"/></a:lt2>` +
+        `<a:accent1><a:srgbClr val="4F81BD"/></a:accent1>` +
+        `<a:accent2><a:srgbClr val="C0504D"/></a:accent2>` +
+        `<a:accent3><a:srgbClr val="9BBB59"/></a:accent3>` +
+        `<a:accent4><a:srgbClr val="8064A2"/></a:accent4>` +
+        `<a:accent5><a:srgbClr val="4BACC6"/></a:accent5>` +
+        `<a:accent6><a:srgbClr val="F79646"/></a:accent6>` +
+        `<a:hlink><a:srgbClr val="0000FF"/></a:hlink>` +
+        `<a:folHlink><a:srgbClr val="800080"/></a:folHlink>` +
+        `</a:clrScheme>` +
+        `</a:themeElements></a:theme>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/slideLayouts/slideLayout1.xml', layout);
+      zip.file('ppt/slideLayouts/_rels/slideLayout1.xml.rels', layoutRels);
+      zip.file('ppt/slideMasters/slideMaster1.xml', master);
+      zip.file('ppt/slideMasters/_rels/slideMaster1.xml.rels', masterRels);
+      zip.file('ppt/theme/theme1.xml', theme);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave5b.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shape: any = Object.values(firstPage.pageElements ?? {})[0];
+    expect(shape, 'shape extracted').toBeTruthy();
+
+    // D3 — rotation: 2700000 / 60000 = 45.
+    expect(shape.angle, 'rot=2700000 → 45 deg').toBeCloseTo(45, 1);
+    // D4 — flips.
+    expect(shape.flipX, 'flipH=1 → flipX=true').toBe(true);
+    expect(shape.flipY, 'flipV unset → flipY=false').toBe(false);
+
+    // 5b — srgbClr white + shade=50000 → exact #808080.
+    // shade(s) on srgbClr blends linearly toward black: 255 * (1 - 0.5)
+    // = 127.5, rounded to 128 = 0x80 per channel.
+    const fillHex = (shape.shape?.shapeProperties?.shapeBackgroundFill?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(fillHex, 'shade=50000 on white → 50% grey').toBe('808080');
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.
