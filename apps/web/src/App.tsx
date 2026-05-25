@@ -9,6 +9,7 @@ import { DEFAULT_SLIDE_DATA } from './default-slide';
 import { TitleBar } from './shell/TitleBar';
 import { Toolbar } from './shell/Toolbar';
 import { StatusBar } from './shell/StatusBar';
+import { SlideShow } from './shell/SlideShow';
 import { dispatchSlideCommand } from './univer/commands';
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -47,7 +48,14 @@ export function App() {
   const [opening, setOpening] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [slideshowOpen, setSlideshowOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Expose to the Toolbar (which lives outside App's prop tree).
+  useEffect(() => {
+    window.__casualSlides_openSlideshow = () => setSlideshowOpen(true);
+    return () => { delete window.__casualSlides_openSlideshow; };
+  }, []);
 
   const fileName = useMemo(() => deckTitle(snapshot), [snapshot]);
   const slideCount = snapshot.body?.pageOrder?.length ?? 0;
@@ -88,8 +96,18 @@ export function App() {
         handleOpenClick();
       }
     };
+    const f5Handler = (e: KeyboardEvent) => {
+      if (e.key === 'F5') {
+        e.preventDefault();
+        setSlideshowOpen(true);
+      }
+    };
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('keydown', f5Handler);
+    return () => {
+      window.removeEventListener('keydown', handler);
+      window.removeEventListener('keydown', f5Handler);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -164,6 +182,17 @@ export function App() {
         <UniverSlide key={snapshot.id} snapshot={snapshot} />
       </div>
       <StatusBar slideCount={slideCount} />
+      {slideshowOpen && (
+        <SlideShow snapshot={snapshot} onExit={() => setSlideshowOpen(false)} />
+      )}
     </>
   );
+}
+
+// Expose a global to let the Toolbar slideshow button trigger via the same
+// state. Keeps Toolbar.tsx out of the App's prop tree.
+declare global {
+  interface Window {
+    __casualSlides_openSlideshow?: () => void;
+  }
 }

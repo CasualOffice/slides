@@ -438,6 +438,101 @@ button:disabled { cursor: not-allowed; }
   color: var(--cs-text);
 }
 
+/* ============================================================= SlideShow */
+
+.cs-slideshow {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+}
+
+.cs-slideshow__stage {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+/* The slide content is positioned in its native px coordinates inside
+   `cs-slideshow__slide`. We scale the whole tile to fit the viewport
+   while keeping its aspect ratio via transform: scale + transform-origin
+   centre. Width/height are set inline by SlidePane based on pageSize.
+   The wrapper handles centering. */
+.cs-slideshow__slide {
+  position: relative;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  /* Scale 960x540 (or whatever pageSize is) to fit viewport while
+     preserving aspect — use clamp to back off below max(width, height).
+     CSS-only approach via max-width / max-height. */
+  max-width: 95vw;
+  max-height: calc(100vh - 80px); /* leave room for toolbar */
+  width: 960px;
+  height: 540px;
+  transform-origin: center center;
+}
+
+/* Scale internally via attribute size + CSS — we set width/height inline
+   in JSX but want the element content (which uses raw px coordinates from
+   the snapshot) to scale with the tile. Use CSS `zoom` for the simplest
+   uniform scale. Browsers other than Firefox support `zoom`; Firefox
+   ignores it but the slide is still visible at native size on FF (clipped
+   if larger than viewport). */
+.cs-slideshow__slide > * { /* preserves layout */ }
+
+.cs-slideshow__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(20, 22, 26, 0.85);
+  backdrop-filter: blur(6px);
+  color: #fff;
+}
+
+.cs-slideshow__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: #fff;
+}
+.cs-slideshow__btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
+.cs-slideshow__btn:disabled { opacity: 0.35; }
+
+.cs-slideshow__counter {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 10px;
+  color: #e8eaed;
+  font-weight: 500;
+}
+
+.cs-slideshow__divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 0 4px;
+}
+
+.cs-slideshow__empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #e8eaed;
+  gap: 12px;
+}
+
 /* ============================================================= Scrollbars */
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }

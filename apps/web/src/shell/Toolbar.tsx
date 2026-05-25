@@ -86,7 +86,15 @@ export function Toolbar() {
           ),
         )}
         <div className="cs-toolbar__spacer" />
-        <button type="button" className="cs-btn cs-btn--accent" disabled title="Slideshow — coming soon">
+        <button
+          type="button"
+          className="cs-btn cs-btn--accent"
+          title="Start slideshow (F5)"
+          onClick={() => {
+            const open = (window as Window & { __casualSlides_openSlideshow?: () => void }).__casualSlides_openSlideshow;
+            open?.();
+          }}
+        >
           <Icon name="play_arrow" size={16} />
           <span>Slideshow</span>
         </button>
