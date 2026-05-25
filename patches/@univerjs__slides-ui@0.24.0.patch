@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..de47bcc9388ac9ae4b7cf57f8f0d925776b8135d 100644
+index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..31d95c50c182ec94a939da4d0c4c6f843f9b242f 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -156,7 +156,7 @@ let SlideRenderController = class SlideRenderController extends _univerjs_core.R
@@ -508,11 +508,38 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..de47bcc9388ac9ae4b7cf57f8f0d9257
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
+@@ -2711,6 +2849,7 @@ Object.defineProperty(exports, 'SlideCanvasPopMangerService', {
+   }
+ });
+ exports.SlideEditorContainer = SlideEditorContainer;
++exports.SlideRenderController = SlideRenderController;
+ exports.SlideSideBar = SlideSideBar;
+ Object.defineProperty(exports, 'SlidesUIController', {
+   enumerable: true,
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b952a6c9f4 100644
+index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..2890c08c342b13355f2d51aec6be1f74aaf42efb 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
-@@ -155,7 +155,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -135,7 +135,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+ 			scene.render();
+ 		});
+ 	}
+-	_scrollToCenter() {
++	scrollToCenter() {
+ 		var _this$_currentRender;
+ 		const mainScene = (_this$_currentRender = this._currentRender()) === null || _this$_currentRender === void 0 ? void 0 : _this$_currentRender.scene;
+ 		const viewMain = mainScene === null || mainScene === void 0 ? void 0 : mainScene.getViewport(SLIDE_KEY.VIEW);
+@@ -148,6 +148,9 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+ 			y
+ 		});
+ 	}
++	_scrollToCenter() {
++		this.scrollToCenter();
++	}
+ 	_currentRender() {
+ 		return getCurrentTypeOfRenderer(UniverInstanceType.UNIVER_SLIDE, this._univerInstanceService, this._renderManagerService);
+ 	}
+@@ -155,7 +158,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  	* @param mainScene
  	*/
  	_createSlide(mainScene) {
@@ -521,7 +548,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  		const { width: sceneWidth, height: sceneHeight } = mainScene;
  		const { width = 100, height = 100 } = model.getPageSize();
  		const slideComponent = new Slide(SLIDE_KEY.COMPONENT, {
-@@ -170,7 +170,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -170,7 +173,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  		return slideComponent;
  	}
  	_addBackgroundRect(scene, fill) {
@@ -530,7 +557,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  		const page = new Rect("canvas", {
  			left: 0,
  			top: 0,
-@@ -232,11 +232,12 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -232,11 +235,12 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  	* SlideDataModel is UnitModel
  	*/
  	_getCurrUnitModel() {
@@ -544,7 +571,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  		let page;
  		if (pageId) page = model.getPage(pageId);
  		else {
-@@ -258,7 +259,9 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -258,7 +262,9 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  		this.createPageScene(id, page);
  	}
  	createThumbs() {
@@ -555,7 +582,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  		const render = this._currentRender();
  		if (!pageOrder || !render) return;
  		if (pageOrder.length === 0) return;
-@@ -349,6 +352,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -349,6 +355,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  	}
  	appendPage() {
  		const model = this._getCurrUnitModel();
@@ -563,7 +590,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  		const page = model.getBlankPage();
  		const render = this._currentRender();
  		if (page == null || render == null || render.mainComponent == null) return;
-@@ -428,11 +432,24 @@ const ActivateSlidePageOperation = {
+@@ -428,11 +435,24 @@ const ActivateSlidePageOperation = {
  //#region src/commands/operations/append-slide.operation.ts
  const AppendSlideOperation = {
  	id: "slide.operation.append-slide",
@@ -592,7 +619,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  		return true;
  	}
  };
-@@ -441,16 +458,27 @@ const AppendSlideOperation = {
+@@ -441,16 +461,27 @@ const AppendSlideOperation = {
  //#region src/commands/operations/delete-element.operation.ts
  const DeleteSlideElementOperation = {
  	id: "slide.operation.delete-element",
@@ -629,7 +656,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  		return true;
  	}
  };
-@@ -496,11 +524,20 @@ const InsertSlideFloatImageCommand = {
+@@ -496,11 +527,20 @@ const InsertSlideFloatImageCommand = {
  				image
  			} }
  		};
@@ -652,7 +679,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  		return true;
  	}
  };
-@@ -509,16 +546,28 @@ const InsertSlideFloatImageCommand = {
+@@ -509,16 +549,28 @@ const InsertSlideFloatImageCommand = {
  //#region src/commands/operations/update-element.operation.ts
  const UpdateSlideElementOperation = {
  	id: "slide.operation.update-element",
@@ -690,7 +717,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  		return true;
  	}
  };
-@@ -881,40 +930,51 @@ const InsertSlideShapeRectangleCommand = {
+@@ -881,40 +933,51 @@ const InsertSlideShapeRectangleCommand = {
  		return commandService.executeCommand(InsertSlideShapeRectangleOperation.id, { unitId });
  	}
  };
@@ -774,7 +801,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  };
  const ToggleSlideEditSidebarOperation = {
  	id: "sidebar.operation.slide-shape",
-@@ -957,8 +1017,32 @@ const InsertSlideShapeEllipseCommand = {
+@@ -957,8 +1020,32 @@ const InsertSlideShapeEllipseCommand = {
  };
  const InsertSlideShapeEllipseOperation = {
  	id: "slide.operation.insert-float-shape.ellipse",
@@ -809,7 +836,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  		const id = generateRandomId(6);
  		const univerInstanceService = accessor.get(IUniverInstanceService);
  		const unitId = params.unitId;
-@@ -994,58 +1078,146 @@ const InsertSlideShapeEllipseOperation = {
+@@ -994,58 +1081,146 @@ const InsertSlideShapeEllipseOperation = {
  	}
  };
  
@@ -986,7 +1013,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  
  //#endregion
  //#region src/commands/operations/set-thumb.operation.ts
-@@ -1548,6 +1720,11 @@ let SlidesUIController = class SlidesUIController extends Disposable {
+@@ -1548,6 +1723,11 @@ let SlidesUIController = class SlidesUIController extends Disposable {
  			ToggleSlideEditSidebarOperation,
  			DeleteSlideElementOperation,
  			UpdateSlideElementOperation,
@@ -998,3 +1025,35 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..3001946cf3d436f1b80aa2d83f38b3b9
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
+@@ -2682,4 +2862,4 @@ UniverSlidesUIPlugin = __decorate([
+ ], UniverSlidesUIPlugin);
+ 
+ //#endregion
+-export { ActivateSlidePageOperation, AppendSlideOperation, CanvasView, DeleteSlideElementOperation, ISlideEditorBridgeService, InsertSlideFloatImageCommand, InsertSlideShapeEllipseCommand, InsertSlideShapeEllipseOperation, InsertSlideShapeRectangleCommand, InsertSlideShapeRectangleOperation, SHAPE_MENU_ID, SLIDES_IMAGE_MENU_ID, SLIDE_EDITOR_ID, SetSlidePageThumbOperation, SlideAddTextCommand, SlideAddTextOperation, SlideCanvasPopMangerService, SlideEditorContainer, SlideSideBar, SlidesUIController, menuSchema as SlidesUIMenuSchema, UniverSlidesUIPlugin, UpdateSlideElementOperation };
+\ No newline at end of file
++export { ActivateSlidePageOperation, AppendSlideOperation, CanvasView, DeleteSlideElementOperation, ISlideEditorBridgeService, InsertSlideFloatImageCommand, InsertSlideShapeEllipseCommand, InsertSlideShapeEllipseOperation, InsertSlideShapeRectangleCommand, InsertSlideShapeRectangleOperation, SHAPE_MENU_ID, SLIDES_IMAGE_MENU_ID, SLIDE_EDITOR_ID, SetSlidePageThumbOperation, SlideAddTextCommand, SlideAddTextOperation, SlideCanvasPopMangerService, SlideEditorContainer, SlideRenderController, SlideSideBar, SlidesUIController, menuSchema as SlidesUIMenuSchema, UniverSlidesUIPlugin, UpdateSlideElementOperation };
+\ No newline at end of file
+diff --git a/lib/types/controllers/slide.render-controller.d.ts b/lib/types/controllers/slide.render-controller.d.ts
+index 8b160a07c382a2ed26014680b5612543c147edb8..159c9b41c98084e32581eb7eb8c82833a38ccb56 100644
+--- a/lib/types/controllers/slide.render-controller.d.ts
++++ b/lib/types/controllers/slide.render-controller.d.ts
+@@ -27,6 +27,7 @@ export declare class SlideRenderController extends RxDisposable implements IRend
+     private _objectProvider;
+     constructor(_renderContext: IRenderContext<UnitModel>, _injector: Injector, _univerInstanceService: IUniverInstanceService, _renderManagerService: IRenderManagerService);
+     private _addNewRender;
++    scrollToCenter(): void;
+     private _scrollToCenter;
+     private _currentRender;
+     private _refreshThumb;
+diff --git a/lib/types/index.d.ts b/lib/types/index.d.ts
+index 4a56f3b43607e28eea26267efbf736161bd2c4fa..8aae412dec21390108b765e6cd053a5f076c0eb6 100644
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -27,6 +27,7 @@ export type { IUniverSlidesUIConfig } from './config/config';
+ export { SLIDE_EDITOR_ID } from './const';
+ export { CanvasView } from './controllers/canvas-view';
+ export { SlidesUIController } from './controllers/slide-ui.controller';
++export { SlideRenderController } from './controllers/slide.render-controller';
+ export { SLIDES_IMAGE_MENU_ID } from './menu/image.menu';
+ export { menuSchema as SlidesUIMenuSchema } from './menu/schema';
+ export { SHAPE_MENU_ID } from './menu/shape.menu';

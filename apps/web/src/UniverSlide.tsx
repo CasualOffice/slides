@@ -8,8 +8,9 @@ import { UniverUIPlugin } from '@univerjs/ui';
 import { UniverDocsPlugin } from '@univerjs/docs';
 import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
 import { UniverDrawingPlugin } from '@univerjs/drawing';
+import { IRenderManagerService } from '@univerjs/engine-render';
 import { UniverSlidesPlugin } from '@univerjs/slides';
-import { UniverSlidesUIPlugin } from '@univerjs/slides-ui';
+import { SlideRenderController, UniverSlidesUIPlugin } from '@univerjs/slides-ui';
 
 import { LOCALES } from './locale';
 
@@ -116,18 +117,52 @@ export function UniverSlide({ snapshot }: UniverSlideProps) {
       };
     }
 
-    // Univer measures the canvas viewport at create-time. Our chrome
-    // (title bar + toolbar + status bar) takes a tick to lay out, so the
-    // initial measurement is sometimes wrong — slide ends up offset to
-    // the right with a horizontal scrollbar required to center it.
-    // Fire a synthetic resize once the layout settles; Univer recomputes
-    // viewport bounds and re-runs _scrollToCenter on the slide.
-    const resize1 = window.setTimeout(() => window.dispatchEvent(new Event('resize')), 80);
-    const resize2 = window.setTimeout(() => window.dispatchEvent(new Event('resize')), 400);
+    // Re-center the slide after our chrome (title bar + toolbar + status
+    // bar) finishes laying out. Univer's SlideRenderController subscribes
+    // to engine.onTransformChange$ for ONE scroll-to-center call at mount;
+    // if that fires before the canvas has its final size (common in async
+    // flex/grid layouts), the slide stays off-center and the user has to
+    // scroll horizontally to find it.
+    //
+    // The public `scrollToCenter` we added to SlideRenderController lets
+    // us re-run the math once layout settles — bound by a ResizeObserver
+    // on the container so it also fires when the user resizes the window
+    // or expands a sibling panel.
+    const renderManager = univer.__getInjector().get(IRenderManagerService);
+    const recenter = () => {
+      const instances = univer.__getInjector().get(IUniverInstanceService);
+      const unitId = instances.getCurrentUnitOfType(UniverInstanceType.UNIVER_SLIDE)?.getUnitId();
+      if (!unitId) return;
+      const renderUnit = renderManager.getRenderById(unitId);
+      try {
+        const ctrl = renderUnit?.with(SlideRenderController);
+        // Trigger an engine resize first so canvasWidth/Height are fresh
+        // before the centering math runs.
+        renderUnit?.engine?.resize();
+        ctrl?.scrollToCenter();
+      } catch {
+        /* renderUnit not ready yet — next tick will retry */
+      }
+    };
+
+    // Chrome layout settles in a couple of frames. Fire on a short and a
+    // longer delay so we catch both the initial mount and any late
+    // font-load reflow.
+    const t1 = window.setTimeout(recenter, 80);
+    const t2 = window.setTimeout(recenter, 400);
+    const t3 = window.setTimeout(recenter, 1200);
+
+    // Container resize → re-center. Watches the .univer-mount element so
+    // any change to the surrounding chrome (e.g. expanding a side panel)
+    // triggers a fresh centering pass.
+    const ro = new ResizeObserver(() => recenter());
+    ro.observe(containerRef.current);
 
     return () => {
-      window.clearTimeout(resize1);
-      window.clearTimeout(resize2);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+      ro.disconnect();
       univer.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,0 +1,28 @@
+diff --git a/lib/cjs/index.js b/lib/cjs/index.js
+index fafb8476bdd10d7a5224234dc0d7494756933de3..9e368dbdde29a5a2fed2840e5838d8f565bf4bc6 100644
+--- a/lib/cjs/index.js
++++ b/lib/cjs/index.js
+@@ -24644,7 +24644,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
+ 	_onMouseWheel(evt) {
+ 		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
+ 		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
+-		this._scene.getMainViewport().onMouseWheel$.emitEvent(evt);
++		const viewportMain = this._scene.getMainViewport();
++		if (viewportMain) viewportMain.onMouseWheel$.emitEvent(evt);
+ 		if (!isStop && this._shouldDispatchEventToScene(currentObject)) this._scene.onMouseWheel$.emitEvent(evt);
+ 	}
+ 	_onKeyDown(evt) {
+diff --git a/lib/es/index.js b/lib/es/index.js
+index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..74aaeb85903aebf53a922a2455d94c0c8740c7b9 100644
+--- a/lib/es/index.js
++++ b/lib/es/index.js
+@@ -24615,7 +24615,8 @@ var InputManager = class InputManager extends Disposable {
+ 	_onMouseWheel(evt) {
+ 		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
+ 		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
+-		this._scene.getMainViewport().onMouseWheel$.emitEvent(evt);
++		const viewportMain = this._scene.getMainViewport();
++		if (viewportMain) viewportMain.onMouseWheel$.emitEvent(evt);
+ 		if (!isStop && this._shouldDispatchEventToScene(currentObject)) this._scene.onMouseWheel$.emitEvent(evt);
+ 	}
+ 	_onKeyDown(evt) {
