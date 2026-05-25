@@ -3,7 +3,7 @@ import { XMLParser } from 'fast-xml-parser';
 import type { IPageElement, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
 import type { IBullet, IDocumentData, IParagraph, ITextRun, IParagraphStyle } from '@univerjs/core';
-import { HorizontalAlign, PresetListType } from '@univerjs/core';
+import { BorderStyleTypes, HorizontalAlign, PresetListType } from '@univerjs/core';
 
 // pptx import — JSZip + fast-xml-parser → ISlideData.
 //
@@ -283,9 +283,50 @@ function resolveSchemeColor(node: unknown, theme: ThemeMap | null): string | nul
   return applyColorModifiers(`#${resolved}`, schemeClr);
 }
 
-// Combined "read any colour" — srgbClr first, schemeClr as fallback.
-// Caller passes the parent node that contains `<a:solidFill>` or
-// equivalent (we resolve the solid first, then the bare schemeClr).
+// Wave 7 — gradient fill fallback (D9 / A3). Univer's IColorStyle has no
+// gradient slot, so when we encounter `<a:gradFill>` we degrade to the
+// first colour stop in `<a:gsLst>` (sorted by `@pos`, ascending).
+//
+// Why first-stop: PowerPoint's "gradient down" presets typically run
+// from accent → lighter-accent; the start is the more saturated /
+// brand-faithful end. Picking middle / average tends to wash out the
+// signal colour. First-stop is the best single-RGB approximation for
+// "what colour did the author pick?" without a fork patch to widen
+// IColorStyle.
+function readGradFirstStop(parent: unknown, theme: ThemeMap | null): string | null {
+  const grad = findChild(parent, 'a:gradFill');
+  if (!grad) return null;
+  const gsLst = findChild(grad, 'a:gsLst');
+  const stops = toArray(findChild(gsLst, 'a:gs'));
+  if (stops.length === 0) return null;
+  const sorted = stops.slice().sort((a, b) => {
+    const pa = parseInt(String((a as XmlNode)['@pos'] ?? '0'), 10);
+    const pb = parseInt(String((b as XmlNode)['@pos'] ?? '0'), 10);
+    return (Number.isFinite(pa) ? pa : 0) - (Number.isFinite(pb) ? pb : 0);
+  });
+  for (const stop of sorted) {
+    // Each `<a:gs>` has the colour directly as a child (NOT wrapped
+    // in `<a:solidFill>`). Try srgbClr first, then schemeClr.
+    const srgb = findChild(stop, 'a:srgbClr') as XmlNode | undefined;
+    const srgbVal = srgb?.['@val'];
+    if (typeof srgbVal === 'string' && /^[0-9a-fA-F]{6}$/.test(srgbVal)) {
+      return applyColorModifiers(`#${srgbVal.toUpperCase()}`, srgb);
+    }
+    const schemeClr = findChild(stop, 'a:schemeClr') as XmlNode | undefined;
+    if (schemeClr && theme) {
+      const raw = schemeClr['@val'];
+      if (typeof raw === 'string') {
+        const resolved = theme.get(resolveSchemeName(raw));
+        if (resolved) return applyColorModifiers(`#${resolved}`, schemeClr);
+      }
+    }
+  }
+  return null;
+}
+
+// Combined "read any colour" — srgbClr first, schemeClr as fallback,
+// then a degraded gradient first-stop. Caller passes the parent node
+// that contains `<a:solidFill>` / `<a:gradFill>` / equivalent.
 function readColor(parent: unknown, theme: ThemeMap | null): string | null {
   const solid = findChild(parent, 'a:solidFill');
   if (solid) {
@@ -297,7 +338,8 @@ function readColor(parent: unknown, theme: ThemeMap | null): string | null {
     const schemed = resolveSchemeColor(solid, theme);
     if (schemed) return schemed;
   }
-  return null;
+  // Degraded gradient → first-stop solid. Better than dropping the fill.
+  return readGradFirstStop(parent, theme);
 }
 
 // Get a string out of a <a:t> node which can be either a bare string or
@@ -431,6 +473,30 @@ function parseBullet(pPr: unknown, listIdSeed: string, level: number): IBullet |
   return null;
 }
 
+// Wave 7 — paragraph space-before / space-after (C5). Same shape as
+// lnSpc: either `<a:spcPct val=…>` (percent * 1000) or
+// `<a:spcPts val=…>` (100ths of a point). Univer's `spaceAbove` /
+// `spaceBelow` are `INumberUnit { v, u? }` — we set just `v` and let
+// the renderer use its default unit.
+function parseSpacePts(holder: unknown): number | null {
+  if (!holder) return null;
+  const pts = findChild(holder, 'a:spcPts') as XmlNode | undefined;
+  const ptsVal = pts?.['@val'];
+  if (ptsVal !== undefined) {
+    const n = parseInt(String(ptsVal), 10);
+    if (Number.isFinite(n)) return n / 100;
+  }
+  const pct = findChild(holder, 'a:spcPct') as XmlNode | undefined;
+  const pctVal = pct?.['@val'];
+  if (pctVal !== undefined) {
+    const n = parseInt(String(pctVal), 10);
+    // Express as a multiplier; renderer treats values < 10 as multipliers
+    // (same convention as lineSpacing).
+    if (Number.isFinite(n)) return n / 100_000;
+  }
+  return null;
+}
+
 // Parse `<a:lnSpc>` → line spacing multiplier OR absolute pt value.
 // PowerPoint stores it as either:
 //   <a:lnSpc><a:spcPct val="100000"/></a:lnSpc>  → percent * 1000 (100% = 1.0)
@@ -550,19 +616,23 @@ function extractRichDoc(
       }
     }
 
-    // Paragraph-level (C2 + C3 + C4 + C6 + C7 + C8).
+    // Paragraph-level (C2 + C3 + C4 + C5 + C6 + C7 + C8).
     const pPr = findChild(p, 'a:pPr');
     const align = parseParagraphAlign(pPr);
     const lineSpacing = parseLineSpacing(pPr);
     const { indentStart, indentFirstLine } = parseIndent(pPr);
     const level = parseLevel(pPr);
     const bullet = parseBullet(pPr, elementId, level);
+    const spaceAbove = parseSpacePts(findChild(pPr, 'a:spcBef'));
+    const spaceBelow = parseSpacePts(findChild(pPr, 'a:spcAft'));
 
     const paragraphStyle: IParagraphStyle = {};
     if (align !== null) paragraphStyle.horizontalAlign = align;
     if (lineSpacing !== null) paragraphStyle.lineSpacing = lineSpacing;
     if (indentStart !== undefined) paragraphStyle.indentStart = { v: indentStart };
     if (indentFirstLine !== undefined) paragraphStyle.indentFirstLine = { v: indentFirstLine };
+    if (spaceAbove !== null) paragraphStyle.spaceAbove = { v: spaceAbove };
+    if (spaceBelow !== null) paragraphStyle.spaceBelow = { v: spaceBelow };
 
     const paragraph: IParagraph = { startIndex: cursor };
     if (Object.keys(paragraphStyle).length > 0) paragraph.paragraphStyle = paragraphStyle;
@@ -611,11 +681,44 @@ function parseSrgbColor(parent: unknown): string | null {
 // reconstruct what PptxGenJS's addShape() emitted on export. Unknown
 // prstGeom values fall back to 'rect' so we never drop a shape; the
 // position / size / fill still survive.
+// Wave 7 — OOXML `<a:prstDash val=…>` → Univer's BorderStyleTypes.
+// PowerPoint's dash presets are richer than Univer's border enum; map
+// to the closest available value. `solid` and unknown values fall
+// through to THIN (the conventional "plain stroke").
+function parsePrstDash(ln: unknown): BorderStyleTypes | null {
+  const node = findChild(ln, 'a:prstDash') as XmlNode | undefined;
+  const val = node?.['@val'];
+  if (typeof val !== 'string') return null;
+  switch (val) {
+    case 'dot':
+    case 'sysDot':
+      return BorderStyleTypes.DOTTED;
+    case 'dash':
+    case 'sysDash':
+      return BorderStyleTypes.DASHED;
+    case 'lgDash':
+      return BorderStyleTypes.MEDIUM_DASHED;
+    case 'dashDot':
+    case 'sysDashDot':
+      return BorderStyleTypes.DASH_DOT;
+    case 'lgDashDot':
+      return BorderStyleTypes.MEDIUM_DASH_DOT;
+    case 'lgDashDotDot':
+    case 'sysDashDotDot':
+      return BorderStyleTypes.MEDIUM_DASH_DOT_DOT;
+    case 'solid':
+      return BorderStyleTypes.THIN;
+    default:
+      return null;
+  }
+}
+
 function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   shapeType: string;
   fillRgb: string | null;
   outlineRgb: string | null;
   outlineWeightPx: number | null;
+  outlineDash: BorderStyleTypes | null;
 } {
   const prstGeom = findChild(spPr, 'a:prstGeom') as XmlNode | undefined;
   const prstAttr = prstGeom?.['@prst'];
@@ -625,9 +728,11 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
 
   let outlineRgb: string | null = null;
   let outlineWeightPx: number | null = null;
+  let outlineDash: BorderStyleTypes | null = null;
   const ln = findChild(spPr, 'a:ln') as XmlNode | undefined;
   if (ln) {
     outlineRgb = readColor(ln, theme) ?? parseSrgbColor(ln);
+    outlineDash = parsePrstDash(ln);
     const w = ln['@w'];
     if (typeof w === 'string' || typeof w === 'number') {
       const emu = parseInt(String(w), 10);
@@ -642,7 +747,7 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
     }
   }
 
-  return { shapeType, fillRgb, outlineRgb, outlineWeightPx };
+  return { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash };
 }
 
 // Placeholder geometry inherited from the slide layout / master (I3).
@@ -1065,14 +1170,15 @@ async function processSpTree(
     }
 
     if (spPr) {
-      const { shapeType, fillRgb, outlineRgb, outlineWeightPx } = parseShapeAppearance(spPr, reg.theme);
+      const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash } = parseShapeAppearance(spPr, reg.theme);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shapeProperties: any = {};
       if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
-      if (outlineRgb || outlineWeightPx !== null) {
+      if (outlineRgb || outlineWeightPx !== null || outlineDash !== null) {
         shapeProperties.outline = {
           outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
           weight: outlineWeightPx ?? 1,
+          ...(outlineDash !== null ? { dashStyle: outlineDash } : {}),
         };
       }
       out.push({

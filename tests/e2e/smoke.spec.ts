@@ -1335,6 +1335,109 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(paras[0].bullet?.listId).toBe(paras[1].bullet?.listId);
   });
 
+  test('pptx import wave 7 — gradient fallback + outline dash + paragraph spacing', async ({ page }) => {
+    // Shape with <a:gradFill> (0% red → 100% blue) → degraded to first
+    // stop = red. Outline uses <a:prstDash val="dash"/> → DASHED (4).
+    // Text frame has a paragraph with spcBef 12pt + spcAft 6pt.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        // Shape: gradient fill (red → blue), dashed outline.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="g"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="2857500" cy="2857500"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `<a:gradFill>` +
+        `<a:gsLst>` +
+        `<a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs>` +
+        `<a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs>` +
+        `</a:gsLst>` +
+        `<a:lin ang="5400000" scaled="1"/>` +
+        `</a:gradFill>` +
+        `<a:ln w="38100">` +  // 4pt outline
+        `<a:solidFill><a:srgbClr val="000000"/></a:solidFill>` +
+        `<a:prstDash val="dash"/>` +
+        `</a:ln>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        // Text: one para with spcBef 1200 (12pt) + spcAft 600 (6pt).
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="3" name="t"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="3814400" y="914400"/><a:ext cx="4000000" cy="2000000"/></a:xfrm></p:spPr>` +
+        `<p:txBody><a:bodyPr/><a:lstStyle/>` +
+        `<a:p><a:pPr><a:spcBef><a:spcPts val="1200"/></a:spcBef><a:spcAft><a:spcPts val="600"/></a:spcAft></a:pPr>` +
+        `<a:r><a:rPr lang="en-US"/><a:t>spaced</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave7.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    const elements = Object.values(firstPage.pageElements ?? {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shape = elements.find((e: any) => e.shape) as any;
+    expect(shape, 'shape extracted').toBeTruthy();
+
+    // D9 — gradient → first stop FF0000.
+    const fillHex = (shape.shape.shapeProperties?.shapeBackgroundFill?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(fillHex, 'gradient → first stop solid (red)').toBe('FF0000');
+
+    // D15 — outline dash style = DASHED (4).
+    expect(shape.shape.shapeProperties?.outline?.dashStyle, 'prstDash=dash → DASHED').toBe(4);
+
+    // C5 — paragraph spaceAbove (12pt) + spaceBelow (6pt).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text = elements.find((e: any) => e.richText) as any;
+    const paraStyle = text?.richText?.rich?.body?.paragraphs?.[0]?.paragraphStyle;
+    expect(paraStyle?.spaceAbove?.v, 'spcBef 1200 → 12pt').toBe(12);
+    expect(paraStyle?.spaceBelow?.v, 'spcAft 600 → 6pt').toBe(6);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

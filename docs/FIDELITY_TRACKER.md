@@ -10,9 +10,9 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 6b)
+## Snapshot — 2026-05-26 (post wave 7)
 
-**27 / 87 items at ✅, 5 at ⚠️.** Wave 6b extends the rich-doc plumbing to paragraph-level structure: bullets (C6 `<a:buChar>` / C7 `<a:buAutoNum>`), nesting levels (C8 `<a:pPr lvl>`), indent (C3 `marL` / `indent`), and line spacing (C4 `<a:lnSpc>`). The remaining text-layout misses are mostly small polish — `<a:spcBef>` / `<a:spcAft>` (C5 paragraph spacing) and bodyPr insets / anchor / autofit (C10-C13).
+**30 / 87 items at ✅, 7 at ⚠️.** Wave 7 lands C5 (`<a:spcBef>` / `<a:spcAft>` → spaceAbove/spaceBelow), D15 (`<a:prstDash>` → `BorderStyleTypes`), and degraded gradient fallback for D9 / A3 — `<a:gradFill>` shapes and slide backgrounds now render with the first colour stop instead of dropping to white. True multi-stop gradient rendering is fork-patch territory (`IColorStyle` has no gradient slot); first-stop degradation keeps brand colour visible without invasive changes. Remaining "looks wrong" gaps are concentrated in shadow / glow effects (D18-D20), bodyPr layout (C10-C14), and Univer-blocked items (G1 tables, H1 charts).
 
 ## A. Slide-level
 
@@ -20,7 +20,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 |------|------|--------|--------|-----------|-------|
 | A1 | Slide dimensions (`<p:sldSz>`) | ✅ | High | Low | Round-trips via `pageSize`. |
 | A2 | Background — solid fill (`<p:bg><p:bgPr><a:solidFill><a:srgbClr\|a:schemeClr>`) | ✅ | High | Low | Wave 2 reads `<a:srgbClr>`; wave 5 added `<a:schemeClr>` via the theme map. Gradient / picture / `<p:bgRef>` index still TODO (A3 / A4 / A5-idx). |
-| A3 | Background — gradient (`<a:gradFill>`) | ❌ | High | Med | Common in business templates. |
+| A3 | Background — gradient (`<a:gradFill>`) | ⚠️ | High | Med | Wave 7 — degraded to first colour stop via `readGradFirstStop`. True multi-stop rendering would need to widen `IColorStyle` (fork patch). |
 | A4 | Background — picture (`<a:blipFill>`) | ❌ | High | Med | Photo backgrounds. |
 | A5 | Background — theme reference (`<p:bgRef idx>`) | ⚠️ | High | Med | `<p:bgPr><a:solidFill><a:schemeClr>` resolves (wave 5); the indexed `<p:bgRef idx>` form (refers into theme.bgFillStyleLst) still TODO. |
 | A6 | Slide hidden flag (`<p:sld show="0">`) | ❌ | Low | Low | Rare. |
@@ -60,7 +60,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | C2 | Paragraph alignment (`<a:pPr algn=l\|ctr\|r\|just\|dist>`) | ✅ | High | Low | Wave 6 — `parseParagraphAlign` → `HorizontalAlign` enum; lands on `paragraphStyle.horizontalAlign` inside `richText.rich`. All five OOXML values (l / ctr / r / just / dist) mapped. |
 | C3 | Paragraph indentation (`<a:pPr indent / marL>`) | ✅ | Med | Low | Wave 6b — `marL` → `indentStart`, `indent` → `indentFirstLine`, EMU → px. |
 | C4 | Line spacing (`<a:lnSpc>`) | ✅ | Med | Low | Wave 6b — `<a:spcPct>` → multiplier (val/100000), `<a:spcPts>` → absolute pt (val/100). |
-| C5 | Space before / after paragraph (`<a:spcBef>` `<a:spcAft>`) | ❌ | Med | Low | — |
+| C5 | Space before / after paragraph (`<a:spcBef>` `<a:spcAft>`) | ✅ | Med | Low | Wave 7 — `parseSpacePts` handles both `<a:spcPts>` (100ths-of-a-pt) and `<a:spcPct>` (multiplier). Lands in `paragraphStyle.spaceAbove` / `spaceBelow`. |
 | C6 | Bullets — char (`<a:buChar>`) | ✅ | High | Med | Wave 6b — `<a:buChar>` → `IBullet { listType: BULLET_LIST, listId: <elementId>-bul, nestingLevel }`. The actual glyph from `@char` isn't read — Univer's renderer uses its own preset glyphs per level. |
 | C7 | Bullets — auto-numbered (`<a:buAutoNum>`) | ✅ | Med | Med | Wave 6b — `<a:buAutoNum>` → `IBullet { listType: ORDER_LIST, listId: <elementId>-ord, nestingLevel }`. `@type` (arabicPeriod / romanUcPeriod / …) not yet read; restarts per text frame. |
 | C8 | Bullet indent levels (`<a:pPr lvl>`) | ✅ | Med | Med | Wave 6b — `@lvl` clamped to 0..8, flows into `IBullet.nestingLevel`. |
@@ -83,13 +83,13 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | D6 | Custom geometry (`<a:custGeom>`) | ❌ | Med | High | Vector paths. |
 | D7 | Solid fill — srgbClr | ✅ | High | — | — |
 | D8 | Solid fill — schemeClr (theme) | ✅ | High | Med | Wave 5 — `parseShapeAppearance` consults the theme map for both fill and outline. Modifiers deferred. |
-| D9 | Gradient fill (`<a:gradFill>`) | ❌ | High | Med | Common in modern templates. |
+| D9 | Gradient fill (`<a:gradFill>`) | ⚠️ | High | Med | Wave 7 — degraded to first colour stop. Brand colour visible; gradient interpolation needs an IColorStyle widening (fork patch). |
 | D10 | Pattern fill (`<a:pattFill>`) | ❌ | Low | Med | — |
 | D11 | Picture fill on shape | ❌ | Low | Med | — |
 | D12 | No fill (`<a:noFill>`) | ⚠️ | High | Low | Currently treated as white. Need to distinguish from missing fill. |
 | D13 | Outline color (srgbClr) | ✅ | High | — | — |
 | D14 | Outline weight | ✅ | High | — | EMU → px. |
-| D15 | Outline dash pattern (`<a:prstDash>`) | ❌ | Med | Low | — |
+| D15 | Outline dash pattern (`<a:prstDash>`) | ✅ | Med | Low | Wave 7 — `parsePrstDash` maps PowerPoint's preset dash values to Univer's `BorderStyleTypes` (DOTTED / DASHED / DASH_DOT etc.). |
 | D16 | Outline cap (`<a:ln @cap>`) | ❌ | Low | Low | — |
 | D17 | Arrowheads (`<a:headEnd>` `<a:tailEnd>`) | ❌ | Med | Low | — |
 | D18 | Shape shadow (`<a:effectLst><a:outerShdw>`) | ❌ | Med | Med | — |
