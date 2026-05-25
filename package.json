@@ -8,9 +8,12 @@
   "scripts": {
     "dev:web": "pnpm --filter @point/web dev",
     "build:web": "pnpm --filter @point/web build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "tsx": "^4.22.3",
     "typescript": "^5.6.3"
   },

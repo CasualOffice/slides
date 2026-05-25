@@ -12,6 +12,7 @@ import { UniverSlidesPlugin } from '@univerjs/slides';
 import { UniverSlidesUIPlugin } from '@univerjs/slides-ui';
 
 import { DEFAULT_SLIDE_DATA } from './default-slide';
+import { LOCALES } from './locale';
 
 // Imperative handle exposed to the parent (App.tsx) so it can hot-swap the
 // active deck (e.g. on `Open .pptx`) without unmounting the whole Univer
@@ -48,6 +49,9 @@ export const UniverSlide = forwardRef<UniverSlideHandle>(function UniverSlide(_,
     const univer = new Univer({
       theme: defaultTheme,
       locale: LocaleType.EN_US,
+      // Without `locales`, the LocaleService throws on first plugin string
+      // lookup and the canvas never renders. See ./locale.ts.
+      locales: LOCALES,
       logLevel: LogLevel.WARN,
     });
     univerRef.current = univer;

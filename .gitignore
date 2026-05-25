@@ -7,3 +7,4 @@ dist/
 .env.local
 test-results/
 playwright-report/
+playwright/.cache/
