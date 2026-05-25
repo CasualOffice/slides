@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
+  '@univerjs/slides-ui@0.24.0':
+    hash: 5e01e065c87658a702c66152f51f191a0c6b6bd9ad06256b06eab60539921da6
+    path: patches/@univerjs__slides-ui@0.24.0.patch
   '@univerjs/slides@0.24.0':
     hash: 86fab7be0024fbf69457996c1b7a11b856f168f4e748b51cb34228f7bd24dd78
     path: patches/@univerjs__slides@0.24.0.patch
@@ -51,7 +54,7 @@ importers:
         version: 0.24.0(patch_hash=86fab7be0024fbf69457996c1b7a11b856f168f4e748b51cb34228f7bd24dd78)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/slides-ui':
         specifier: 0.24.0
-        version: 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
+        version: 0.24.0(patch_hash=5e01e065c87658a702c66152f51f191a0c6b6bd9ad06256b06eab60539921da6)(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/themes':
         specifier: 0.24.0
         version: 0.24.0
@@ -2559,7 +2562,7 @@ snapshots:
     transitivePeerDependencies:
       - react
 
-  '@univerjs/slides-ui@0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)':
+  '@univerjs/slides-ui@0.24.0(patch_hash=5e01e065c87658a702c66152f51f191a0c6b6bd9ad06256b06eab60539921da6)(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)':
     dependencies:
       '@univerjs/core': 0.24.0(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/design': 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

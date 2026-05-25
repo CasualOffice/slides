@@ -1,0 +1,44 @@
+diff --git a/lib/cjs/index.js b/lib/cjs/index.js
+index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..348ac3d30da47384da00df15b077112cb533f68b 100644
+--- a/lib/cjs/index.js
++++ b/lib/cjs/index.js
+@@ -156,7 +156,7 @@ let SlideRenderController = class SlideRenderController extends _univerjs_core.R
+ 	* @param mainScene
+ 	*/
+ 	_createSlide(mainScene) {
+-		const model = this._univerInstanceService.getCurrentUnitOfType(_univerjs_core.UniverInstanceType.UNIVER_SLIDE);
++		const model = this._getCurrUnitModel();
+ 		const { width: sceneWidth, height: sceneHeight } = mainScene;
+ 		const { width = 100, height = 100 } = model.getPageSize();
+ 		const slideComponent = new _univerjs_engine_render.Slide(_univerjs_slides.SLIDE_KEY.COMPONENT, {
+@@ -171,7 +171,7 @@ let SlideRenderController = class SlideRenderController extends _univerjs_core.R
+ 		return slideComponent;
+ 	}
+ 	_addBackgroundRect(scene, fill) {
+-		const { width: pageWidth = 0, height: pageHeight = 0 } = this._univerInstanceService.getCurrentUnitOfType(_univerjs_core.UniverInstanceType.UNIVER_SLIDE).getPageSize();
++		const { width: pageWidth = 0, height: pageHeight = 0 } = this._getCurrUnitModel().getPageSize();
+ 		const page = new _univerjs_engine_render.Rect("canvas", {
+ 			left: 0,
+ 			top: 0,
+diff --git a/lib/es/index.js b/lib/es/index.js
+index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..4de4b82c0c2ecb1e8476be69d564bb71622bdff7 100644
+--- a/lib/es/index.js
++++ b/lib/es/index.js
+@@ -155,7 +155,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+ 	* @param mainScene
+ 	*/
+ 	_createSlide(mainScene) {
+-		const model = this._univerInstanceService.getCurrentUnitOfType(UniverInstanceType.UNIVER_SLIDE);
++		const model = this._getCurrUnitModel();
+ 		const { width: sceneWidth, height: sceneHeight } = mainScene;
+ 		const { width = 100, height = 100 } = model.getPageSize();
+ 		const slideComponent = new Slide(SLIDE_KEY.COMPONENT, {
+@@ -170,7 +170,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+ 		return slideComponent;
+ 	}
+ 	_addBackgroundRect(scene, fill) {
+-		const { width: pageWidth = 0, height: pageHeight = 0 } = this._univerInstanceService.getCurrentUnitOfType(UniverInstanceType.UNIVER_SLIDE).getPageSize();
++		const { width: pageWidth = 0, height: pageHeight = 0 } = this._getCurrUnitModel().getPageSize();
+ 		const page = new Rect("canvas", {
+ 			left: 0,
+ 			top: 0,

@@ -10,7 +10,9 @@ Fork remote: `git@github.com:schnsrw/univer-revamp.git` · branch `dev` · **v0.
 
 | # | Gap | Severity | Phase | Upstream-eligible? |
 |---|---|---|---|---|
-| 1 | Collab rev tracking on `SlideDataModel` | 🔴 Blocker for P2 | P0 spike, P2 land | Yes — clean upstream PR |
+| 1 | Collab rev tracking on `SlideDataModel` | 🔴 Blocker for P2 | P0 spike, P2 land | Yes — clean upstream PR ✅ shipped on `slide/rev-tracking` |
+| 1.5 | `_createSlide` race uses `getCurrentUnitOfType()!` instead of `renderContext.unit` | 🔴 Black-screen on prod | P0 spike, P0 land | Yes — clean upstream PR ✅ shipped on `slide/render-context-unit-fix` |
+| 1.6 | `slide-editing.render-controller.ts:257` calls `.activate(...)` on stale doc renderer after `disposeUnit` | 🟡 Console noise on swap, no UX impact | P1 | Yes |
 | 2 | Element operations declared as `OPERATION` not `MUTATION` | 🔴 Blocker for P2 | P0 spike, P2 land | Yes — clean upstream PR |
 | 3 | Missing element types (table, chart, line, video) | 🟡 Limits P4 breadth | P4 | Yes — model + render |
 | 4 | Animations / transitions not modeled | 🟡 Limits P5 | P5 | Maybe — model addition is large |

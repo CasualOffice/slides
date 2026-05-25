@@ -79,6 +79,69 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(head[3]).toBe(0x04);
   });
 
+  test('Open .pptx hot-swaps the deck without TypeError (Gap render-context-unit-fix)', async ({ page }, testInfo) => {
+    // Reproduces the slides-ui _createSlide race: getCurrentUnitOfType()
+    // returns null between disposeUnit() and createUnit(). Pre-patch this
+    // threw "Cannot read properties of null (reading 'getPageSize')" the
+    // moment we swapped decks; post-patch _getCurrUnitModel() reads from
+    // the renderContext.unit and survives the race.
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}`));
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') errors.push(`console.error: ${msg.text()}`);
+    });
+
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __slideRevProbe?: unknown }).__slideRevProbe === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+
+    // Save the default deck, then re-open it to force swapDeck.
+    const downloadPromise = page.waitForEvent('download', { timeout: 15_000 });
+    await page.getByRole('button', { name: /save \.pptx/i }).click();
+    const download = await downloadPromise;
+    const downloadedPath = await download.path();
+    expect(downloadedPath).toBeTruthy();
+
+    // Persist to a stable path so setInputFiles can pick it up.
+    const fixturePath = testInfo.outputPath('round-trip.pptx');
+    const { copyFileSync } = await import('node:fs');
+    copyFileSync(downloadedPath!, fixturePath);
+
+    // The Open .pptx button trips a hidden <input type=file ref={fileInputRef}>.
+    // Drive the input directly — that fires the change handler, which
+    // calls swapDeck → disposeUnit + createUnit, the exact code path that
+    // hit the bug.
+    const fileInput = page.locator('input[type="file"]');
+    await fileInput.setInputFiles(fixturePath);
+
+    // Wait for the import to finish (status pill updates) then settle.
+    await expect(page.locator('.spike-status')).toContainText(/loaded/i, { timeout: 10_000 });
+    await page.waitForTimeout(500);
+
+    const fatal = errors.filter(
+      (e) =>
+        !e.includes('fonts.googleapis') &&
+        !e.includes('favicon') &&
+        // Known secondary bug in @univerjs/slides-ui slide-editing render
+        // controller — after disposeUnit, a doc-selection .activate() fires
+        // against a stale renderer and throws. The canvas still renders
+        // correctly. Tracked separately (Gap 9 / render-doc-selection-activate).
+        !e.includes('renderer.activate is not a function'),
+    );
+
+    // The error we DID fix: pre-patch this would have surfaced as
+    // "Cannot read properties of null (reading 'getPageSize')".
+    expect(
+      errors.some((e) => e.includes("Cannot read properties of null (reading 'getPageSize')")),
+      'getPageSize race must not appear — that is the patch we shipped',
+    ).toBe(false);
+
+    expect(fatal, `swapDeck console errors:\n${fatal.join('\n')}`).toEqual([]);
+  });
+
   test('rev-tracking patch is live (Gap 1)', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => typeof (window as { __slideRevProbe?: unknown }).__slideRevProbe === 'function', null, { timeout: 15_000 });
