@@ -10,9 +10,9 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 5b)
+## Snapshot — 2026-05-26 (post wave 6)
 
-**21 / 87 items at ✅, 5 at ⚠️.** Wave 5b polish: color modifiers (lumMod / lumOff / tint / shade) on both srgbClr and schemeClr — corrects "lighter accent" backgrounds that were rendering as the dark base colour — plus D3 / D4 / E7 (shape + image rotation and horizontal/vertical flips). Next-biggest visible miss remaining: **B16** (multi-run rich text) and **C2 + C6** (alignment + bullets) — all live in **wave 6** behind `IDocumentData`. Modifier coverage is the 80 %: satMod / hueMod / alpha still drop.
+**23 / 87 items at ✅, 5 at ⚠️.** Wave 6 landed B16 (multi-run rich text via `IDocumentData`) and C2 (paragraph alignment via `IParagraphStyle.horizontalAlign`). The TEXT element's `richText.rich` field now carries a full doc body (dataStream + per-run textRuns + per-paragraph paragraphs) so a paragraph with a bold word in the middle, or one centered while another is left-aligned, finally survives a round-trip. Bullets (C6 / C7) + line spacing + indent (C3-C5) deferred to wave 6b — same plumbing, different paragraph-style fields. Multi-line `dataStream` ends with the canonical `\r…\r\n`.
 
 ## A. Slide-level
 
@@ -49,7 +49,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | B13 | Highlight color (`<a:rPr highlight>`) | ❌ | Low | Low | — |
 | B14 | Letter spacing (`<a:rPr spc>`) | ❌ | Low | Low | — |
 | B15 | Text outline (`<a:rPr><a:ln>`) | ❌ | Low | Med | — |
-| B16 | **Multi-run paragraphs** (mixed bold / color / size mid-line) | ❌ | **High** | Med | Currently collapses to first-run style. Needs `IDocumentData`. |
+| B16 | **Multi-run paragraphs** (mixed bold / color / size mid-line) | ✅ | High | Med | Wave 6 — `extractRichDoc` emits one `ITextRun` per `<a:r>` with its own style; placed into `richText.rich` as a full `IDocumentData`. Flat `richText.text` / `fs` / `bl` etc. are still populated for export and renderer-fallback paths. |
 | B17 | Hyperlinks (`<a:hlinkClick>`) | ❌ | Med | Med | — |
 
 ## C. Text — paragraphs / frame
@@ -57,7 +57,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
 | C1 | Multi-paragraph (`<a:p>` repeats) | ✅ | High | — | Joined with `\n`. |
-| C2 | Paragraph alignment (`<a:pPr algn=l\|ctr\|r\|just\|dist>`) | ❌ | **High** | Low | Title alignment is the most-noticed miss. |
+| C2 | Paragraph alignment (`<a:pPr algn=l\|ctr\|r\|just\|dist>`) | ✅ | High | Low | Wave 6 — `parseParagraphAlign` → `HorizontalAlign` enum; lands on `paragraphStyle.horizontalAlign` inside `richText.rich`. All five OOXML values (l / ctr / r / just / dist) mapped. |
 | C3 | Paragraph indentation (`<a:pPr indent / marL>`) | ❌ | Med | Low | — |
 | C4 | Line spacing (`<a:lnSpc>`) | ❌ | Med | Low | — |
 | C5 | Space before / after paragraph (`<a:spcBef>` `<a:spcAft>`) | ❌ | Med | Low | — |

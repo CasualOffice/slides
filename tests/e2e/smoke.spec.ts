@@ -1130,6 +1130,116 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(fillHex, 'shade=50000 on white → 50% grey').toBe('808080');
   });
 
+  test('pptx import wave 6 — multi-run rich text + paragraph alignment (B16 + C2)', async ({ page }) => {
+    // Slide has one TEXT element with two paragraphs:
+    //  • Para 1: "Hello " (regular) + "world" (bold red).
+    //  • Para 2: "centered" (single run) with <a:pPr algn="ctr"/>.
+    // Pre-wave-6 the importer collapsed both paras to first-run style.
+    // After wave 6, richText.rich holds an IDocumentData with separate
+    // textRuns per <a:r> and per-paragraph horizontalAlign.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="text"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="914400" y="914400"/><a:ext cx="7315200" cy="2857500"/></a:xfrm></p:spPr>` +
+        `<p:txBody>` +
+        `<a:bodyPr/><a:lstStyle/>` +
+        // Para 1: "Hello " + "world" (bold red, fs=30)
+        `<a:p>` +
+        `<a:r><a:rPr lang="en-US"/><a:t>Hello </a:t></a:r>` +
+        `<a:r><a:rPr lang="en-US" sz="3000" b="1"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:rPr><a:t>world</a:t></a:r>` +
+        `</a:p>` +
+        // Para 2: "centered" with algn="ctr"
+        `<a:p>` +
+        `<a:pPr algn="ctr"/>` +
+        `<a:r><a:rPr lang="en-US"/><a:t>centered</a:t></a:r>` +
+        `</a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave6.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text: any = Object.values(firstPage.pageElements ?? {})[0];
+    expect(text?.richText?.rich, 'rich IDocumentData populated').toBeTruthy();
+
+    // dataStream should be "Hello world\rcentered\r\n".
+    const ds: string = text.richText.rich.body.dataStream;
+    expect(ds).toBe('Hello world\rcentered\r\n');
+
+    // Two paragraphs — startIndex points at the \r ending each.
+    const paras = text.richText.rich.body.paragraphs;
+    expect(paras.length, 'two paragraphs').toBe(2);
+    expect(paras[0].startIndex, "first para ends at index 11 (length of 'Hello world')").toBe(11);
+    expect(paras[1].startIndex, "second para ends at index 20 (length of 'Hello world\\rcentered')").toBe(20);
+
+    // C2 — second paragraph carries center alignment.
+    // HorizontalAlign.CENTER = 2.
+    expect(paras[1].paragraphStyle?.horizontalAlign, 'algn=ctr → CENTER (2)').toBe(2);
+    // First paragraph had no algn → no paragraphStyle override.
+    expect(paras[0].paragraphStyle?.horizontalAlign).toBeUndefined();
+
+    // B16 — three textRuns: "Hello ", "world", "centered".
+    const runs = text.richText.rich.body.textRuns;
+    expect(runs.length, 'three text runs').toBe(3);
+    expect(runs[0].st).toBe(0); expect(runs[0].ed).toBe(6);
+    expect(runs[1].st).toBe(6); expect(runs[1].ed).toBe(11);
+    expect(runs[2].st).toBe(12); expect(runs[2].ed).toBe(20);
+    // Run 2 carries the bold + red + fs=30.
+    expect(runs[1].ts?.bl, 'bold preserved on second run').toBe(1);
+    expect(runs[1].ts?.fs, 'fs=30 on second run').toBe(30);
+    const r2hex = (runs[1].ts?.cl?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(r2hex, 'red color preserved on second run').toBe('FF0000');
+    // First run had no rPr — flat fields empty, run 1 should NOT carry the bold style.
+    expect(runs[0].ts?.bl).toBeFalsy();
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

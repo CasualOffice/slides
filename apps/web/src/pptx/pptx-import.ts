@@ -2,6 +2,8 @@ import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
 import type { IPageElement, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
+import type { IDocumentData, IParagraph, ITextRun, IParagraphStyle } from '@univerjs/core';
+import { HorizontalAlign } from '@univerjs/core';
 
 // pptx import — JSZip + fast-xml-parser → ISlideData.
 //
@@ -369,43 +371,121 @@ function parseRunProps(rPr: unknown, theme: ThemeMap | null = null): Partial<ISl
 // vast majority of slides) survive intact. Mixed-format runs collapse
 // to the first run's style and lose visible distinctions — tracked as
 // Sprint 2 #6 (multi-run rich text).
-function extractTextAndProps(
+// Map `<a:pPr algn>` (l / ctr / r / just / dist) → Univer's
+// HorizontalAlign enum. Undefined / 'l' fall through to LEFT (the
+// default), null means "no override".
+function parseParagraphAlign(pPr: unknown): HorizontalAlign | null {
+  const node = pPr as XmlNode | undefined;
+  const raw = node?.['@algn'];
+  if (typeof raw !== 'string') return null;
+  switch (raw) {
+    case 'ctr': return HorizontalAlign.CENTER;
+    case 'r': return HorizontalAlign.RIGHT;
+    case 'just': return HorizontalAlign.JUSTIFIED;
+    case 'dist': return HorizontalAlign.DISTRIBUTED;
+    case 'l': return HorizontalAlign.LEFT;
+    default: return null;
+  }
+}
+
+// Wave 6 — extract a full `IDocumentData` body from a `<p:txBody>`.
+// Each `<a:r>` becomes one `ITextRun` carrying its own style; each
+// `<a:p>` becomes one `IParagraph` with its `<a:pPr>` alignment. The
+// fallbackProps (from layout/master placeholder lstStyle defRPr —
+// I4) is spread under every run as the inherited default.
+//
+// Compat: we still return a `text` string + element-level `props` (from
+// the first run + fallback) so callers that look at `richText.text` /
+// `richText.fs` etc. keep working — the rich body is the source of
+// truth when present, the flat fields a fallback for older paths
+// (notably PptxGenJS export which reads from the flat fields).
+//
+// Univer's IDocumentBody requires:
+//   • dataStream ends with `\r\n` (\r = paragraph break, \n = section)
+//   • paragraphs[i].startIndex = index of the `\r` that ends paragraph i
+//   • textRuns[i] = { st, ed, ts } where st inclusive, ed exclusive
+function extractRichDoc(
   txBody: unknown,
+  elementId: string,
   fallbackProps?: Partial<ISlideRichTextProps>,
   theme: ThemeMap | null = null,
-): { text: string; props: Partial<ISlideRichTextProps> } {
-  const paragraphs = toArray(findChild(txBody, 'a:p'));
-  const lines: string[] = [];
-  let firstProps: Partial<ISlideRichTextProps> = {};
-  let captured = false;
-
-  for (const p of paragraphs) {
-    const runs = toArray(findChild(p, 'a:r'));
-    const inline: string[] = [];
-    for (const r of runs) {
-      const tNode = findChild(r, 'a:t');
-      inline.push(readT(tNode));
-      if (!captured) {
-        const rPr = findChild(r, 'a:rPr');
-        const parsed = parseRunProps(rPr, theme);
-        if (Object.keys(parsed).length > 0) {
-          firstProps = parsed;
-          captured = true;
-        }
-      }
-    }
-    lines.push(inline.join(''));
+): {
+  text: string;
+  props: Partial<ISlideRichTextProps>;
+  rich: IDocumentData | null;
+} {
+  const paras = toArray(findChild(txBody, 'a:p'));
+  if (paras.length === 0) {
+    return { text: '', props: fallbackProps ?? {}, rich: null };
   }
 
-  // I4 — when the slide's run carried no formatting of its own, fall
-  // back to the placeholder's <a:lstStyle><a:lvl1pPr><a:defRPr> from
-  // layout/master. Run-level rPr wins by field when both exist (we
-  // spread fallback first, then the captured first-run props).
-  const props: Partial<ISlideRichTextProps> = fallbackProps
-    ? { ...fallbackProps, ...firstProps }
-    : firstProps;
+  const dataStream: string[] = [];
+  const textRuns: ITextRun[] = [];
+  const paragraphs: IParagraph[] = [];
+  const lines: string[] = [];
+  let cursor = 0;
+  let firstRunProps: Partial<ISlideRichTextProps> = {};
+  let capturedFirstRun = false;
 
-  return { text: lines.join('\n'), props };
+  for (const p of paras) {
+    const runs = toArray(findChild(p, 'a:r'));
+    const paraText: string[] = [];
+
+    for (const r of runs) {
+      const tNode = findChild(r, 'a:t');
+      const txt = readT(tNode);
+      paraText.push(txt);
+
+      // Build the run's style: layout/master defaults < layout pPr
+      // defaults < this run's rPr.
+      const rPr = findChild(r, 'a:rPr');
+      const runStyle = parseRunProps(rPr, theme);
+      const ts = { ...(fallbackProps ?? {}), ...runStyle };
+
+      if (txt.length > 0) {
+        textRuns.push({ st: cursor, ed: cursor + txt.length, ts });
+      }
+      cursor += txt.length;
+
+      if (!capturedFirstRun && Object.keys(runStyle).length > 0) {
+        firstRunProps = runStyle;
+        capturedFirstRun = true;
+      }
+    }
+
+    // Paragraph-level: alignment (C2). Univer's IParagraph carries
+    // paragraphStyle.horizontalAlign for the body-level alignment.
+    const pPr = findChild(p, 'a:pPr');
+    const align = parseParagraphAlign(pPr);
+    const paragraphStyle: IParagraphStyle | undefined = align !== null
+      ? { horizontalAlign: align }
+      : undefined;
+
+    // \r terminates this paragraph; record its startIndex (position of
+    // the \r itself).
+    paragraphs.push(paragraphStyle ? { startIndex: cursor, paragraphStyle } : { startIndex: cursor });
+    dataStream.push(...paraText, '\r');
+    cursor += 1;
+    lines.push(paraText.join(''));
+  }
+
+  // Univer convention: the section-final `\n` sits past the last \r.
+  dataStream.push('\n');
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rich: IDocumentData = {
+    id: `${elementId}-doc`,
+    body: { dataStream: dataStream.join(''), textRuns, paragraphs },
+    documentStyle: {},
+  } as any;
+
+  // Flat fallback fields = layout/master defaults spread under first
+  // run's overrides. Run-level wins by field.
+  const props: Partial<ISlideRichTextProps> = fallbackProps
+    ? { ...fallbackProps, ...firstRunProps }
+    : firstRunProps;
+
+  return { text: lines.join('\n'), props, rich };
 }
 
 // Read a `<… val="RRGGBB"/>` srgbClr child of a parent node, returning
@@ -850,13 +930,20 @@ async function processSpTree(
 
     const txBody = findChild(sp, 'p:txBody');
     if (txBody) {
-      const { text, props } = extractTextAndProps(
+      const elId = `s${pageOrdinal}-el-${zIndex}`;
+      const { text, props, rich } = extractRichDoc(
         txBody,
+        elId,
         phInherited?.defaultRunProps,
         reg.theme,
       );
+      const richText: ISlideRichTextProps = {
+        text,
+        ...props,
+        ...(rich ? { rich } : {}),
+      } as ISlideRichTextProps;
       out.push({
-        id: `s${pageOrdinal}-el-${zIndex}`,
+        id: elId,
         zIndex,
         left,
         top,
@@ -868,7 +955,7 @@ async function processSpTree(
         title: '',
         description: '',
         type: PageElementType.TEXT,
-        richText: { text, ...props } as ISlideRichTextProps,
+        richText,
       });
       continue;
     }
