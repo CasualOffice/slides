@@ -1240,6 +1240,101 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(runs[0].ts?.bl).toBeFalsy();
   });
 
+  test('pptx import wave 6b — bullets + indent + line spacing (C3/C4/C6-8)', async ({ page }) => {
+    // Three paragraphs in one text body:
+    //   1) <a:buChar char="•"/> bulleted, level 0
+    //   2) <a:buChar char="•"/> bulleted, level 1 (nested)
+    //   3) <a:buAutoNum type="arabicPeriod"/> numbered, level 0
+    //      with <a:lnSpc>150%, marL=720000 (75px), indent=-360000 (-37.5px)
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="bullets"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="914400" y="914400"/><a:ext cx="7315200" cy="2857500"/></a:xfrm></p:spPr>` +
+        `<p:txBody>` +
+        `<a:bodyPr/><a:lstStyle/>` +
+        `<a:p><a:pPr lvl="0"><a:buChar char="•"/></a:pPr><a:r><a:rPr lang="en-US"/><a:t>One</a:t></a:r></a:p>` +
+        `<a:p><a:pPr lvl="1"><a:buChar char="•"/></a:pPr><a:r><a:rPr lang="en-US"/><a:t>One A</a:t></a:r></a:p>` +
+        `<a:p><a:pPr lvl="0" marL="720000" indent="-360000"><a:lnSpc><a:spcPct val="150000"/></a:lnSpc><a:buAutoNum type="arabicPeriod"/></a:pPr><a:r><a:rPr lang="en-US"/><a:t>Two</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave6b.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text: any = Object.values(firstPage.pageElements ?? {})[0];
+    const paras = text?.richText?.rich?.body?.paragraphs;
+    expect(paras?.length, 'three paragraphs').toBe(3);
+
+    // C6 — first para is bulleted at level 0.
+    expect(paras[0].bullet?.listType, 'p1 is BULLET_LIST').toBe('BULLET_LIST');
+    expect(paras[0].bullet?.nestingLevel, 'p1 level 0').toBe(0);
+
+    // C8 — second para is bulleted at level 1.
+    expect(paras[1].bullet?.listType, 'p2 is BULLET_LIST').toBe('BULLET_LIST');
+    expect(paras[1].bullet?.nestingLevel, 'p2 level 1 (nested)').toBe(1);
+
+    // C7 — third para is auto-numbered.
+    expect(paras[2].bullet?.listType, 'p3 is ORDER_LIST').toBe('ORDER_LIST');
+
+    // C4 — third para has line spacing 150%.
+    expect(paras[2].paragraphStyle?.lineSpacing, 'p3 lineSpacing 1.5').toBeCloseTo(1.5, 2);
+
+    // C3 — third para has indent. 720000 EMU = 75.59 px; -360000 = -37.79 px.
+    expect(paras[2].paragraphStyle?.indentStart?.v, 'p3 indentStart ~75px').toBeCloseTo(75.59, 0);
+    expect(paras[2].paragraphStyle?.indentFirstLine?.v, 'p3 indentFirstLine ~-37px').toBeCloseTo(-37.79, 0);
+
+    // Bullets across paragraphs of the same list share a listId so
+    // numbering doesn't restart mid-frame.
+    expect(paras[0].bullet?.listId).toBe(paras[1].bullet?.listId);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

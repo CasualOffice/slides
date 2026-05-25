@@ -10,9 +10,9 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 6)
+## Snapshot — 2026-05-26 (post wave 6b)
 
-**23 / 87 items at ✅, 5 at ⚠️.** Wave 6 landed B16 (multi-run rich text via `IDocumentData`) and C2 (paragraph alignment via `IParagraphStyle.horizontalAlign`). The TEXT element's `richText.rich` field now carries a full doc body (dataStream + per-run textRuns + per-paragraph paragraphs) so a paragraph with a bold word in the middle, or one centered while another is left-aligned, finally survives a round-trip. Bullets (C6 / C7) + line spacing + indent (C3-C5) deferred to wave 6b — same plumbing, different paragraph-style fields. Multi-line `dataStream` ends with the canonical `\r…\r\n`.
+**27 / 87 items at ✅, 5 at ⚠️.** Wave 6b extends the rich-doc plumbing to paragraph-level structure: bullets (C6 `<a:buChar>` / C7 `<a:buAutoNum>`), nesting levels (C8 `<a:pPr lvl>`), indent (C3 `marL` / `indent`), and line spacing (C4 `<a:lnSpc>`). The remaining text-layout misses are mostly small polish — `<a:spcBef>` / `<a:spcAft>` (C5 paragraph spacing) and bodyPr insets / anchor / autofit (C10-C13).
 
 ## A. Slide-level
 
@@ -58,12 +58,12 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 |------|------|--------|--------|-----------|-------|
 | C1 | Multi-paragraph (`<a:p>` repeats) | ✅ | High | — | Joined with `\n`. |
 | C2 | Paragraph alignment (`<a:pPr algn=l\|ctr\|r\|just\|dist>`) | ✅ | High | Low | Wave 6 — `parseParagraphAlign` → `HorizontalAlign` enum; lands on `paragraphStyle.horizontalAlign` inside `richText.rich`. All five OOXML values (l / ctr / r / just / dist) mapped. |
-| C3 | Paragraph indentation (`<a:pPr indent / marL>`) | ❌ | Med | Low | — |
-| C4 | Line spacing (`<a:lnSpc>`) | ❌ | Med | Low | — |
+| C3 | Paragraph indentation (`<a:pPr indent / marL>`) | ✅ | Med | Low | Wave 6b — `marL` → `indentStart`, `indent` → `indentFirstLine`, EMU → px. |
+| C4 | Line spacing (`<a:lnSpc>`) | ✅ | Med | Low | Wave 6b — `<a:spcPct>` → multiplier (val/100000), `<a:spcPts>` → absolute pt (val/100). |
 | C5 | Space before / after paragraph (`<a:spcBef>` `<a:spcAft>`) | ❌ | Med | Low | — |
-| C6 | Bullets — char (`<a:buChar>`) | ❌ | High | Med | Many decks use bulleted content. |
-| C7 | Bullets — auto-numbered (`<a:buAutoNum>`) | ❌ | Med | Med | — |
-| C8 | Bullet indent levels (`<a:pPr lvl>`) | ❌ | Med | Med | — |
+| C6 | Bullets — char (`<a:buChar>`) | ✅ | High | Med | Wave 6b — `<a:buChar>` → `IBullet { listType: BULLET_LIST, listId: <elementId>-bul, nestingLevel }`. The actual glyph from `@char` isn't read — Univer's renderer uses its own preset glyphs per level. |
+| C7 | Bullets — auto-numbered (`<a:buAutoNum>`) | ✅ | Med | Med | Wave 6b — `<a:buAutoNum>` → `IBullet { listType: ORDER_LIST, listId: <elementId>-ord, nestingLevel }`. `@type` (arabicPeriod / romanUcPeriod / …) not yet read; restarts per text frame. |
+| C8 | Bullet indent levels (`<a:pPr lvl>`) | ✅ | Med | Med | Wave 6b — `@lvl` clamped to 0..8, flows into `IBullet.nestingLevel`. |
 | C9 | RTL paragraphs (`<a:pPr rtl="1">`) | ❌ | Low | Low | — |
 | C10 | Text frame insets (`<a:bodyPr ins{L,T,R,B}>`) | ❌ | Low | Low | — |
 | C11 | Text frame vertical anchor (`<a:bodyPr anchor>`) | ❌ | Med | Low | — |

@@ -2,8 +2,8 @@ import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
 import type { IPageElement, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
-import type { IDocumentData, IParagraph, ITextRun, IParagraphStyle } from '@univerjs/core';
-import { HorizontalAlign } from '@univerjs/core';
+import type { IBullet, IDocumentData, IParagraph, ITextRun, IParagraphStyle } from '@univerjs/core';
+import { HorizontalAlign, PresetListType } from '@univerjs/core';
 
 // pptx import — JSZip + fast-xml-parser → ISlideData.
 //
@@ -388,6 +388,103 @@ function parseParagraphAlign(pPr: unknown): HorizontalAlign | null {
   }
 }
 
+// Wave 6b — bullet info from `<a:pPr>`. PowerPoint expresses bullet
+// behaviour with one of three sibling children of `<a:pPr>`:
+//   <a:buChar char="•"/>          → unordered bullet w/ custom char
+//   <a:buAutoNum type="arabicPeriod"/> → ordered list, 1. 2. 3. …
+//   <a:buNone/>                   → explicitly NO bullet (override)
+//
+// Returns null when there's no explicit bullet directive on this
+// paragraph (the bullet inherits from layout/master defaults — same
+// list-style cascade as run properties; full inheritance is layered
+// in via I4 today, just for text-style not bullets — bullet
+// inheritance is a wave-6c follow-up).
+//
+// Univer's IBullet asks for a listType (PresetListType), a listId
+// (used to share numbering across paragraphs), nestingLevel, and a
+// textStyle for the bullet glyph. We synth a listId per element so
+// numbering restarts at the start of every text frame — matches
+// PowerPoint's per-frame numbering scope.
+function parseBullet(pPr: unknown, listIdSeed: string, level: number): IBullet | null {
+  if (!pPr || typeof pPr !== 'object') return null;
+  const node = pPr as XmlNode;
+  if (findChild(node, 'a:buNone') !== undefined) {
+    // Explicit "no bullet" — caller treats null as "no override", so
+    // we distinguish via a sentinel `none` flag. Today bullet
+    // inheritance isn't implemented anyway, so null is functionally
+    // equivalent for now.
+    return null;
+  }
+  const buChar = findChild(node, 'a:buChar') as XmlNode | undefined;
+  if (buChar) {
+    // For unordered lists Univer's preset family `BULLET_LIST_n`
+    // matches the visual treatment at each nesting level; the actual
+    // glyph isn't read from `@char` today (Univer's bullet renderer
+    // uses its own glyph set). Recording the listType is what makes
+    // the indent + glyph appear.
+    return { listType: PresetListType.BULLET_LIST, listId: `${listIdSeed}-bul`, nestingLevel: level };
+  }
+  const buAutoNum = findChild(node, 'a:buAutoNum') as XmlNode | undefined;
+  if (buAutoNum) {
+    return { listType: PresetListType.ORDER_LIST, listId: `${listIdSeed}-ord`, nestingLevel: level };
+  }
+  return null;
+}
+
+// Parse `<a:lnSpc>` → line spacing multiplier OR absolute pt value.
+// PowerPoint stores it as either:
+//   <a:lnSpc><a:spcPct val="100000"/></a:lnSpc>  → percent * 1000 (100% = 1.0)
+//   <a:lnSpc><a:spcPts val="2400"/></a:lnSpc>    → 100ths-of-a-point (24pt)
+// Univer's `lineSpacing` is a unitless number — values < 10 read as
+// multipliers, >= 10 as point values. We follow that convention.
+function parseLineSpacing(pPr: unknown): number | null {
+  const lnSpc = findChild(pPr, 'a:lnSpc');
+  if (!lnSpc) return null;
+  const pct = findChild(lnSpc, 'a:spcPct') as XmlNode | undefined;
+  const pctVal = pct?.['@val'];
+  if (pctVal !== undefined) {
+    const n = parseInt(String(pctVal), 10);
+    if (Number.isFinite(n)) return n / 100_000; // 100000 → 1.0
+  }
+  const pts = findChild(lnSpc, 'a:spcPts') as XmlNode | undefined;
+  const ptsVal = pts?.['@val'];
+  if (ptsVal !== undefined) {
+    const n = parseInt(String(ptsVal), 10);
+    if (Number.isFinite(n)) return n / 100; // 100ths-of-a-pt → pt
+  }
+  return null;
+}
+
+// Parse `<a:pPr>` indent attributes. OOXML stores them in EMU (or
+// hundredths-of-a-point in some legacy schemas — sticking to EMU
+// here). marL = left margin of the paragraph; indent = first-line
+// indent relative to marL. Univer wants px / pt — convert via 9525
+// EMU/px @ 96 DPI.
+function parseIndent(pPr: unknown): { indentStart?: number; indentFirstLine?: number } {
+  const node = pPr as XmlNode | undefined;
+  const out: { indentStart?: number; indentFirstLine?: number } = {};
+  const marL = node?.['@marL'];
+  if (marL !== undefined) {
+    const n = parseInt(String(marL), 10);
+    if (Number.isFinite(n) && n !== 0) out.indentStart = n / EMU_PER_PIXEL;
+  }
+  const indent = node?.['@indent'];
+  if (indent !== undefined) {
+    const n = parseInt(String(indent), 10);
+    if (Number.isFinite(n) && n !== 0) out.indentFirstLine = n / EMU_PER_PIXEL;
+  }
+  return out;
+}
+
+// Bullet nesting level from `<a:pPr lvl="0..8">`. Defaults to 0.
+function parseLevel(pPr: unknown): number {
+  const node = pPr as XmlNode | undefined;
+  const lvl = node?.['@lvl'];
+  if (lvl === undefined) return 0;
+  const n = parseInt(String(lvl), 10);
+  return Number.isFinite(n) ? Math.max(0, Math.min(8, n)) : 0;
+}
+
 // Wave 6 — extract a full `IDocumentData` body from a `<p:txBody>`.
 // Each `<a:r>` becomes one `ITextRun` carrying its own style; each
 // `<a:p>` becomes one `IParagraph` with its `<a:pPr>` alignment. The
@@ -453,17 +550,24 @@ function extractRichDoc(
       }
     }
 
-    // Paragraph-level: alignment (C2). Univer's IParagraph carries
-    // paragraphStyle.horizontalAlign for the body-level alignment.
+    // Paragraph-level (C2 + C3 + C4 + C6 + C7 + C8).
     const pPr = findChild(p, 'a:pPr');
     const align = parseParagraphAlign(pPr);
-    const paragraphStyle: IParagraphStyle | undefined = align !== null
-      ? { horizontalAlign: align }
-      : undefined;
+    const lineSpacing = parseLineSpacing(pPr);
+    const { indentStart, indentFirstLine } = parseIndent(pPr);
+    const level = parseLevel(pPr);
+    const bullet = parseBullet(pPr, elementId, level);
 
-    // \r terminates this paragraph; record its startIndex (position of
-    // the \r itself).
-    paragraphs.push(paragraphStyle ? { startIndex: cursor, paragraphStyle } : { startIndex: cursor });
+    const paragraphStyle: IParagraphStyle = {};
+    if (align !== null) paragraphStyle.horizontalAlign = align;
+    if (lineSpacing !== null) paragraphStyle.lineSpacing = lineSpacing;
+    if (indentStart !== undefined) paragraphStyle.indentStart = { v: indentStart };
+    if (indentFirstLine !== undefined) paragraphStyle.indentFirstLine = { v: indentFirstLine };
+
+    const paragraph: IParagraph = { startIndex: cursor };
+    if (Object.keys(paragraphStyle).length > 0) paragraph.paragraphStyle = paragraphStyle;
+    if (bullet) paragraph.bullet = bullet;
+    paragraphs.push(paragraph);
     dataStream.push(...paraText, '\r');
     cursor += 1;
     lines.push(paraText.join(''));
