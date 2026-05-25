@@ -10,9 +10,9 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 2)
+## Snapshot — 2026-05-26 (post wave 4)
 
-**12 / 87 items at ✅, 7 at ⚠️.** Wave 2 landed A2 (slide bg fill, read side), B3 (font family from `<a:latin>`), and F1+F2 (group shape recursion with composed `<a:chOff>`/`<a:chExt>` transforms). The biggest visible miss now is **I3** (placeholder geometry inherited from slide layouts) — titles still come back at 0,0 size when the deck inherits from a layout instead of declaring `<a:xfrm>` directly.
+**13 / 87 items at ✅, 7 at ⚠️.** Wave 4 landed I3 (placeholder geometry inherits from slideLayout, then slideMaster). This was the single biggest visible miss — real-world decks lean heavily on the layout to position title/content placeholders, and skipping inheritance was rendering imported decks as collections of 0×0 elements stacked at origin. **I4** (placeholder default text style — `<a:lstStyle><a:lvl1pPr><a:defRPr>`) is next: title font / size / colour still revert to defaults until that lands.
 
 ## A. Slide-level
 
@@ -27,8 +27,8 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | A7 | Slide transitions (`<p:transition>`) | ❌ | Low | Med | Skip for v0; deferred behind playback. |
 | A8 | Slide animations (`<p:timing>`) | ❌ | Med | High | Defer. |
 | A9 | Speaker notes (`<p:notesSlide>`) | ⚠️ | Med | Med | Stored in `page.description` round-trip via resources passthrough — not an actual notesSlide. |
-| A10 | Slide layout reference (`r:id` in slide rels) | ❌ | High | Med | Needed for I3 / I4. |
-| A11 | Slide master reference | ❌ | High | Med | Needed for I3 / I4. |
+| A10 | Slide layout reference (`r:id` in slide rels) | ✅ | High | Med | Wave 4 — `findRelTargetByType(rels, '/slideLayout')`. |
+| A11 | Slide master reference | ✅ | High | Med | Wave 4 — layout's rels carry the master pointer. |
 
 ## B. Text — runs
 
@@ -141,7 +141,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 |------|------|--------|--------|-----------|-------|
 | I1 | Slide layout XML passthrough (resources slot) | ❌ | Med | Low | Carry XML across round-trip even if unused. |
 | I2 | Slide master XML passthrough | ❌ | Med | Low | — |
-| I3 | **Placeholder geometry inheritance** (xfrm from layout / master) | ❌ | **Critical** | Med | Single biggest visual miss — titles render at 0,0 size when the slide xml leaves `<a:xfrm>` off the placeholder. |
+| I3 | **Placeholder geometry inheritance** (xfrm from layout / master) | ✅ | **Critical** | Med | Wave 4 — `buildPlaceholderMap` walks slide → layout → master and assembles a `(type\|idx)` → xfrm map. Layout overrides master; matches OOXML's inheritance order. |
 | I4 | Placeholder default text style inheritance | ❌ | High | Med | Title font / size from layout. |
 | I5 | Date / page-number / footer placeholders | ❌ | Med | Med | — |
 | I6 | Layout background fill (when slide inherits) | ❌ | High | Med | — |

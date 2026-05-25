@@ -62,6 +62,41 @@ function extractRelMap(relsXml: string): Map<string, string> {
   return map;
 }
 
+// Find the first Relationship of a given Type (suffix-matched — OOXML
+// uses long URI prefixes that vary between document and presentationML
+// flavors, but the last path segment is stable). Returns Target string.
+function findRelTargetByType(relsXml: string, typeSuffix: string): string | null {
+  const parsed = parser.parse(relsXml) as XmlNode;
+  const rels = findChild(parsed, 'Relationships');
+  const rel = toArray(findChild(rels, 'Relationship'));
+  for (const r of rel) {
+    if (typeof r !== 'object' || !r) continue;
+    const type = (r as XmlNode)['@Type'];
+    const target = (r as XmlNode)['@Target'];
+    if (typeof type === 'string' && typeof target === 'string' && type.endsWith(typeSuffix)) {
+      return target;
+    }
+  }
+  return null;
+}
+
+// Resolve a rels Target (which may be '../slideLayouts/slideLayout1.xml'
+// or 'slides/slide1.xml' depending on the rels file's location) into a
+// zip-rooted path. `baseDir` is the directory of the file that owns
+// the rels (e.g. 'ppt/slides/' for slideN.xml.rels).
+function resolveRelTarget(target: string, baseDir: string): string {
+  if (target.startsWith('/')) return target.slice(1);
+  // Normalise '../' walks.
+  const parts = (baseDir + target).split('/');
+  const out: string[] = [];
+  for (const p of parts) {
+    if (p === '..') out.pop();
+    else if (p === '.' || p === '') continue;
+    else out.push(p);
+  }
+  return out.join('/');
+}
+
 // Get a string out of a <a:t> node which can be either a bare string or
 // an object whose '#text' field holds the actual content (fast-xml-parser
 // shape varies with run nesting).
@@ -215,6 +250,123 @@ function parseShapeAppearance(spPr: unknown): {
   return { shapeType, fillRgb, outlineRgb, outlineWeightPx };
 }
 
+// Placeholder geometry inherited from the slide layout / master (I3).
+//
+// A pptx slide may carry a `<p:sp>` whose `<p:nvSpPr><p:nvPr><p:ph
+// type=… idx=…/>` marks it as a placeholder. PowerPoint's authoring
+// convention is to omit `<a:xfrm>` from such placeholders and let the
+// slideLayout (and ultimately the slideMaster) provide position+size.
+// Without inheritance, those placeholders render at 0,0 / 0,0 — which
+// is precisely why imported real-world decks looked like "only text,
+// no properties, randomly placed at origin".
+interface PlaceholderRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+// Compose a stable lookup key from `<p:ph type idx>`. Layout/master and
+// slide use the same convention so the strings line up by construction.
+//
+// Edge cases:
+// • Title placeholders use `type="title"` or `type="ctrTitle"` — idx
+//   is usually absent.
+// • Body content slots use `idx="N"` (1, 2, …) — type is often absent.
+// • Header/footer date/slide-number placeholders use specific types.
+//
+// We key on `${type}|${idx}` with missing values as empty strings, so
+// the same placeholder in slide / layout / master always resolves to
+// the same string.
+function placeholderKey(ph: XmlNode | undefined): string | null {
+  if (!ph) return null;
+  const type = ph['@type'];
+  const idx = ph['@idx'];
+  if (type === undefined && idx === undefined) {
+    // Bare `<p:ph/>` — treat as idx="0" by OOXML convention.
+    return '|0';
+  }
+  return `${type ?? ''}|${idx ?? ''}`;
+}
+
+function getPlaceholderKey(sp: unknown): string | null {
+  const nvSpPr = findChild(sp, 'p:nvSpPr');
+  const nvPr = findChild(nvSpPr, 'p:nvPr');
+  const ph = findChild(nvPr, 'p:ph') as XmlNode | undefined;
+  return placeholderKey(ph);
+}
+
+// Walk a <p:sldLayout> or <p:sldMaster> XML and collect every
+// placeholder's xfrm into a key → rect map. Used as the inheritance
+// source for slides that leave xfrm off their placeholders.
+function extractPlaceholderRects(layoutOrMasterXml: string): Map<string, PlaceholderRect> {
+  const parsed = parser.parse(layoutOrMasterXml) as XmlNode;
+  const root =
+    (findChild(parsed, 'p:sldLayout') as XmlNode | undefined) ??
+    (findChild(parsed, 'p:sldMaster') as XmlNode | undefined);
+  const map = new Map<string, PlaceholderRect>();
+  if (!root) return map;
+  const spTree = findChild(findChild(root, 'p:cSld'), 'p:spTree');
+  for (const sp of toArray(findChild(spTree, 'p:sp'))) {
+    if (!sp || typeof sp !== 'object') continue;
+    const key = getPlaceholderKey(sp);
+    if (!key) continue;
+    const spPr = findChild(sp, 'p:spPr');
+    const xfrm = findChild(spPr, 'a:xfrm');
+    if (!xfrm) continue;
+    const off = findChild(xfrm, 'a:off') as XmlNode | undefined;
+    const ext = findChild(xfrm, 'a:ext') as XmlNode | undefined;
+    if (!off || !ext) continue;
+    map.set(key, {
+      left: emu2px(off['@x'] as string | undefined),
+      top: emu2px(off['@y'] as string | undefined),
+      width: emu2px(ext['@cx'] as string | undefined),
+      height: emu2px(ext['@cy'] as string | undefined),
+    });
+  }
+  return map;
+}
+
+// Resolve a slide's layout (then master) and merge their placeholder
+// rects. Layout overrides master where both define the same key —
+// that matches PowerPoint's inheritance order.
+async function buildPlaceholderMap(
+  slideRelsXml: string | null,
+  zip: JSZip,
+): Promise<Map<string, PlaceholderRect>> {
+  if (!slideRelsXml) return new Map();
+  // Slide's rels live at ppt/slides/_rels/slideN.xml.rels — base dir
+  // for resolving Targets is ppt/slides/.
+  const layoutTarget = findRelTargetByType(slideRelsXml, '/slideLayout');
+  if (!layoutTarget) return new Map();
+  const layoutPath = resolveRelTarget(layoutTarget, 'ppt/slides/');
+  const layoutXml = await zip.file(layoutPath)?.async('string');
+  if (!layoutXml) return new Map();
+
+  // Layout's own rels for finding the master (and image refs the
+  // layout itself might carry — out of scope today).
+  const layoutDir = layoutPath.slice(0, layoutPath.lastIndexOf('/') + 1);
+  const layoutName = layoutPath.split('/').pop() ?? '';
+  const layoutRelsPath = `${layoutDir}_rels/${layoutName}.rels`;
+  const layoutRelsXml = await zip.file(layoutRelsPath)?.async('string');
+
+  let masterMap = new Map<string, PlaceholderRect>();
+  if (layoutRelsXml) {
+    const masterTarget = findRelTargetByType(layoutRelsXml, '/slideMaster');
+    if (masterTarget) {
+      const masterPath = resolveRelTarget(masterTarget, layoutDir);
+      const masterXml = await zip.file(masterPath)?.async('string');
+      if (masterXml) masterMap = extractPlaceholderRects(masterXml);
+    }
+  }
+
+  const layoutMap = extractPlaceholderRects(layoutXml);
+  // Master first, then layout overrides — Map's later .set() wins.
+  const merged = new Map(masterMap);
+  for (const [k, v] of layoutMap) merged.set(k, v);
+  return merged;
+}
+
 interface ImageRegistry {
   /** rels for the active slide — rId → image part path inside the zip */
   imageRelMap: Map<string, string>;
@@ -222,6 +374,8 @@ interface ImageRegistry {
   cache: Map<string, string>;
   /** The zip we're reading bytes out of */
   zip: JSZip;
+  /** Placeholder rects from this slide's layout + master (I3) */
+  placeholderRects: Map<string, PlaceholderRect>;
 }
 
 const MIME_FROM_EXT: Record<string, string> = {
@@ -340,10 +494,26 @@ async function processSpTree(
     const xfrm = findChild(spPr, 'a:xfrm');
     const off = findChild(xfrm, 'a:off') as XmlNode | undefined;
     const ext = findChild(xfrm, 'a:ext') as XmlNode | undefined;
-    const rawLeft = emu2px(off?.['@x'] as string | undefined);
-    const rawTop = emu2px(off?.['@y'] as string | undefined);
-    const rawW = emu2px(ext?.['@cx'] as string | undefined);
-    const rawH = emu2px(ext?.['@cy'] as string | undefined);
+    let rawLeft = emu2px(off?.['@x'] as string | undefined);
+    let rawTop = emu2px(off?.['@y'] as string | undefined);
+    let rawW = emu2px(ext?.['@cx'] as string | undefined);
+    let rawH = emu2px(ext?.['@cy'] as string | undefined);
+
+    // I3 — inherit geometry from layout / master when the slide leaves
+    // <a:xfrm> off a placeholder. Without this, title placeholders end
+    // up at (0, 0) with (0, 0) size — historically the dominant cause
+    // of "imported decks look empty".
+    if (!xfrm) {
+      const key = getPlaceholderKey(sp);
+      const inherited = key ? reg.placeholderRects.get(key) : null;
+      if (inherited) {
+        rawLeft = inherited.left;
+        rawTop = inherited.top;
+        rawW = inherited.width;
+        rawH = inherited.height;
+      }
+    }
+
     const { x: left, y: top } = applyXfrm(groupXfrm, rawLeft, rawTop);
     const width = rawW * groupXfrm.scaleX;
     const height = rawH * groupXfrm.scaleY;
@@ -548,10 +718,11 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     // slidePath's stem with `_rels/` and `.rels` suffix.
     const slideName = slidePath.split('/').pop() ?? '';
     const slideRelsPath = `ppt/slides/_rels/${slideName}.rels`;
-    const slideRelsXml = await zip.file(slideRelsPath)?.async('string');
+    const slideRelsXml = (await zip.file(slideRelsPath)?.async('string')) ?? null;
     const imageRelMap = slideRelsXml ? extractRelMap(slideRelsXml) : new Map<string, string>();
+    const placeholderRects = await buildPlaceholderMap(slideRelsXml, zip);
 
-    const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip };
+    const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip, placeholderRects };
     const pageOrdinal = i + 1;
     const pageId = `page-${pageOrdinal}`;
     const elements = await extractElementsFromSlideXml(slideXml, reg, pageOrdinal);
