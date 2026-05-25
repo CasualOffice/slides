@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { IUniverInstanceService, LocaleType, LogLevel, Univer, UniverInstanceType } from '@univerjs/core';
-import type { SlideDataModel } from '@univerjs/slides';
+import type { ISlideData, SlideDataModel } from '@univerjs/slides';
 import { defaultTheme } from '@univerjs/themes';
 import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
 import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
@@ -13,12 +13,34 @@ import { UniverSlidesUIPlugin } from '@univerjs/slides-ui';
 
 import { DEFAULT_SLIDE_DATA } from './default-slide';
 
-// Mount Univer Slides into a DOM container ref. Native UI chrome is hidden so
-// we can render our own Office-style shell on top — same approach sheet uses
-// (../sheet/apps/web/src/UniverSheet.tsx).
-export function UniverSlide() {
+// Imperative handle exposed to the parent (App.tsx) so it can hot-swap the
+// active deck (e.g. on `Open .pptx`) without unmounting the whole Univer
+// instance — disposing + recreating the unit keeps the canvas warm.
+export interface UniverSlideHandle {
+  swapDeck(snapshot: ISlideData): void;
+}
+
+export const UniverSlide = forwardRef<UniverSlideHandle>(function UniverSlide(_, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const disposedRef = useRef(false);
+  const univerRef = useRef<Univer | null>(null);
+  const activeUnitIdRef = useRef<string | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    swapDeck(snapshot: ISlideData) {
+      const univer = univerRef.current;
+      if (!univer) return;
+      const instances = univer.__getInjector().get(IUniverInstanceService);
+      const oldUnitId = activeUnitIdRef.current;
+      if (oldUnitId) {
+        instances.disposeUnit(oldUnitId);
+      }
+      const model = univer.createUnit<ISlideData, SlideDataModel>(
+        UniverInstanceType.UNIVER_SLIDE,
+        snapshot,
+      );
+      activeUnitIdRef.current = model.getUnitId();
+    },
+  }), []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -28,6 +50,7 @@ export function UniverSlide() {
       locale: LocaleType.EN_US,
       logLevel: LogLevel.WARN,
     });
+    univerRef.current = univer;
 
     // Render engine first — every other plugin assumes it exists.
     univer.registerPlugin(UniverRenderEnginePlugin);
@@ -57,7 +80,11 @@ export function UniverSlide() {
     univer.registerPlugin(UniverSlidesPlugin);
     univer.registerPlugin(UniverSlidesUIPlugin);
 
-    univer.createUnit(UniverInstanceType.UNIVER_SLIDE, DEFAULT_SLIDE_DATA);
+    const model = univer.createUnit<ISlideData, SlideDataModel>(
+      UniverInstanceType.UNIVER_SLIDE,
+      DEFAULT_SLIDE_DATA,
+    );
+    activeUnitIdRef.current = model.getUnitId();
 
     if (typeof window !== 'undefined') {
       const w = window as unknown as { univer: Univer; __slideRevProbe?: () => number };
@@ -67,13 +94,13 @@ export function UniverSlide() {
       // on every incrementRev(). Open devtools and call window.__slideRevProbe().
       w.__slideRevProbe = () => {
         const instances = univer.__getInjector().get(IUniverInstanceService);
-        const model = instances.getCurrentUnitOfType<SlideDataModel>(
+        const m = instances.getCurrentUnitOfType<SlideDataModel>(
           UniverInstanceType.UNIVER_SLIDE,
         );
-        if (!model) return -1;
-        const before = model.getRev();
-        model.incrementRev();
-        const after = model.getRev();
+        if (!m) return -1;
+        const before = m.getRev();
+        m.incrementRev();
+        const after = m.getRev();
         // eslint-disable-next-line no-console
         console.info(`[slide-rev] before=${before} after=${after} (expected 1 → 2)`);
         return after;
@@ -81,10 +108,11 @@ export function UniverSlide() {
     }
 
     return () => {
-      disposedRef.current = true;
       univer.dispose();
+      univerRef.current = null;
+      activeUnitIdRef.current = null;
     };
   }, []);
 
   return <div ref={containerRef} className="univer-mount" />;
-}
+});

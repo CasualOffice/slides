@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { UniverSlide } from './UniverSlide';
+import { UniverSlide, type UniverSlideHandle } from './UniverSlide';
 import { getPptxClient } from './pptx/client';
 import { DEFAULT_SLIDE_DATA } from './default-slide';
 import type { SlideDataModel } from '@univerjs/slides';
@@ -36,6 +36,7 @@ export function App() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const slideRef = useRef<UniverSlideHandle>(null);
 
   async function handleSavePptx() {
     setError(null);
@@ -64,12 +65,14 @@ export function App() {
       const buffer = await file.arrayBuffer();
       const snapshot = await getPptxClient().import(buffer, file.name);
       const pageCount = snapshot.body?.pageOrder.length ?? 0;
-      // The reload swaps the Univer unit by remounting. Simplest for the
-      // spike — the proper path is FUniver.createWorkbook-equivalent.
+      // Hot-swap the active deck — disposeUnit + createUnit on the live
+      // Univer instance keeps the canvas warm. Renders immediately.
+      slideRef.current?.swapDeck(snapshot);
+      // Mirror to window for devtools poking.
       const w = window as unknown as { __pptxImportedSnapshot?: unknown };
       w.__pptxImportedSnapshot = snapshot;
       setStatus(
-        `Imported ${file.name}: ${pageCount} slides · ${snapshot.pageSize?.width}×${snapshot.pageSize?.height}px · stashed on window.__pptxImportedSnapshot`,
+        `Loaded ${file.name}: ${pageCount} slides · ${snapshot.pageSize?.width}×${snapshot.pageSize?.height}px`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -105,7 +108,7 @@ export function App() {
         {status && <span className="spike-status" title={status}>{status}</span>}
         {error && <span className="spike-error" title={error}>⚠ {error}</span>}
       </div>
-      <UniverSlide />
+      <UniverSlide ref={slideRef} />
     </>
   );
 }
