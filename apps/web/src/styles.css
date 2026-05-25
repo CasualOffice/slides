@@ -48,7 +48,7 @@ html, body, #root {
 
 #root {
   display: grid;
-  grid-template-rows: var(--cs-titlebar-h) var(--cs-toolbar-h) 1fr var(--cs-statusbar-h);
+  grid-template-rows: var(--cs-titlebar-h) var(--cs-toolbar-h) 1fr auto var(--cs-statusbar-h);
   min-height: 0;
 }
 
@@ -374,6 +374,73 @@ button:disabled { cursor: not-allowed; }
   min-height: 0;
   position: relative;
   background: var(--cs-stage);
+}
+
+/* ============================================================= Notes panel */
+
+.cs-notes {
+  display: flex;
+  flex-direction: column;
+  height: 140px;
+  background: var(--cs-surface);
+  border-top: 1px solid var(--cs-border);
+  min-height: 0;
+}
+
+.cs-notes__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--cs-border-2);
+  background: var(--cs-surface-2);
+  font-size: 11px;
+  color: var(--cs-text-mute);
+  flex-shrink: 0;
+}
+
+.cs-notes__title {
+  font-weight: 600;
+  color: var(--cs-text);
+  font-size: 12px;
+}
+
+.cs-notes__hint {
+  flex: 1;
+  font-size: 11px;
+  color: var(--cs-text-dim);
+  margin-left: 4px;
+}
+
+.cs-notes__close {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cs-radius);
+  color: var(--cs-text-mute);
+}
+.cs-notes__close:hover { background: var(--cs-hover); color: var(--cs-text); }
+
+.cs-notes__textarea {
+  flex: 1 1 auto;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--cs-text);
+  background: var(--cs-surface);
+  border: 0;
+  outline: 0;
+  resize: none;
+  font-family: inherit;
+}
+
+.cs-notes__textarea::placeholder {
+  color: var(--cs-text-dim);
+  font-style: italic;
 }
 
 /* ============================================================= StatusBar */

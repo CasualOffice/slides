@@ -8,9 +8,11 @@ import { Icon } from './icons';
 export interface StatusBarProps {
   slideCount: number;
   activeSlideIndex?: number;
+  notesVisible?: boolean;
+  onToggleNotes?: () => void;
 }
 
-export function StatusBar({ slideCount, activeSlideIndex = 0 }: StatusBarProps) {
+export function StatusBar({ slideCount, activeSlideIndex = 0, notesVisible, onToggleNotes }: StatusBarProps) {
   const [zoom, setZoom] = useState(100);
 
   return (
@@ -29,7 +31,12 @@ export function StatusBar({ slideCount, activeSlideIndex = 0 }: StatusBarProps) 
         <button type="button" className="cs-statusbar__view-btn" disabled title="Slide sorter — coming soon">
           <Icon name="view_module" size={14} />
         </button>
-        <button type="button" className="cs-statusbar__view-btn" disabled title="Notes page — coming soon">
+        <button
+          type="button"
+          className={`cs-statusbar__view-btn ${notesVisible ? 'is-active' : ''}`}
+          title={notesVisible ? 'Hide speaker notes' : 'Show speaker notes'}
+          onClick={onToggleNotes}
+        >
           <Icon name="sticky_note_2" size={14} />
         </button>
         <span className="cs-statusbar__sep" aria-hidden="true" />

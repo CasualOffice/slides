@@ -10,6 +10,7 @@ import { TitleBar } from './shell/TitleBar';
 import { Toolbar } from './shell/Toolbar';
 import { StatusBar } from './shell/StatusBar';
 import { SlideShow } from './shell/SlideShow';
+import { NotesPanel } from './shell/NotesPanel';
 import { dispatchSlideCommand } from './univer/commands';
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -49,12 +50,17 @@ export function App() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [slideshowOpen, setSlideshowOpen] = useState(false);
+  const [notesVisible, setNotesVisible] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Expose to the Toolbar (which lives outside App's prop tree).
   useEffect(() => {
     window.__casualSlides_openSlideshow = () => setSlideshowOpen(true);
-    return () => { delete window.__casualSlides_openSlideshow; };
+    window.__casualSlides_toggleNotes = () => setNotesVisible((v) => !v);
+    return () => {
+      delete window.__casualSlides_openSlideshow;
+      delete window.__casualSlides_toggleNotes;
+    };
   }, []);
 
   const fileName = useMemo(() => deckTitle(snapshot), [snapshot]);
@@ -181,7 +187,12 @@ export function App() {
       <div className="cs-workspace">
         <UniverSlide key={snapshot.id} snapshot={snapshot} />
       </div>
-      <StatusBar slideCount={slideCount} />
+      <NotesPanel visible={notesVisible} onToggle={() => setNotesVisible((v) => !v)} />
+      <StatusBar
+        slideCount={slideCount}
+        notesVisible={notesVisible}
+        onToggleNotes={() => setNotesVisible((v) => !v)}
+      />
       {slideshowOpen && (
         <SlideShow snapshot={snapshot} onExit={() => setSlideshowOpen(false)} />
       )}
@@ -194,5 +205,6 @@ export function App() {
 declare global {
   interface Window {
     __casualSlides_openSlideshow?: () => void;
+    __casualSlides_toggleNotes?: () => void;
   }
 }
