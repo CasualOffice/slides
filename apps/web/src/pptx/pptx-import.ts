@@ -7,7 +7,8 @@ import { PageElementType, PageType } from '@univerjs/slides';
 //
 // Wave-1 fidelity (this file): text runs preserve font size / bold /
 // italic / underline / color; images extracted from ppt/media/ via
-// rId lookups; shape geometry is still a rect fallback.
+// rId lookups; shape geometry parsed from `<a:prstGeom prst=…>` with
+// solid-fill + outline.
 //
 // Wave-2 (deferred):
 //   • Multi-run rich text (currently we collapse all runs to the first
@@ -16,7 +17,6 @@ import { PageElementType, PageType } from '@univerjs/slides';
 //   • Theme color resolution (`<a:schemeClr val="accent1"/>` etc.)
 //   • Layout / master inheritance (placeholders that get position +
 //     font from a slideLayout instead of the slide itself)
-//   • Shape geometry (`<a:prstGeom prst=…>` → ShapeType enum)
 //   • Tables / charts / lines / groups
 //
 // Coordinate system: pptx OOXML uses EMU. 914_400 EMU = 1 inch,
@@ -149,6 +149,59 @@ function extractTextAndProps(txBody: unknown): { text: string; props: Partial<IS
   }
 
   return { text: lines.join('\n'), props: firstProps };
+}
+
+// Read a `<… val="RRGGBB"/>` srgbClr child of a parent node, returning
+// the css-style hex string or null when absent / not a srgbClr fill.
+//
+// OOXML's `<a:solidFill>` accepts several child kinds (srgbClr,
+// schemeClr, prstClr, sysClr). Only srgbClr is round-trippable through
+// `pnpm export` today — the others are deferred to theme resolution
+// (wave 2).
+function parseSrgbColor(parent: unknown): string | null {
+  const solid = findChild(parent, 'a:solidFill');
+  const srgb = findChild(solid, 'a:srgbClr') as XmlNode | undefined;
+  const val = srgb?.['@val'];
+  if (typeof val !== 'string' || !/^[0-9a-fA-F]{6}$/.test(val)) return null;
+  return `#${val.toUpperCase()}`;
+}
+
+// Pull geometry + fill + outline out of <p:spPr>. Returns enough to
+// reconstruct what PptxGenJS's addShape() emitted on export. Unknown
+// prstGeom values fall back to 'rect' so we never drop a shape; the
+// position / size / fill still survive.
+function parseShapeAppearance(spPr: unknown): {
+  shapeType: string;
+  fillRgb: string | null;
+  outlineRgb: string | null;
+  outlineWeightPx: number | null;
+} {
+  const prstGeom = findChild(spPr, 'a:prstGeom') as XmlNode | undefined;
+  const prstAttr = prstGeom?.['@prst'];
+  const shapeType = typeof prstAttr === 'string' && prstAttr.length > 0 ? prstAttr : 'rect';
+
+  const fillRgb = parseSrgbColor(spPr);
+
+  let outlineRgb: string | null = null;
+  let outlineWeightPx: number | null = null;
+  const ln = findChild(spPr, 'a:ln') as XmlNode | undefined;
+  if (ln) {
+    outlineRgb = parseSrgbColor(ln);
+    const w = ln['@w'];
+    if (typeof w === 'string' || typeof w === 'number') {
+      const emu = parseInt(String(w), 10);
+      if (Number.isFinite(emu)) {
+        // OOXML `<a:ln w>` is EMU. 9525 EMU = 1 px @ 96 DPI; PptxGenJS
+        // accepts weight in points on export, so on import we want the
+        // px-equivalent stored. The shape model's `weight` field is
+        // unitless in Univer's type, but the export side uses it as
+        // points — that's the surviving lossy bit. Accept that for now.
+        outlineWeightPx = emu / EMU_PER_PIXEL;
+      }
+    }
+  }
+
+  return { shapeType, fillRgb, outlineRgb, outlineWeightPx };
 }
 
 interface ImageRegistry {
@@ -293,6 +346,18 @@ async function extractElementsFromSlideXml(
 
     if (spPr) {
       const id = `s${pageOrdinal}-shape-${zIndex}`;
+      const { shapeType, fillRgb, outlineRgb, outlineWeightPx } = parseShapeAppearance(spPr);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const shapeProperties: any = {};
+      if (fillRgb) {
+        shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
+      }
+      if (outlineRgb || outlineWeightPx !== null) {
+        shapeProperties.outline = {
+          outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
+          weight: outlineWeightPx ?? 1,
+        };
+      }
       elements.push({
         id,
         zIndex,
@@ -304,11 +369,9 @@ async function extractElementsFromSlideXml(
         description: '',
         type: PageElementType.SHAPE,
         shape: {
-          shapeType: 'rect' as never,
+          shapeType: shapeType as never,
           text: '',
-          shapeProperties: {
-            shapeBackgroundFill: { rgb: 'rgb(255, 255, 255)' },
-          },
+          shapeProperties,
         },
       });
       zIndex += 1;

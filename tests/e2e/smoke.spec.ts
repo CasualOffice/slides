@@ -574,6 +574,83 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect((img as any).image?.imageProperties?.contentUrl).toMatch(/^data:image\//);
   });
 
+  test('pptx import preserves shape geometry + fill', async ({ page }) => {
+    // Build a deck with a non-text SHAPE (ellipse, green fill, blue
+    // outline). Export → re-import → assert prstGeom + fill survive.
+    // Pre-patch, every shape came back as a white rect.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(800);
+
+    const result = await page.evaluate(async () => {
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          export(snapshot: unknown): Promise<{ blob: Blob; fileName: string }>;
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      const client = (window as unknown as W).__casualSlides_getPptxClient();
+      const snapshot = {
+        id: 'roundtrip-shape',
+        title: 'roundtrip shape',
+        pageSize: { width: 960, height: 540 },
+        body: {
+          pageOrder: ['p1'],
+          pages: {
+            p1: {
+              id: 'p1',
+              pageType: 0,
+              zIndex: 1,
+              title: 'p1',
+              description: '',
+              pageBackgroundFill: { rgb: 'rgb(255,255,255)' },
+              pageElements: {
+                'shape-1': {
+                  id: 'shape-1',
+                  zIndex: 1,
+                  left: 120, top: 80, width: 320, height: 200,
+                  title: '', description: '',
+                  type: 0,                           // SHAPE
+                  shape: {
+                    shapeType: 'ellipse',
+                    text: '',
+                    shapeProperties: {
+                      shapeBackgroundFill: { rgb: '#00CC44' },
+                      outline: { outlineFill: { rgb: '#0044CC' }, weight: 3 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+      const { blob } = await client.export(snapshot);
+      const buf = await blob.arrayBuffer();
+      const reimported = await client.import(buf, 'roundtrip-shape.pptx');
+      return reimported;
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = result;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    expect(firstPage, 'first page exists').toBeTruthy();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shape = Object.values(firstPage.pageElements ?? {}).find((e: any) => e.type === 0);
+    expect(shape, 're-imported shape element').toBeTruthy();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const s: any = shape;
+    expect(s.shape?.shapeType, 'prstGeom value survives').toBe('ellipse');
+    const fillHex = (s.shape?.shapeProperties?.shapeBackgroundFill?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(fillHex, 'solidFill srgbClr round-trips').toBe('00CC44');
+    const outlineHex = (s.shape?.shapeProperties?.outline?.outlineFill?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(outlineHex, 'outline srgbClr round-trips').toBe('0044CC');
+  });
+
   test('File → Properties shows deck metadata', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(
