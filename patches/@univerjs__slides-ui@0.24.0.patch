@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..348ac3d30da47384da00df15b077112cb533f68b 100644
+index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..c34a31c4e304336eb364c821a880c93958d216a8 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -156,7 +156,7 @@ let SlideRenderController = class SlideRenderController extends _univerjs_core.R
@@ -20,8 +20,142 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..348ac3d30da47384da00df15b077112c
  		const page = new _univerjs_engine_render.Rect("canvas", {
  			left: 0,
  			top: 0,
+@@ -995,58 +995,94 @@ const InsertSlideShapeEllipseOperation = {
+ 	}
+ };
+ 
++//#endregion
++//#region src/commands/mutations/element.mutation.ts
++const SlideInsertElementMutation = {
++	id: "slide.mutation.insert-element",
++	type: _univerjs_core.CommandType.MUTATION,
++	handler: (accessor, params) => {
++		if (!params) return false;
++		const model = accessor.get(_univerjs_core.IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const page = model.getPage(params.pageId);
++		if (!page) return false;
++		page.pageElements[params.element.id] = params.element;
++		model.updatePage(params.pageId, page);
++		model.incrementRev();
++		return true;
++	}
++};
++const SlideDeleteElementMutation = {
++	id: "slide.mutation.delete-element",
++	type: _univerjs_core.CommandType.MUTATION,
++	handler: (accessor, params) => {
++		if (!params) return false;
++		const model = accessor.get(_univerjs_core.IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const page = model.getPage(params.pageId);
++		if (!page) return false;
++		delete page.pageElements[params.elementId];
++		model.updatePage(params.pageId, page);
++		model.incrementRev();
++		return true;
++	}
++};
+ //#endregion
+ //#region src/commands/operations/insert-text.operation.ts
+ const SlideAddTextCommand = {
+ 	id: "slide.command.add-text",
+ 	type: _univerjs_core.CommandType.COMMAND,
+-	handler: async (accessor) => {
+-		var _univerInstanceServic;
++	handler: (accessor, params) => {
++		var _focused;
+ 		const commandService = accessor.get(_univerjs_core.ICommandService);
+-		const unitId = (_univerInstanceServic = accessor.get(_univerjs_core.IUniverInstanceService).getFocusedUnit()) === null || _univerInstanceServic === void 0 ? void 0 : _univerInstanceServic.getUnitId();
+-		return await commandService.executeCommand(SlideAddTextOperation.id, { unitId });
+-	}
+-};
+-const SlideAddTextOperation = {
+-	id: "slide.operation.add-text",
+-	type: _univerjs_core.CommandType.OPERATION,
+-	handler: async (accessor, params) => {
+-		const unitId = params.unitId;
++		const undoRedoService = accessor.get(_univerjs_core.IUndoRedoService);
++		const instances = accessor.get(_univerjs_core.IUniverInstanceService);
++		const unitId = (params === null || params === void 0 ? void 0 : params.unitId)
++			|| ((_focused = instances.getFocusedUnit()) === null || _focused === void 0 ? void 0 : _focused.getUnitId());
++		if (!unitId) return false;
++		const model = instances.getUnit(unitId);
++		if (!model) return false;
++		const activePage = model.getActivePage();
++		if (!activePage) return false;
+ 		const elementId = (0, _univerjs_core.generateRandomId)(6);
+-		const defaultWidth = 220;
+-		const defaultheight = 40;
+-		const left = 230;
+-		const top = 142;
+-		const textContent = (params === null || params === void 0 ? void 0 : params.text) || "A New Text";
+-		const slideData = accessor.get(_univerjs_core.IUniverInstanceService).getUnit(unitId);
+-		if (!slideData) return false;
+-		const activePage = slideData.getActivePage();
+-		const elements = Object.values(activePage.pageElements);
+-		const elementData = {
++		const existing = Object.values(activePage.pageElements);
++		const maxZIndex = existing.length ? Math.max(...existing.map((e) => e.zIndex)) : 21;
++		const element = {
+ 			id: elementId,
+-			zIndex: ((elements === null || elements === void 0 ? void 0 : elements.length) ? Math.max(...elements.map((element) => element.zIndex)) : 21) + 1,
+-			left,
+-			top,
+-			width: defaultWidth,
+-			height: defaultheight,
++			zIndex: maxZIndex + 1,
++			left: 230,
++			top: 142,
++			width: 220,
++			height: 40,
+ 			title: "text",
+ 			description: "",
+ 			type: _univerjs_slides.PageElementType.TEXT,
+ 			richText: {
+-				text: textContent,
++				text: (params === null || params === void 0 ? void 0 : params.text) || "A New Text",
+ 				fs: 30,
+ 				cl: { rgb: "rgb(51, 51, 51)" },
+ 				bl: 1
+ 			}
+ 		};
+-		activePage.pageElements[elementId] = elementData;
+-		slideData.updatePage(activePage.id, activePage);
++		const insertParams = { unitId, pageId: activePage.id, element };
++		const ok = commandService.syncExecuteCommand(SlideInsertElementMutation.id, insertParams);
++		if (!ok) return false;
+ 		const canvasview = accessor.get(CanvasView);
+-		const sceneObject = canvasview.createObjectToPage(elementData, activePage.id, unitId);
++		const sceneObject = canvasview.createObjectToPage(element, activePage.id, unitId);
+ 		if (sceneObject) canvasview.setObjectActiveByPage(sceneObject, activePage.id, unitId);
++		undoRedoService.pushUndoRedo({
++			unitID: unitId,
++			undoMutations: [{ id: SlideDeleteElementMutation.id, params: { unitId, pageId: activePage.id, elementId } }],
++			redoMutations: [{ id: SlideInsertElementMutation.id, params: insertParams }]
++		});
+ 		return true;
+ 	}
+ };
++const SlideAddTextOperation = {
++	id: "slide.operation.add-text",
++	type: _univerjs_core.CommandType.COMMAND,
++	handler: (accessor, params) => accessor.get(_univerjs_core.ICommandService).syncExecuteCommand(SlideAddTextCommand.id, params)
++};
+ 
+ //#endregion
+ //#region src/commands/operations/set-thumb.operation.ts
+@@ -1549,6 +1585,8 @@ let SlidesUIController = class SlidesUIController extends _univerjs_core.Disposa
+ 			ToggleSlideEditSidebarOperation,
+ 			DeleteSlideElementOperation,
+ 			UpdateSlideElementOperation,
++			SlideInsertElementMutation,
++			SlideDeleteElementMutation,
+ 			SetTextEditArrowOperation
+ 		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
+ 	}
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..4de4b82c0c2ecb1e8476be69d564bb71622bdff7 100644
+index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..7ac5d85125db9666fd708dd8d66d445f76d3536a 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -155,7 +155,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
@@ -42,3 +176,137 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..4de4b82c0c2ecb1e8476be69d564bb71
  		const page = new Rect("canvas", {
  			left: 0,
  			top: 0,
+@@ -994,58 +994,94 @@ const InsertSlideShapeEllipseOperation = {
+ 	}
+ };
+ 
++//#endregion
++//#region src/commands/mutations/element.mutation.ts
++const SlideInsertElementMutation = {
++	id: "slide.mutation.insert-element",
++	type: CommandType.MUTATION,
++	handler: (accessor, params) => {
++		if (!params) return false;
++		const model = accessor.get(IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const page = model.getPage(params.pageId);
++		if (!page) return false;
++		page.pageElements[params.element.id] = params.element;
++		model.updatePage(params.pageId, page);
++		model.incrementRev();
++		return true;
++	}
++};
++const SlideDeleteElementMutation = {
++	id: "slide.mutation.delete-element",
++	type: CommandType.MUTATION,
++	handler: (accessor, params) => {
++		if (!params) return false;
++		const model = accessor.get(IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const page = model.getPage(params.pageId);
++		if (!page) return false;
++		delete page.pageElements[params.elementId];
++		model.updatePage(params.pageId, page);
++		model.incrementRev();
++		return true;
++	}
++};
+ //#endregion
+ //#region src/commands/operations/insert-text.operation.ts
+ const SlideAddTextCommand = {
+ 	id: "slide.command.add-text",
+ 	type: CommandType.COMMAND,
+-	handler: async (accessor) => {
+-		var _univerInstanceServic;
++	handler: (accessor, params) => {
++		var _focused;
+ 		const commandService = accessor.get(ICommandService);
+-		const unitId = (_univerInstanceServic = accessor.get(IUniverInstanceService).getFocusedUnit()) === null || _univerInstanceServic === void 0 ? void 0 : _univerInstanceServic.getUnitId();
+-		return await commandService.executeCommand(SlideAddTextOperation.id, { unitId });
+-	}
+-};
+-const SlideAddTextOperation = {
+-	id: "slide.operation.add-text",
+-	type: CommandType.OPERATION,
+-	handler: async (accessor, params) => {
+-		const unitId = params.unitId;
++		const undoRedoService = accessor.get(IUndoRedoService);
++		const instances = accessor.get(IUniverInstanceService);
++		const unitId = (params === null || params === void 0 ? void 0 : params.unitId)
++			|| ((_focused = instances.getFocusedUnit()) === null || _focused === void 0 ? void 0 : _focused.getUnitId());
++		if (!unitId) return false;
++		const model = instances.getUnit(unitId);
++		if (!model) return false;
++		const activePage = model.getActivePage();
++		if (!activePage) return false;
+ 		const elementId = generateRandomId(6);
+-		const defaultWidth = 220;
+-		const defaultheight = 40;
+-		const left = 230;
+-		const top = 142;
+-		const textContent = (params === null || params === void 0 ? void 0 : params.text) || "A New Text";
+-		const slideData = accessor.get(IUniverInstanceService).getUnit(unitId);
+-		if (!slideData) return false;
+-		const activePage = slideData.getActivePage();
+-		const elements = Object.values(activePage.pageElements);
+-		const elementData = {
++		const existing = Object.values(activePage.pageElements);
++		const maxZIndex = existing.length ? Math.max(...existing.map((e) => e.zIndex)) : 21;
++		const element = {
+ 			id: elementId,
+-			zIndex: ((elements === null || elements === void 0 ? void 0 : elements.length) ? Math.max(...elements.map((element) => element.zIndex)) : 21) + 1,
+-			left,
+-			top,
+-			width: defaultWidth,
+-			height: defaultheight,
++			zIndex: maxZIndex + 1,
++			left: 230,
++			top: 142,
++			width: 220,
++			height: 40,
+ 			title: "text",
+ 			description: "",
+ 			type: PageElementType.TEXT,
+ 			richText: {
+-				text: textContent,
++				text: (params === null || params === void 0 ? void 0 : params.text) || "A New Text",
+ 				fs: 30,
+ 				cl: { rgb: "rgb(51, 51, 51)" },
+ 				bl: 1
+ 			}
+ 		};
+-		activePage.pageElements[elementId] = elementData;
+-		slideData.updatePage(activePage.id, activePage);
++		const insertParams = { unitId, pageId: activePage.id, element };
++		const ok = commandService.syncExecuteCommand(SlideInsertElementMutation.id, insertParams);
++		if (!ok) return false;
+ 		const canvasview = accessor.get(CanvasView);
+-		const sceneObject = canvasview.createObjectToPage(elementData, activePage.id, unitId);
++		const sceneObject = canvasview.createObjectToPage(element, activePage.id, unitId);
+ 		if (sceneObject) canvasview.setObjectActiveByPage(sceneObject, activePage.id, unitId);
++		undoRedoService.pushUndoRedo({
++			unitID: unitId,
++			undoMutations: [{ id: SlideDeleteElementMutation.id, params: { unitId, pageId: activePage.id, elementId } }],
++			redoMutations: [{ id: SlideInsertElementMutation.id, params: insertParams }]
++		});
+ 		return true;
+ 	}
+ };
++const SlideAddTextOperation = {
++	id: "slide.operation.add-text",
++	type: CommandType.COMMAND,
++	handler: (accessor, params) => accessor.get(ICommandService).syncExecuteCommand(SlideAddTextCommand.id, params)
++};
+ 
+ //#endregion
+ //#region src/commands/operations/set-thumb.operation.ts
+@@ -1548,6 +1584,8 @@ let SlidesUIController = class SlidesUIController extends Disposable {
+ 			ToggleSlideEditSidebarOperation,
+ 			DeleteSlideElementOperation,
+ 			UpdateSlideElementOperation,
++			SlideInsertElementMutation,
++			SlideDeleteElementMutation,
+ 			SetTextEditArrowOperation
+ 		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
+ 	}

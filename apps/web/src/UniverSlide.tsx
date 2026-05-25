@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { IUniverInstanceService, LocaleType, LogLevel, Univer, UniverInstanceType } from '@univerjs/core';
+import { ICommandService, IUniverInstanceService, LocaleType, LogLevel, Univer, UniverInstanceType } from '@univerjs/core';
 import type { ISlideData, SlideDataModel } from '@univerjs/slides';
 import { defaultTheme } from '@univerjs/themes';
 import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
@@ -91,8 +91,28 @@ export const UniverSlide = forwardRef<UniverSlideHandle>(function UniverSlide(_,
     activeUnitIdRef.current = model.getUnitId();
 
     if (typeof window !== 'undefined') {
-      const w = window as unknown as { univer: Univer; __slideRevProbe?: () => number };
+      const w = window as unknown as {
+        univer: Univer;
+        __slideRevProbe?: () => number;
+        __capturedMutations?: string[];
+      };
       w.univer = univer;
+
+      // Spike-mode collab probe: capture every CommandType.MUTATION the
+      // engine fires through ICommandService.onMutationExecutedForCollab.
+      // Lets Playwright (and dev console) verify Gap 2's refactor — that
+      // slide element edits now route through MUTATION, not OPERATION.
+      // Pre-patch this array stayed empty for SlideAddTextCommand;
+      // post-patch it contains 'slide.mutation.insert-element'.
+      w.__capturedMutations = [];
+      const cs = univer.__getInjector().get(ICommandService);
+      cs.onMutationExecutedForCollab((info) => {
+        w.__capturedMutations!.push(info.id);
+      });
+      // Expose the ICommandService identifier on globalThis so the e2e
+      // suite can grab the same service without importing the symbol.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).__casualSlides__ICommandService = ICommandService;
       // Spike-C probe: confirms the Gap 1 rev-tracking patch is live at runtime.
       // Pre-patch this returned 0 forever; post-patch it starts at 1 and bumps
       // on every incrementRev(). Open devtools and call window.__slideRevProbe().

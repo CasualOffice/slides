@@ -171,6 +171,53 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(fatal, `swapDeck console errors:\n${fatal.join('\n')}`).toEqual([]);
   });
 
+  test('insert-text fires onMutationExecutedForCollab (Gap 2 V1)', async ({ page }) => {
+    // Pre-patch: SlideAddTextCommand routed through SlideAddTextOperation,
+    // declared as CommandType.OPERATION. ICommandService.onMutationExecutedForCollab
+    // fires ONLY for CommandType.MUTATION, so the collab bridge would have
+    // silently dropped every text insert. Post-patch: the command synthesizes
+    // a SlideInsertElementMutation and dispatches that, which IS broadcast
+    // eligible. UniverSlide subscribes to the hook at bootstrap and stashes
+    // every mutation id on window.__capturedMutations.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
+      null,
+      { timeout: 15_000 },
+    );
+    // Plugin lifecycle takes a beat after createUnit to land on Steady, which
+    // is when slides-ui registers its commands. Without this wait the probe
+    // races and ICommandService still throws "not registered".
+    await page.waitForTimeout(800);
+
+    const captured = await page.evaluate(async () => {
+      type W = {
+        univer: { executeCommand?: (id: string, params?: unknown) => Promise<boolean>; __getInjector(): { get(id: unknown): { executeCommand(id: string, params?: unknown): Promise<boolean> } } };
+        __capturedMutations: string[];
+      };
+      const w = window as unknown as W;
+      const before = [...w.__capturedMutations];
+
+      // Resolve the command service via the same injector path UniverSlide uses.
+      // We can't import ICommandService here, but the injector still has it
+      // — the bootstrap already pulled it. Run the command via the FUniver
+      // facade's underlying command service.
+      const inj = w.univer.__getInjector();
+      // ICommandService's symbol is the named identifier; the injector
+      // also accepts the string identifier name.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cs = inj.get((globalThis as any).__casualSlides__ICommandService);
+
+      await cs.executeCommand('slide.command.add-text', { text: 'spike-collab-probe' });
+      return { before, after: [...w.__capturedMutations] };
+    });
+
+    // The post-patch list must contain the new mutation id (and not the old
+    // operation id, which was the OPERATION-typed escape hatch).
+    expect(captured.after).toContain('slide.mutation.insert-element');
+    expect(captured.after.length).toBeGreaterThan(captured.before.length);
+  });
+
   test('rev-tracking patch is live (Gap 1)', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => typeof (window as { __slideRevProbe?: unknown }).__slideRevProbe === 'function', null, { timeout: 15_000 });

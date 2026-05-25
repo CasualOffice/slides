@@ -13,7 +13,7 @@ Fork remote: `git@github.com:schnsrw/univer-revamp.git` · branch `dev` · **v0.
 | 1 | Collab rev tracking on `SlideDataModel` | 🔴 Blocker for P2 | P0 spike, P2 land | Yes — clean upstream PR ✅ shipped on `slide/rev-tracking` |
 | 1.5 | `_createSlide` race uses `getCurrentUnitOfType()!` instead of `renderContext.unit` | 🔴 Black-screen on prod | P0 spike, P0 land | Yes — clean upstream PR ✅ shipped on `slide/render-context-unit-fix` |
 | 1.6 | `slide-editing.render-controller.ts:257` calls `.activate(...)` on stale doc renderer after `disposeUnit` | 🟡 Console noise on swap, no UX impact | P1 | Yes |
-| 2 | Element operations declared as `OPERATION` not `MUTATION` | 🔴 Blocker for P2 | P0 spike, P2 land | Yes — clean upstream PR |
+| 2 | Element operations declared as `OPERATION` not `MUTATION` | 🔴 Blocker for P2 | P0 spike, P2 land | Yes — V1 shipped (`slide.command.add-text` → `slide.mutation.insert-element`) on `slide/element-mutations`. Sibling ops (insert-shape, insert-image, update-element, delete-element, append-slide) pending on the same branch. |
 | 3 | Missing element types (table, chart, line, video) | 🟡 Limits P4 breadth | P4 | Yes — model + render |
 | 4 | Animations / transitions not modeled | 🟡 Limits P5 | P5 | Maybe — model addition is large |
 | 5 | Speaker notes UI absent (model exists) | 🟢 Polish | P4 | Yes |
