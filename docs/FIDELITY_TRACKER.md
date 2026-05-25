@@ -10,19 +10,19 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 4 + 4b)
+## Snapshot — 2026-05-26 (post wave 5)
 
-**14 / 87 items at ✅, 7 at ⚠️.** Wave 4 landed I3 (placeholder geometry inheritance) and Wave 4b landed I4 (placeholder default text style — `<a:lstStyle><a:lvl1pPr><a:defRPr>` from layout / master). Together these address the dominant "imported decks look empty / unstyled" failure mode in real-world pptx files. Theme-color resolution (J2) is the next high-impact gap — once schemed colours resolve, B11 / D8 / A5 light up at once.
+**18 / 87 items at ✅, 5 at ⚠️.** Wave 5 landed J2 (theme color scheme resolution) and lit up B11 (text scheme color) + D8 (shape scheme fill) + the schemeClr branch of A5 in one shot. With waves 4 / 4b / 5 stacked, the modern-business-deck failure mode ("title invisible, brand colour shapes plain white, layouts ignored") is fixed. Modifiers (`<a:lumMod>` / `<a:lumOff>` / `<a:tint>` / `<a:shade>`) still drop — placeholder for **wave 5b**. Next-biggest visible miss remaining: **B16** (multi-run rich text) and **C2 + C6** (alignment + bullets) — all live in **wave 6** behind `IDocumentData`.
 
 ## A. Slide-level
 
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
 | A1 | Slide dimensions (`<p:sldSz>`) | ✅ | High | Low | Round-trips via `pageSize`. |
-| A2 | Background — solid fill (`<p:bg><p:bgPr><a:solidFill><a:srgbClr>`) | ✅ | High | Low | Read in wave 2 via `extractSlideBackground`. Gradient / picture / theme-ref bg still TODO (A3-A5). |
+| A2 | Background — solid fill (`<p:bg><p:bgPr><a:solidFill><a:srgbClr\|a:schemeClr>`) | ✅ | High | Low | Wave 2 reads `<a:srgbClr>`; wave 5 added `<a:schemeClr>` via the theme map. Gradient / picture / `<p:bgRef>` index still TODO (A3 / A4 / A5-idx). |
 | A3 | Background — gradient (`<a:gradFill>`) | ❌ | High | Med | Common in business templates. |
 | A4 | Background — picture (`<a:blipFill>`) | ❌ | High | Med | Photo backgrounds. |
-| A5 | Background — theme reference (`<p:bgRef idx>`) | ❌ | High | Med | Depends on theme resolution (J2). |
+| A5 | Background — theme reference (`<p:bgRef idx>`) | ⚠️ | High | Med | `<p:bgPr><a:solidFill><a:schemeClr>` resolves (wave 5); the indexed `<p:bgRef idx>` form (refers into theme.bgFillStyleLst) still TODO. |
 | A6 | Slide hidden flag (`<p:sld show="0">`) | ❌ | Low | Low | Rare. |
 | A7 | Slide transitions (`<p:transition>`) | ❌ | Low | Med | Skip for v0; deferred behind playback. |
 | A8 | Slide animations (`<p:timing>`) | ❌ | Med | High | Defer. |
@@ -44,7 +44,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | B8 | Strikethrough (`<a:rPr strike>`) | ❌ | Low | Low | — |
 | B9 | Subscript / superscript (`<a:rPr baseline>`) | ❌ | Low | Low | — |
 | B10 | Font color — srgbClr | ✅ | High | — | First run only. |
-| B11 | Font color — schemeClr (theme) | ❌ | High | Med | Depends on J2. |
+| B11 | Font color — schemeClr (theme) | ✅ | High | Med | Wave 5 — `readColor` resolves `<a:solidFill><a:schemeClr val=…>` against the parsed `<a:clrScheme>`. lumMod / lumOff / tint / shade modifiers still drop. |
 | B12 | Font color — prstClr / sysClr | ❌ | Low | Low | — |
 | B13 | Highlight color (`<a:rPr highlight>`) | ❌ | Low | Low | — |
 | B14 | Letter spacing (`<a:rPr spc>`) | ❌ | Low | Low | — |
@@ -82,7 +82,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | D5 | Preset geometry (`<a:prstGeom prst>`) | ✅ | High | — | 100+ values; we pass the string through. |
 | D6 | Custom geometry (`<a:custGeom>`) | ❌ | Med | High | Vector paths. |
 | D7 | Solid fill — srgbClr | ✅ | High | — | — |
-| D8 | Solid fill — schemeClr (theme) | ❌ | **High** | Med | Most templates use theme accents. |
+| D8 | Solid fill — schemeClr (theme) | ✅ | High | Med | Wave 5 — `parseShapeAppearance` consults the theme map for both fill and outline. Modifiers deferred. |
 | D9 | Gradient fill (`<a:gradFill>`) | ❌ | High | Med | Common in modern templates. |
 | D10 | Pattern fill (`<a:pattFill>`) | ❌ | Low | Med | — |
 | D11 | Picture fill on shape | ❌ | Low | Med | — |
@@ -151,7 +151,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
 | J1 | Theme XML passthrough | ❌ | Med | Low | Carry across round-trip even if unused. |
-| J2 | **Color scheme resolution** (`<a:schemeClr>` → hex) | ❌ | **High** | Med | Unlocks B11, D8, A5. |
+| J2 | **Color scheme resolution** (`<a:schemeClr>` → hex) | ✅ | High | Med | Wave 5 — `resolveThemeForSlide` walks slide → layout → master → theme; `parseThemeColors` reads `<a:clrScheme>`; `resolveSchemeColor` handles tx/bg aliases. lumMod / lumOff / tint / shade not yet applied. |
 | J3 | Font scheme (major / minor typefaces) | ❌ | Med | Med | Falls back from B3 when `<a:latin>` is absent. |
 | J4 | Format scheme (default fills / lines / effects) | ❌ | Low | High | Defer. |
 

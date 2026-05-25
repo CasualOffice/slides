@@ -97,6 +97,98 @@ function resolveRelTarget(target: string, baseDir: string): string {
   return out.join('/');
 }
 
+// Theme color map (J2). PowerPoint's `<a:schemeClr val="…">` references
+// resolve against `ppt/theme/themeN.xml`'s `<a:clrScheme>`. Map keys
+// are the OOXML scheme color names plus PowerPoint's tx/bg aliases:
+//   bg1 ↔ lt1   bg2 ↔ lt2   tx1 ↔ dk1   tx2 ↔ dk2
+//   accent1..6, hlink, folHlink resolve directly.
+//
+// Modifiers (`<a:lumMod>`, `<a:lumOff>`, `<a:tint>`, `<a:shade>`) are
+// intentionally NOT applied yet — they sit on top of the base scheme
+// color to lighten/darken. Worth ~5 % more fidelity; deferred behind
+// the rest of wave 5/6 since the base-colour fix already unlocks the
+// majority of "title is invisible because text is white-on-white" cases.
+type ThemeMap = Map<string, string>;
+
+const SCHEME_ALIASES: Record<string, string> = {
+  bg1: 'lt1',
+  bg2: 'lt2',
+  tx1: 'dk1',
+  tx2: 'dk2',
+};
+
+function resolveSchemeName(name: string): string {
+  return SCHEME_ALIASES[name] ?? name;
+}
+
+// Parse one `<a:clrScheme>` child like `<a:accent1><a:srgbClr val="…"/></a:accent1>`
+// or `<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>`. Returns
+// the hex value or null on unparseable shapes.
+function readClrSchemeChildColor(node: unknown): string | null {
+  const srgb = findChild(node, 'a:srgbClr') as XmlNode | undefined;
+  const srgbVal = srgb?.['@val'];
+  if (typeof srgbVal === 'string' && /^[0-9a-fA-F]{6}$/.test(srgbVal)) {
+    return srgbVal.toUpperCase();
+  }
+  // <a:sysClr lastClr="…"/> carries a baked hex equivalent.
+  const sys = findChild(node, 'a:sysClr') as XmlNode | undefined;
+  const sysLast = sys?.['@lastClr'];
+  if (typeof sysLast === 'string' && /^[0-9a-fA-F]{6}$/.test(sysLast)) {
+    return sysLast.toUpperCase();
+  }
+  return null;
+}
+
+function parseThemeColors(themeXml: string): ThemeMap {
+  const map: ThemeMap = new Map();
+  const parsed = parser.parse(themeXml) as XmlNode;
+  const theme = findChild(parsed, 'a:theme');
+  const themeElements = findChild(theme, 'a:themeElements');
+  const clrScheme = findChild(themeElements, 'a:clrScheme') as XmlNode | undefined;
+  if (!clrScheme) return map;
+
+  // a:clrScheme's children are named by scheme slot (dk1, lt1, accent1, …)
+  // — iterate the keys rather than reaching for known names.
+  for (const key of Object.keys(clrScheme)) {
+    if (key.startsWith('@')) continue; // skip attributes
+    if (!key.startsWith('a:')) continue;
+    const slotName = key.slice(2); // strip "a:" prefix
+    if (slotName === 'extLst') continue;
+    const hex = readClrSchemeChildColor(clrScheme[key]);
+    if (hex) map.set(slotName, hex);
+  }
+  return map;
+}
+
+// Resolve a `<a:schemeClr val="accent1"/>` reference. Returns the hex
+// (with leading "#") or null when unresolvable.
+function resolveSchemeColor(node: unknown, theme: ThemeMap | null): string | null {
+  if (!theme) return null;
+  const schemeClr = findChild(node, 'a:schemeClr') as XmlNode | undefined;
+  if (!schemeClr) return null;
+  const raw = schemeClr['@val'];
+  if (typeof raw !== 'string') return null;
+  const resolved = theme.get(resolveSchemeName(raw));
+  return resolved ? `#${resolved}` : null;
+}
+
+// Combined "read any colour" — srgbClr first, schemeClr as fallback.
+// Caller passes the parent node that contains `<a:solidFill>` or
+// equivalent (we resolve the solid first, then the bare schemeClr).
+function readColor(parent: unknown, theme: ThemeMap | null): string | null {
+  const solid = findChild(parent, 'a:solidFill');
+  if (solid) {
+    const srgb = findChild(solid, 'a:srgbClr') as XmlNode | undefined;
+    const srgbVal = srgb?.['@val'];
+    if (typeof srgbVal === 'string' && /^[0-9a-fA-F]{6}$/.test(srgbVal)) {
+      return `#${srgbVal.toUpperCase()}`;
+    }
+    const schemed = resolveSchemeColor(solid, theme);
+    if (schemed) return schemed;
+  }
+  return null;
+}
+
 // Get a string out of a <a:t> node which can be either a bare string or
 // an object whose '#text' field holds the actual content (fast-xml-parser
 // shape varies with run nesting).
@@ -115,7 +207,7 @@ function readT(node: unknown): string {
 //
 // Color extraction handles `<a:solidFill><a:srgbClr val="HEX"/></>` —
 // theme colors (`<a:schemeClr>`) are deferred until we read the theme.
-function parseRunProps(rPr: unknown): Partial<ISlideRichTextProps> {
+function parseRunProps(rPr: unknown, theme: ThemeMap | null = null): Partial<ISlideRichTextProps> {
   if (!rPr || typeof rPr !== 'object') return {};
   const node = rPr as XmlNode;
   const out: Partial<ISlideRichTextProps> = {};
@@ -141,13 +233,11 @@ function parseRunProps(rPr: unknown): Partial<ISlideRichTextProps> {
     (out as any).ul = { s: 1 };
   }
 
-  // Color: <a:solidFill><a:srgbClr val="RRGGBB"/></a:solidFill>
-  const solidFill = findChild(node, 'a:solidFill');
-  const srgbClr = findChild(solidFill, 'a:srgbClr') as XmlNode | undefined;
-  const valAttr = srgbClr?.['@val'];
-  if (typeof valAttr === 'string' && /^[0-9a-fA-F]{6}$/.test(valAttr)) {
-    out.cl = { rgb: `#${valAttr}` };
-  }
+  // Color: <a:solidFill><a:srgbClr val="…"/></a:solidFill> or
+  // <a:solidFill><a:schemeClr val="accent1"/></a:solidFill> resolved
+  // via the theme color scheme (J2).
+  const colour = readColor(node, theme);
+  if (colour) out.cl = { rgb: colour };
 
   // Font family (B3): <a:rPr><a:latin typeface="Calibri"/></a:rPr>.
   // <a:ea> and <a:cs> are deferred (B4) — currently we use the Latin
@@ -173,6 +263,7 @@ function parseRunProps(rPr: unknown): Partial<ISlideRichTextProps> {
 function extractTextAndProps(
   txBody: unknown,
   fallbackProps?: Partial<ISlideRichTextProps>,
+  theme: ThemeMap | null = null,
 ): { text: string; props: Partial<ISlideRichTextProps> } {
   const paragraphs = toArray(findChild(txBody, 'a:p'));
   const lines: string[] = [];
@@ -187,7 +278,7 @@ function extractTextAndProps(
       inline.push(readT(tNode));
       if (!captured) {
         const rPr = findChild(r, 'a:rPr');
-        const parsed = parseRunProps(rPr);
+        const parsed = parseRunProps(rPr, theme);
         if (Object.keys(parsed).length > 0) {
           firstProps = parsed;
           captured = true;
@@ -227,7 +318,7 @@ function parseSrgbColor(parent: unknown): string | null {
 // reconstruct what PptxGenJS's addShape() emitted on export. Unknown
 // prstGeom values fall back to 'rect' so we never drop a shape; the
 // position / size / fill still survive.
-function parseShapeAppearance(spPr: unknown): {
+function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   shapeType: string;
   fillRgb: string | null;
   outlineRgb: string | null;
@@ -237,13 +328,13 @@ function parseShapeAppearance(spPr: unknown): {
   const prstAttr = prstGeom?.['@prst'];
   const shapeType = typeof prstAttr === 'string' && prstAttr.length > 0 ? prstAttr : 'rect';
 
-  const fillRgb = parseSrgbColor(spPr);
+  const fillRgb = readColor(spPr, theme) ?? parseSrgbColor(spPr);
 
   let outlineRgb: string | null = null;
   let outlineWeightPx: number | null = null;
   const ln = findChild(spPr, 'a:ln') as XmlNode | undefined;
   if (ln) {
-    outlineRgb = parseSrgbColor(ln);
+    outlineRgb = readColor(ln, theme) ?? parseSrgbColor(ln);
     const w = ln['@w'];
     if (typeof w === 'string' || typeof w === 'number') {
       const emu = parseInt(String(w), 10);
@@ -316,7 +407,7 @@ function getPlaceholderKey(sp: unknown): string | null {
 // Walk a <p:sldLayout> or <p:sldMaster> XML and collect every
 // placeholder's xfrm into a key → rect map. Used as the inheritance
 // source for slides that leave xfrm off their placeholders.
-function extractPlaceholderRects(layoutOrMasterXml: string): Map<string, PlaceholderRect> {
+function extractPlaceholderRects(layoutOrMasterXml: string, theme: ThemeMap | null = null): Map<string, PlaceholderRect> {
   const parsed = parser.parse(layoutOrMasterXml) as XmlNode;
   const root =
     (findChild(parsed, 'p:sldLayout') as XmlNode | undefined) ??
@@ -343,7 +434,7 @@ function extractPlaceholderRects(layoutOrMasterXml: string): Map<string, Placeho
     const lvl1pPr = findChild(lstStyle, 'a:lvl1pPr');
     const defRPr = findChild(lvl1pPr, 'a:defRPr');
     if (defRPr) {
-      const parsed = parseRunProps(defRPr);
+      const parsed = parseRunProps(defRPr, theme);
       if (Object.keys(parsed).length > 0) defaultRunProps = parsed;
     }
 
@@ -370,12 +461,53 @@ function extractPlaceholderRects(layoutOrMasterXml: string): Map<string, Placeho
   return map;
 }
 
+// Walk slide → layout → master → theme, returning the parsed theme
+// color map (or null when the chain breaks). The `cache` argument
+// memoises by master path so multi-slide decks don't re-parse the
+// theme on every slide.
+async function resolveThemeForSlide(
+  slideRelsXml: string | null,
+  zip: JSZip,
+  cache: Map<string, ThemeMap | null>,
+): Promise<ThemeMap | null> {
+  if (!slideRelsXml) return null;
+  const layoutTarget = findRelTargetByType(slideRelsXml, '/slideLayout');
+  if (!layoutTarget) return null;
+  const layoutPath = resolveRelTarget(layoutTarget, 'ppt/slides/');
+  const layoutDir = layoutPath.slice(0, layoutPath.lastIndexOf('/') + 1);
+  const layoutName = layoutPath.split('/').pop() ?? '';
+  const layoutRelsXml = await zip.file(`${layoutDir}_rels/${layoutName}.rels`)?.async('string');
+  if (!layoutRelsXml) return null;
+  const masterTarget = findRelTargetByType(layoutRelsXml, '/slideMaster');
+  if (!masterTarget) return null;
+  const masterPath = resolveRelTarget(masterTarget, layoutDir);
+  if (cache.has(masterPath)) return cache.get(masterPath) ?? null;
+  const masterDir = masterPath.slice(0, masterPath.lastIndexOf('/') + 1);
+  const masterName = masterPath.split('/').pop() ?? '';
+  const masterRelsXml = await zip.file(`${masterDir}_rels/${masterName}.rels`)?.async('string');
+  if (!masterRelsXml) {
+    cache.set(masterPath, null);
+    return null;
+  }
+  const themeTarget = findRelTargetByType(masterRelsXml, '/theme');
+  if (!themeTarget) {
+    cache.set(masterPath, null);
+    return null;
+  }
+  const themePath = resolveRelTarget(themeTarget, masterDir);
+  const themeXml = await zip.file(themePath)?.async('string');
+  const theme = themeXml ? parseThemeColors(themeXml) : null;
+  cache.set(masterPath, theme);
+  return theme;
+}
+
 // Resolve a slide's layout (then master) and merge their placeholder
 // rects. Layout overrides master where both define the same key —
 // that matches PowerPoint's inheritance order.
 async function buildPlaceholderMap(
   slideRelsXml: string | null,
   zip: JSZip,
+  theme: ThemeMap | null,
 ): Promise<Map<string, PlaceholderRect>> {
   if (!slideRelsXml) return new Map();
   // Slide's rels live at ppt/slides/_rels/slideN.xml.rels — base dir
@@ -399,11 +531,11 @@ async function buildPlaceholderMap(
     if (masterTarget) {
       const masterPath = resolveRelTarget(masterTarget, layoutDir);
       const masterXml = await zip.file(masterPath)?.async('string');
-      if (masterXml) masterMap = extractPlaceholderRects(masterXml);
+      if (masterXml) masterMap = extractPlaceholderRects(masterXml, theme);
     }
   }
 
-  const layoutMap = extractPlaceholderRects(layoutXml);
+  const layoutMap = extractPlaceholderRects(layoutXml, theme);
   // Master first, then layout overrides. Field-level merge: layout's
   // rect wins when present; for defaultRunProps, layout > master >
   // none — so a layout with xfrm but no lstStyle still picks up the
@@ -438,6 +570,8 @@ interface ImageRegistry {
   zip: JSZip;
   /** Placeholder rects from this slide's layout + master (I3) */
   placeholderRects: Map<string, PlaceholderRect>;
+  /** Theme color scheme from `ppt/theme/themeN.xml` (J2) */
+  theme: ThemeMap | null;
 }
 
 const MIME_FROM_EXT: Record<string, string> = {
@@ -584,7 +718,11 @@ async function processSpTree(
 
     const txBody = findChild(sp, 'p:txBody');
     if (txBody) {
-      const { text, props } = extractTextAndProps(txBody, phInherited?.defaultRunProps);
+      const { text, props } = extractTextAndProps(
+        txBody,
+        phInherited?.defaultRunProps,
+        reg.theme,
+      );
       out.push({
         id: `s${pageOrdinal}-el-${zIndex}`,
         zIndex,
@@ -601,7 +739,7 @@ async function processSpTree(
     }
 
     if (spPr) {
-      const { shapeType, fillRgb, outlineRgb, outlineWeightPx } = parseShapeAppearance(spPr);
+      const { shapeType, fillRgb, outlineRgb, outlineWeightPx } = parseShapeAppearance(spPr, reg.theme);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shapeProperties: any = {};
       if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
@@ -721,18 +859,19 @@ async function extractElementsFromSlideXml(
   return elements;
 }
 
-// A2 — read `<p:cSld><p:bg>` for the slide background. Today we resolve
-// `<p:bgPr><a:solidFill><a:srgbClr>` only; gradient (`<a:gradFill>`),
-// picture (`<a:blipFill>`), and theme-referenced (`<p:bgRef>`)
-// backgrounds are deferred to later waves (A3 / A4 / A5).
-function extractSlideBackground(slideXml: string): string | null {
+// A2 — read `<p:cSld><p:bg>` for the slide background. Resolves both
+// `<p:bgPr><a:solidFill><a:srgbClr>` and `<p:bgPr><a:solidFill><a:schemeClr>`
+// (J2) — the latter via the theme map. Gradient (`<a:gradFill>`),
+// picture (`<a:blipFill>`), and `<p:bgRef>` (theme background indexes)
+// are deferred to later waves (A3 / A4 / A5-ref).
+function extractSlideBackground(slideXml: string, theme: ThemeMap | null): string | null {
   const parsed = parser.parse(slideXml) as XmlNode;
   const cSld = findChild(findChild(parsed, 'p:sld'), 'p:cSld');
   const bg = findChild(cSld, 'p:bg');
   if (!bg) return null;
   const bgPr = findChild(bg, 'p:bgPr');
   if (!bgPr) return null;
-  return parseSrgbColor(bgPr);
+  return readColor(bgPr, theme) ?? parseSrgbColor(bgPr);
 }
 
 export async function importPptxToSlides(file: ArrayBuffer, fileName: string): Promise<ISlideData> {
@@ -764,6 +903,7 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
   const pages: Record<string, ISlidePage> = {};
   const pageOrder: string[] = [];
   const imageCache = new Map<string, string>();
+  const themeCache = new Map<string, ThemeMap | null>();
 
   for (let i = 0; i < sldIds.length; i += 1) {
     const sldId = sldIds[i] as XmlNode;
@@ -781,9 +921,17 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     const slideRelsPath = `ppt/slides/_rels/${slideName}.rels`;
     const slideRelsXml = (await zip.file(slideRelsPath)?.async('string')) ?? null;
     const imageRelMap = slideRelsXml ? extractRelMap(slideRelsXml) : new Map<string, string>();
-    const placeholderRects = await buildPlaceholderMap(slideRelsXml, zip);
 
-    const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip, placeholderRects };
+    // Resolve theme BEFORE the placeholder map so layout/master
+    // `<a:lstStyle><a:lvl1pPr><a:defRPr>` entries that use scheme
+    // colours (the common case in modern themes) resolve to real hex
+    // values when we capture the inherited defaults. Theme (J2) walks
+    // slide → layout → master → theme; cached by master path so
+    // multi-slide decks don't re-parse it on every slide.
+    const theme = await resolveThemeForSlide(slideRelsXml, zip, themeCache);
+    const placeholderRects = await buildPlaceholderMap(slideRelsXml, zip, theme);
+
+    const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip, placeholderRects, theme };
     const pageOrdinal = i + 1;
     const pageId = `page-${pageOrdinal}`;
     const elements = await extractElementsFromSlideXml(slideXml, reg, pageOrdinal);
@@ -793,7 +941,7 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     // A2 — slide background. Theme- and layout-inherited backgrounds
     // are still TODO (A5 / I6); when this slide has no `<p:bg>` we
     // keep the historical white default.
-    const slideBg = extractSlideBackground(slideXml);
+    const slideBg = extractSlideBackground(slideXml, theme);
 
     pages[pageId] = {
       id: pageId,
