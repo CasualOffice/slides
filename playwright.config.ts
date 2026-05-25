@@ -6,6 +6,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // __diagnostic__ specs hit the live deployed URL or do informational
+  // captures — they're triage tools, not regression guards. Run them
+  // explicitly via `pnpm exec playwright test --config=playwright.diagnostic.config.ts`
+  // when needed.
+  testIgnore: ['**/__diagnostic__/**'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

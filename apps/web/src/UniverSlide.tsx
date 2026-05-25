@@ -94,6 +94,8 @@ export function UniverSlide({ snapshot }: UniverSlideProps) {
       });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (globalThis as any).__casualSlides__ICommandService = ICommandService;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).__casualSlides__IUniverInstanceService = IUniverInstanceService;
 
       // Spike-C runtime probe for the Gap 1 rev-tracking patch. Pre-patch
       // SlideDataModel.getRev() returned 0 forever and incrementRev was a

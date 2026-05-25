@@ -181,6 +181,59 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(fatal, `swapDeck console errors:\n${fatal.join('\n')}`).toEqual([]);
   });
 
+  test('all element/page ops fire mutations (Gap 2 round 2)', async ({ page }) => {
+    // After Gap 2 round 2, four more public commands route through
+    // CommandType.MUTATION:
+    //   slide.command.add-text            → slide.mutation.insert-element  (round 1)
+    //   slide.operation.update-element    → slide.mutation.update-element  (round 2)
+    //   slide.operation.delete-element    → slide.mutation.delete-element  (round 2)
+    //   slide.operation.append-slide      → slide.mutation.insert-page     (round 2)
+    // This single test drives all four and asserts each produces the
+    // expected wire-format mutation id in window.__capturedMutations.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(800);
+
+    const captured = await page.evaluate(async () => {
+      type W = {
+        univer: { __getInjector(): { get(id: unknown): { executeCommand(id: string, params?: unknown): Promise<boolean> } } };
+        __capturedMutations: string[];
+      };
+      const w = window as unknown as W;
+      const inj = w.univer.__getInjector();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cs = inj.get((globalThis as any).__casualSlides__ICommandService);
+      // Cross-cut: read the snapshot to grab the active page + a known
+      // element id. The default deck always has 'el-1-title' on page 1.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const inst = inj.get((globalThis as any).__casualSlides__IUniverInstanceService);
+      const unitId = inst.getFocusedUnit().getUnitId();
+
+      // Reset capture before our suite.
+      w.__capturedMutations = [];
+
+      await cs.executeCommand('slide.command.add-text', { text: 'probe-add' });
+      await cs.executeCommand('slide.operation.update-element', {
+        unitId,
+        oKey: 'el-1-title',
+        props: { left: 999, top: 999 },
+      });
+      await cs.executeCommand('slide.operation.delete-element', { unitId, id: 'el-1-subtitle' });
+      await cs.executeCommand('slide.operation.append-slide', { unitId });
+
+      return [...w.__capturedMutations];
+    });
+
+    expect(captured).toContain('slide.mutation.insert-element');
+    expect(captured).toContain('slide.mutation.update-element');
+    expect(captured).toContain('slide.mutation.delete-element');
+    expect(captured).toContain('slide.mutation.insert-page');
+  });
+
   test('insert-text fires onMutationExecutedForCollab (Gap 2 V1)', async ({ page }) => {
     // Pre-patch: SlideAddTextCommand routed through SlideAddTextOperation,
     // declared as CommandType.OPERATION. ICommandService.onMutationExecutedForCollab

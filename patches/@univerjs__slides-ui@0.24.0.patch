@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..3fbad9eaaf99b9fbe768c755a85fc1c88502168f 100644
+index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..cbd88b417dbd731fd79e5d8a0ab81c9214336fb7 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -156,7 +156,7 @@ let SlideRenderController = class SlideRenderController extends _univerjs_core.R
@@ -53,7 +53,111 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..3fbad9eaaf99b9fbe768c755a85fc1c8
  		const page = model.getBlankPage();
  		const render = this._currentRender();
  		if (page == null || render == null || render.mainComponent == null) return;
-@@ -995,58 +999,94 @@ const InsertSlideShapeEllipseOperation = {
+@@ -429,11 +433,24 @@ const ActivateSlidePageOperation = {
+ //#region src/commands/operations/append-slide.operation.ts
+ const AppendSlideOperation = {
+ 	id: "slide.operation.append-slide",
+-	type: _univerjs_core.CommandType.OPERATION,
++	type: _univerjs_core.CommandType.COMMAND,
+ 	handler: (accessor, params) => {
+-		const unitId = params.unitId;
+-		if (!accessor.get(_univerjs_core.IUniverInstanceService).getUnit(unitId)) return false;
+-		accessor.get(CanvasView).appendPage(unitId);
++		if (!(params === null || params === void 0 ? void 0 : params.unitId)) return false;
++		const commandService = accessor.get(_univerjs_core.ICommandService);
++		const undoRedoService = accessor.get(_univerjs_core.IUndoRedoService);
++		const model = accessor.get(_univerjs_core.IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const newPage = model.getBlankPage();
++		const insertParams = { unitId: params.unitId, page: newPage };
++		const deleteParams = { unitId: params.unitId, pageId: newPage.id };
++		const ok = commandService.syncExecuteCommand(SlideInsertPageMutation.id, insertParams);
++		if (!ok) return false;
++		accessor.get(CanvasView).appendPage(params.unitId);
++		undoRedoService.pushUndoRedo({
++			unitID: params.unitId,
++			undoMutations: [{ id: SlideDeletePageMutation.id, params: deleteParams }],
++			redoMutations: [{ id: SlideInsertPageMutation.id, params: insertParams }]
++		});
+ 		return true;
+ 	}
+ };
+@@ -442,16 +459,27 @@ const AppendSlideOperation = {
+ //#region src/commands/operations/delete-element.operation.ts
+ const DeleteSlideElementOperation = {
+ 	id: "slide.operation.delete-element",
+-	type: _univerjs_core.CommandType.OPERATION,
++	type: _univerjs_core.CommandType.COMMAND,
+ 	handler: (accessor, params) => {
+-		if (!(params === null || params === void 0 ? void 0 : params.id)) return false;
+-		const unitId = params.unitId;
+-		const slideData = accessor.get(_univerjs_core.IUniverInstanceService).getUnit(unitId);
+-		if (!slideData) return false;
+-		const activePage = slideData.getActivePage();
+-		delete activePage.pageElements[params.id];
+-		slideData.updatePage(activePage.id, activePage);
+-		accessor.get(CanvasView).removeObjectById(params.id, activePage.id, unitId);
++		if (!(params === null || params === void 0 ? void 0 : params.id) || !params.unitId) return false;
++		const commandService = accessor.get(_univerjs_core.ICommandService);
++		const undoRedoService = accessor.get(_univerjs_core.IUndoRedoService);
++		const model = accessor.get(_univerjs_core.IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const activePage = model.getActivePage();
++		if (!activePage) return false;
++		const element = activePage.pageElements[params.id];
++		if (!element) return false;
++		const deleteParams = { unitId: params.unitId, pageId: activePage.id, elementId: params.id };
++		const insertParams = { unitId: params.unitId, pageId: activePage.id, element: { ...element } };
++		const ok = commandService.syncExecuteCommand(SlideDeleteElementMutation.id, deleteParams);
++		if (!ok) return false;
++		accessor.get(CanvasView).removeObjectById(params.id, activePage.id, params.unitId);
++		undoRedoService.pushUndoRedo({
++			unitID: params.unitId,
++			undoMutations: [{ id: SlideInsertElementMutation.id, params: insertParams }],
++			redoMutations: [{ id: SlideDeleteElementMutation.id, params: deleteParams }]
++		});
+ 		return true;
+ 	}
+ };
+@@ -510,16 +538,28 @@ const InsertSlideFloatImageCommand = {
+ //#region src/commands/operations/update-element.operation.ts
+ const UpdateSlideElementOperation = {
+ 	id: "slide.operation.update-element",
+-	type: _univerjs_core.CommandType.OPERATION,
++	type: _univerjs_core.CommandType.COMMAND,
+ 	handler: (accessor, params) => {
+-		const { oKey, props } = params;
+-		const univerInstanceService = accessor.get(_univerjs_core.IUniverInstanceService);
+-		const unitId = params === null || params === void 0 ? void 0 : params.unitId;
+-		const slideData = univerInstanceService.getUnit(unitId);
+-		if (!slideData) return false;
+-		const activePage = slideData.getActivePage();
+-		activePage.pageElements[oKey] = (0, _univerjs_core.merge)(activePage.pageElements[oKey], props);
+-		slideData.updatePage(activePage.id, activePage);
++		if (!params) return false;
++		const { oKey, props, unitId } = params;
++		const commandService = accessor.get(_univerjs_core.ICommandService);
++		const undoRedoService = accessor.get(_univerjs_core.IUndoRedoService);
++		const model = accessor.get(_univerjs_core.IUniverInstanceService).getUnit(unitId);
++		if (!model) return false;
++		const activePage = model.getActivePage();
++		if (!activePage) return false;
++		const before = activePage.pageElements[oKey];
++		if (!before) return false;
++		const beforeProps = { ...before };
++		const forward = { unitId, pageId: activePage.id, elementId: oKey, props };
++		const inverse = { unitId, pageId: activePage.id, elementId: oKey, props: beforeProps };
++		const ok = commandService.syncExecuteCommand(SlideUpdateElementMutation.id, forward);
++		if (!ok) return false;
++		undoRedoService.pushUndoRedo({
++			unitID: unitId,
++			undoMutations: [{ id: SlideUpdateElementMutation.id, params: inverse }],
++			redoMutations: [{ id: SlideUpdateElementMutation.id, params: forward }]
++		});
+ 		return true;
+ 	}
+ };
+@@ -995,58 +1035,146 @@ const InsertSlideShapeEllipseOperation = {
  	}
  };
  
@@ -85,6 +189,58 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..3fbad9eaaf99b9fbe768c755a85fc1c8
 +		if (!page) return false;
 +		delete page.pageElements[params.elementId];
 +		model.updatePage(params.pageId, page);
++		model.incrementRev();
++		return true;
++	}
++};
++const SlideUpdateElementMutation = {
++	id: "slide.mutation.update-element",
++	type: _univerjs_core.CommandType.MUTATION,
++	handler: (accessor, params) => {
++		if (!params) return false;
++		const model = accessor.get(_univerjs_core.IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const page = model.getPage(params.pageId);
++		if (!page) return false;
++		const existing = page.pageElements[params.elementId];
++		if (!existing) return false;
++		page.pageElements[params.elementId] = (0, _univerjs_core.merge)(existing, params.props);
++		model.updatePage(params.pageId, page);
++		model.incrementRev();
++		return true;
++	}
++};
++const SlideInsertPageMutation = {
++	id: "slide.mutation.insert-page",
++	type: _univerjs_core.CommandType.MUTATION,
++	handler: (accessor, params) => {
++		if (!params) return false;
++		const model = accessor.get(_univerjs_core.IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const snapshot = model.getSnapshot();
++		if (!snapshot.body) return false;
++		snapshot.body.pages[params.page.id] = params.page;
++		if (typeof params.index === "number" && params.index >= 0 && params.index <= snapshot.body.pageOrder.length) {
++			snapshot.body.pageOrder.splice(params.index, 0, params.page.id);
++		} else {
++			snapshot.body.pageOrder.push(params.page.id);
++		}
++		model.incrementRev();
++		return true;
++	}
++};
++const SlideDeletePageMutation = {
++	id: "slide.mutation.delete-page",
++	type: _univerjs_core.CommandType.MUTATION,
++	handler: (accessor, params) => {
++		if (!params) return false;
++		const model = accessor.get(_univerjs_core.IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const snapshot = model.getSnapshot();
++		if (!snapshot.body) return false;
++		delete snapshot.body.pages[params.pageId];
++		const orderIdx = snapshot.body.pageOrder.indexOf(params.pageId);
++		if (orderIdx !== -1) snapshot.body.pageOrder.splice(orderIdx, 1);
 +		model.incrementRev();
 +		return true;
 +	}
@@ -178,17 +334,20 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..3fbad9eaaf99b9fbe768c755a85fc1c8
  
  //#endregion
  //#region src/commands/operations/set-thumb.operation.ts
-@@ -1549,6 +1589,8 @@ let SlidesUIController = class SlidesUIController extends _univerjs_core.Disposa
+@@ -1549,6 +1677,11 @@ let SlidesUIController = class SlidesUIController extends _univerjs_core.Disposa
  			ToggleSlideEditSidebarOperation,
  			DeleteSlideElementOperation,
  			UpdateSlideElementOperation,
 +			SlideInsertElementMutation,
 +			SlideDeleteElementMutation,
++			SlideUpdateElementMutation,
++			SlideInsertPageMutation,
++			SlideDeletePageMutation,
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..4855506e186cab69a47653c6e5bc795c7b3e2277 100644
+index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..6aad55e00309209fc6ba6a01b13d3816fd499c16 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -155,7 +155,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
@@ -242,7 +401,111 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..4855506e186cab69a47653c6e5bc795c
  		const page = model.getBlankPage();
  		const render = this._currentRender();
  		if (page == null || render == null || render.mainComponent == null) return;
-@@ -994,58 +998,94 @@ const InsertSlideShapeEllipseOperation = {
+@@ -428,11 +432,24 @@ const ActivateSlidePageOperation = {
+ //#region src/commands/operations/append-slide.operation.ts
+ const AppendSlideOperation = {
+ 	id: "slide.operation.append-slide",
+-	type: CommandType.OPERATION,
++	type: CommandType.COMMAND,
+ 	handler: (accessor, params) => {
+-		const unitId = params.unitId;
+-		if (!accessor.get(IUniverInstanceService).getUnit(unitId)) return false;
+-		accessor.get(CanvasView).appendPage(unitId);
++		if (!(params === null || params === void 0 ? void 0 : params.unitId)) return false;
++		const commandService = accessor.get(ICommandService);
++		const undoRedoService = accessor.get(IUndoRedoService);
++		const model = accessor.get(IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const newPage = model.getBlankPage();
++		const insertParams = { unitId: params.unitId, page: newPage };
++		const deleteParams = { unitId: params.unitId, pageId: newPage.id };
++		const ok = commandService.syncExecuteCommand(SlideInsertPageMutation.id, insertParams);
++		if (!ok) return false;
++		accessor.get(CanvasView).appendPage(params.unitId);
++		undoRedoService.pushUndoRedo({
++			unitID: params.unitId,
++			undoMutations: [{ id: SlideDeletePageMutation.id, params: deleteParams }],
++			redoMutations: [{ id: SlideInsertPageMutation.id, params: insertParams }]
++		});
+ 		return true;
+ 	}
+ };
+@@ -441,16 +458,27 @@ const AppendSlideOperation = {
+ //#region src/commands/operations/delete-element.operation.ts
+ const DeleteSlideElementOperation = {
+ 	id: "slide.operation.delete-element",
+-	type: CommandType.OPERATION,
++	type: CommandType.COMMAND,
+ 	handler: (accessor, params) => {
+-		if (!(params === null || params === void 0 ? void 0 : params.id)) return false;
+-		const unitId = params.unitId;
+-		const slideData = accessor.get(IUniverInstanceService).getUnit(unitId);
+-		if (!slideData) return false;
+-		const activePage = slideData.getActivePage();
+-		delete activePage.pageElements[params.id];
+-		slideData.updatePage(activePage.id, activePage);
+-		accessor.get(CanvasView).removeObjectById(params.id, activePage.id, unitId);
++		if (!(params === null || params === void 0 ? void 0 : params.id) || !params.unitId) return false;
++		const commandService = accessor.get(ICommandService);
++		const undoRedoService = accessor.get(IUndoRedoService);
++		const model = accessor.get(IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const activePage = model.getActivePage();
++		if (!activePage) return false;
++		const element = activePage.pageElements[params.id];
++		if (!element) return false;
++		const deleteParams = { unitId: params.unitId, pageId: activePage.id, elementId: params.id };
++		const insertParams = { unitId: params.unitId, pageId: activePage.id, element: { ...element } };
++		const ok = commandService.syncExecuteCommand(SlideDeleteElementMutation.id, deleteParams);
++		if (!ok) return false;
++		accessor.get(CanvasView).removeObjectById(params.id, activePage.id, params.unitId);
++		undoRedoService.pushUndoRedo({
++			unitID: params.unitId,
++			undoMutations: [{ id: SlideInsertElementMutation.id, params: insertParams }],
++			redoMutations: [{ id: SlideDeleteElementMutation.id, params: deleteParams }]
++		});
+ 		return true;
+ 	}
+ };
+@@ -509,16 +537,28 @@ const InsertSlideFloatImageCommand = {
+ //#region src/commands/operations/update-element.operation.ts
+ const UpdateSlideElementOperation = {
+ 	id: "slide.operation.update-element",
+-	type: CommandType.OPERATION,
++	type: CommandType.COMMAND,
+ 	handler: (accessor, params) => {
+-		const { oKey, props } = params;
+-		const univerInstanceService = accessor.get(IUniverInstanceService);
+-		const unitId = params === null || params === void 0 ? void 0 : params.unitId;
+-		const slideData = univerInstanceService.getUnit(unitId);
+-		if (!slideData) return false;
+-		const activePage = slideData.getActivePage();
+-		activePage.pageElements[oKey] = merge(activePage.pageElements[oKey], props);
+-		slideData.updatePage(activePage.id, activePage);
++		if (!params) return false;
++		const { oKey, props, unitId } = params;
++		const commandService = accessor.get(ICommandService);
++		const undoRedoService = accessor.get(IUndoRedoService);
++		const model = accessor.get(IUniverInstanceService).getUnit(unitId);
++		if (!model) return false;
++		const activePage = model.getActivePage();
++		if (!activePage) return false;
++		const before = activePage.pageElements[oKey];
++		if (!before) return false;
++		const beforeProps = { ...before };
++		const forward = { unitId, pageId: activePage.id, elementId: oKey, props };
++		const inverse = { unitId, pageId: activePage.id, elementId: oKey, props: beforeProps };
++		const ok = commandService.syncExecuteCommand(SlideUpdateElementMutation.id, forward);
++		if (!ok) return false;
++		undoRedoService.pushUndoRedo({
++			unitID: unitId,
++			undoMutations: [{ id: SlideUpdateElementMutation.id, params: inverse }],
++			redoMutations: [{ id: SlideUpdateElementMutation.id, params: forward }]
++		});
+ 		return true;
+ 	}
+ };
+@@ -994,58 +1034,146 @@ const InsertSlideShapeEllipseOperation = {
  	}
  };
  
@@ -274,6 +537,58 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..4855506e186cab69a47653c6e5bc795c
 +		if (!page) return false;
 +		delete page.pageElements[params.elementId];
 +		model.updatePage(params.pageId, page);
++		model.incrementRev();
++		return true;
++	}
++};
++const SlideUpdateElementMutation = {
++	id: "slide.mutation.update-element",
++	type: CommandType.MUTATION,
++	handler: (accessor, params) => {
++		if (!params) return false;
++		const model = accessor.get(IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const page = model.getPage(params.pageId);
++		if (!page) return false;
++		const existing = page.pageElements[params.elementId];
++		if (!existing) return false;
++		page.pageElements[params.elementId] = merge(existing, params.props);
++		model.updatePage(params.pageId, page);
++		model.incrementRev();
++		return true;
++	}
++};
++const SlideInsertPageMutation = {
++	id: "slide.mutation.insert-page",
++	type: CommandType.MUTATION,
++	handler: (accessor, params) => {
++		if (!params) return false;
++		const model = accessor.get(IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const snapshot = model.getSnapshot();
++		if (!snapshot.body) return false;
++		snapshot.body.pages[params.page.id] = params.page;
++		if (typeof params.index === "number" && params.index >= 0 && params.index <= snapshot.body.pageOrder.length) {
++			snapshot.body.pageOrder.splice(params.index, 0, params.page.id);
++		} else {
++			snapshot.body.pageOrder.push(params.page.id);
++		}
++		model.incrementRev();
++		return true;
++	}
++};
++const SlideDeletePageMutation = {
++	id: "slide.mutation.delete-page",
++	type: CommandType.MUTATION,
++	handler: (accessor, params) => {
++		if (!params) return false;
++		const model = accessor.get(IUniverInstanceService).getUnit(params.unitId);
++		if (!model) return false;
++		const snapshot = model.getSnapshot();
++		if (!snapshot.body) return false;
++		delete snapshot.body.pages[params.pageId];
++		const orderIdx = snapshot.body.pageOrder.indexOf(params.pageId);
++		if (orderIdx !== -1) snapshot.body.pageOrder.splice(orderIdx, 1);
 +		model.incrementRev();
 +		return true;
 +	}
@@ -367,12 +682,15 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..4855506e186cab69a47653c6e5bc795c
  
  //#endregion
  //#region src/commands/operations/set-thumb.operation.ts
-@@ -1548,6 +1588,8 @@ let SlidesUIController = class SlidesUIController extends Disposable {
+@@ -1548,6 +1676,11 @@ let SlidesUIController = class SlidesUIController extends Disposable {
  			ToggleSlideEditSidebarOperation,
  			DeleteSlideElementOperation,
  			UpdateSlideElementOperation,
 +			SlideInsertElementMutation,
 +			SlideDeleteElementMutation,
++			SlideUpdateElementMutation,
++			SlideInsertPageMutation,
++			SlideDeletePageMutation,
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
