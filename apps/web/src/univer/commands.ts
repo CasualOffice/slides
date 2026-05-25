@@ -28,10 +28,21 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   id: string,
   params?: T,
 ): Promise<boolean> {
+  // Casual-Slides-local commands are handled here, not via Univer's command
+  // bus. Keeps small UI verbs (print, slideshow, fit-to-window) out of the
+  // collab broadcast envelope.
+  if (id === 'casual-slides.command.print') {
+    if (typeof window !== 'undefined') window.print();
+    return true;
+  }
+
   const univer = getUniver();
   if (!univer) return false;
   const cs = univer.__getInjector().get(ICommandService);
-  const unitId = getFocusedSlideUnitId();
+  // univer.command.undo / .redo don't take a unitId param; only auto-supply
+  // for slide.* commands that need one.
+  const needsUnitId = id.startsWith('slide.');
+  const unitId = needsUnitId ? getFocusedSlideUnitId() : null;
   const merged = unitId ? { unitId, ...(params ?? {}) } : params;
   try {
     return await cs.executeCommand(id, merged);

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ISlideData, SlideDataModel } from '@univerjs/slides';
 import { IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { Univer } from '@univerjs/core';
@@ -9,6 +9,7 @@ import { DEFAULT_SLIDE_DATA } from './default-slide';
 import { TitleBar } from './shell/TitleBar';
 import { Toolbar } from './shell/Toolbar';
 import { StatusBar } from './shell/StatusBar';
+import { dispatchSlideCommand } from './univer/commands';
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -50,6 +51,47 @@ export function App() {
 
   const fileName = useMemo(() => deckTitle(snapshot), [snapshot]);
   const slideCount = snapshot.body?.pageOrder?.length ?? 0;
+
+  // Global keyboard shortcuts. Each guards on the active element NOT being
+  // an editable input (text-frame editor inside Univer manages its own
+  // shortcuts; we don't want to step on those).
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const inEditable = !!target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      );
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const k = e.key.toLowerCase();
+      if (inEditable && k !== 'p' && k !== 's' && k !== 'o') return;
+
+      if (k === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        void dispatchSlideCommand('univer.command.undo');
+      } else if ((k === 'z' && e.shiftKey) || k === 'y') {
+        e.preventDefault();
+        void dispatchSlideCommand('univer.command.redo');
+      } else if (k === 'm') {
+        e.preventDefault();
+        void dispatchSlideCommand('slide.operation.append-slide');
+      } else if (k === 'p') {
+        e.preventDefault();
+        window.print();
+      } else if (k === 's') {
+        e.preventDefault();
+        void handleSavePptx();
+      } else if (k === 'o') {
+        e.preventDefault();
+        handleOpenClick();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSavePptx() {
     setError(null);

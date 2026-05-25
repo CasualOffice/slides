@@ -23,9 +23,9 @@ const SHAPES_MENU: NonNullable<ToolButton['menu']> = [
 ];
 
 const TOOLS: (ToolButton | { sep: true })[] = [
-  { id: 'undo', icon: 'undo', label: 'Undo (Ctrl+Z)', disabled: true },
-  { id: 'redo', icon: 'redo', label: 'Redo (Ctrl+Y)', disabled: true },
-  { id: 'print', icon: 'print', label: 'Print', disabled: true },
+  { id: 'undo', icon: 'undo', label: 'Undo (Ctrl+Z)', cmd: 'univer.command.undo' },
+  { id: 'redo', icon: 'redo', label: 'Redo (Ctrl+Y)', cmd: 'univer.command.redo' },
+  { id: 'print', icon: 'print', label: 'Print', cmd: 'casual-slides.command.print' },
   { sep: true },
   { id: 'pointer', icon: 'arrow_selector_tool', label: 'Select', disabled: true },
   { id: 'textbox', icon: 'text_fields', label: 'Text box', cmd: 'slide.command.add-text' },

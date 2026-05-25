@@ -303,6 +303,39 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(captured).toContain('slide.mutation.insert-element');
   });
 
+  test('Undo after Text box restores prior state (Gap 2 + Univer undo wiring)', async ({ page }) => {
+    // Insert a text element, then dispatch univer.command.undo. The
+    // (delete, insert) inverse-mutation pair the slide.command.add-text
+    // handler pushes onto IUndoRedoService should produce a
+    // slide.mutation.delete-element on undo. Catches regressions in the
+    // mutation-pair scaffolding and the Univer undo wiring.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(800);
+
+    const captured = await page.evaluate(async () => {
+      type W = {
+        univer: { __getInjector(): { get(id: unknown): { executeCommand(id: string, params?: unknown): Promise<boolean> } } };
+        __capturedMutations: string[];
+      };
+      const w = window as unknown as W;
+      const inj = w.univer.__getInjector();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cs = inj.get((globalThis as any).__casualSlides__ICommandService);
+      w.__capturedMutations = [];
+      await cs.executeCommand('slide.command.add-text', { text: 'probe-undo' });
+      await cs.executeCommand('univer.command.undo');
+      return [...w.__capturedMutations];
+    });
+
+    expect(captured).toContain('slide.mutation.insert-element');
+    expect(captured).toContain('slide.mutation.delete-element');
+  });
+
   test('rev-tracking patch is live (Gap 1)', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => typeof (window as { __slideRevProbe?: unknown }).__slideRevProbe === 'function', null, { timeout: 15_000 });
