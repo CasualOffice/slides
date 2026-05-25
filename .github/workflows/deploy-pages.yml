@@ -1,0 +1,96 @@
+name: Deploy web to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment; cancel any in-progress run when a
+# new push arrives so we always publish the latest main.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        # No `version:` — it's picked from `packageManager` in package.json
+        # (pnpm@10.33.4), avoiding ERR_PNPM_BAD_PM_VERSION.
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        # --frozen-lockfile fails the build if pnpm-lock.yaml is out of date,
+        # which is what we want — patches/ are applied during install so a
+        # stale lockfile would silently ship un-patched code.
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck web
+        run: pnpm --filter @point/web typecheck
+
+      - name: Build web
+        env:
+          # Canonical URL is the apex of the subdomain — slide.schnsrw.live/
+          # — so assets are root-relative. A small /slides/ redirect (added
+          # below) keeps the GitHub-provided URL working
+          # (schnsrw.github.io/slides/ → 301 → slide.schnsrw.live/slides/
+          # → redirect → /).
+          PAGES_BASE: /
+        run: pnpm --filter @point/web build
+
+      - name: Assemble Pages artifact
+        # CNAME tells GitHub Pages which host to serve; without it in every
+        # deploy, the custom-domain config in the Pages UI gets dropped.
+        # The /slides/index.html redirect makes the schnsrw.github.io URL
+        # land on the app instead of 404.
+        run: |
+          set -euo pipefail
+          mkdir -p public/slides
+          cp -R apps/web/dist/. public/
+          echo "slide.schnsrw.live" > public/CNAME
+          cat > public/slides/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <title>Casual Slides</title>
+              <meta http-equiv="refresh" content="0; url=/" />
+              <link rel="canonical" href="https://slide.schnsrw.live/" />
+              <script>location.replace('/');</script>
+            </head>
+            <body>
+              <p>Redirecting to <a href="/">slide.schnsrw.live</a>…</p>
+            </body>
+          </html>
+          HTML
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
