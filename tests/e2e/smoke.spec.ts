@@ -336,6 +336,36 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(captured).toContain('slide.mutation.delete-element');
   });
 
+  test('Right-click on slide thumbnail opens context menu + Duplicate dispatches', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(
+      () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(800);
+
+    // Find the first thumbnail by the slide-number span "1" inside Univer's
+    // left-sidebar. Right-click its sibling div (the actual thumbnail).
+    const thumbnail = page.locator('aside[data-u-comp="left-sidebar"] span:has-text("1") + div').first();
+    await thumbnail.click({ button: 'right' });
+
+    await expect(page.locator('[data-testid="slide-context-menu"]')).toBeVisible();
+
+    // Reset capture before clicking Duplicate.
+    await page.evaluate(() => {
+      (window as { __capturedMutations: string[] }).__capturedMutations = [];
+    });
+    await page.locator('[data-testid="slide-context-menu"]').getByText(/duplicate slide/i).click();
+    await page.waitForTimeout(300);
+
+    const captured = await page.evaluate(() => [...(window as { __capturedMutations: string[] }).__capturedMutations]);
+    expect(captured).toContain('slide.mutation.insert-page');
+
+    // Menu closed after click.
+    await expect(page.locator('[data-testid="slide-context-menu"]')).toHaveCount(0);
+  });
+
   test('File → Properties shows deck metadata', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(

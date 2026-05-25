@@ -11,7 +11,7 @@ Update this file when an item lands or shifts ownership.
 | # | Feature                          | Owner   | Branch                     | Status     | Notes |
 |---|----------------------------------|---------|----------------------------|------------|-------|
 | 1 | Properties dialog                | main    | `main`                     | ✅ landed   | **Feature**. File → Properties → modal with title / slide count / page size / element count / text length / format. Esc + click-outside close. |
-| 2 | Slide-bar right-click menu       | -       | -                          | ⏳ pending  | **Feature**. Parallel-agent run blocked by org usage limit. Picking up sequentially next turn. |
+| 2 | Slide-bar right-click menu       | main    | `main`                     | ✅ landed   | **Feature**. Right-click thumbnail → New / Duplicate / Delete. DOM-walks to find the thumbnail's slide-index span; suppresses native context menu. |
 | 3 | Image export round-trip          | -       | -                          | ⏳ pending  | **Fidelity**. Parallel-agent run blocked by org usage limit. Picking up sequentially next turn. |
 
 Parallel agent dispatch hit the org's monthly usage limit (3 spawned, 0 progress). Sprint 1 is being completed sequentially on `main`.

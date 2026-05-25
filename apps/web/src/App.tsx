@@ -13,6 +13,7 @@ import { SlideShow } from './shell/SlideShow';
 import { NotesPanel } from './shell/NotesPanel';
 import { ThemePicker } from './shell/ThemePicker';
 import { PropertiesDialog } from './shell/PropertiesDialog';
+import { SlideContextMenu } from './shell/SlideContextMenu';
 import { dispatchSlideCommand } from './univer/commands';
 import { useCollabBridge } from './collab/CollabProvider';
 
@@ -239,6 +240,7 @@ export function App() {
         onClose={() => setPropertiesOpen(false)}
         fallback={snapshot}
       />
+      <SlideContextMenu />
     </>
   );
 }

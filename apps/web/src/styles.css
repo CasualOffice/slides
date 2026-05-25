@@ -678,6 +678,52 @@ button:disabled { cursor: not-allowed; }
   text-align: left;
 }
 
+/* ============================================================= Slide context menu */
+
+.cs-slide-context {
+  position: fixed;
+  z-index: 80;
+  margin: 0;
+  padding: 6px;
+  min-width: 200px;
+  list-style: none;
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-2);
+}
+
+.cs-slide-context__item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--cs-text);
+  border-radius: var(--cs-radius);
+  text-align: left;
+}
+.cs-slide-context__item:hover { background: var(--cs-hover); }
+.cs-slide-context__item .material-symbols-outlined { color: var(--cs-text-mute); }
+
+.cs-slide-context__item--danger { color: #b91c1c; }
+.cs-slide-context__item--danger:hover { background: #fee2e2; }
+.cs-slide-context__item--danger .material-symbols-outlined { color: #b91c1c; }
+
+.cs-slide-context__shortcut {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--cs-text-mute);
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+}
+
+.cs-slide-context__sep {
+  height: 1px;
+  background: var(--cs-border-2);
+  margin: 4px 0;
+}
+
 /* ============================================================= Properties dialog */
 
 .cs-properties__backdrop {
