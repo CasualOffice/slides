@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://slide.schnsrw.live/sitemap.xml

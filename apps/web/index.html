@@ -3,9 +3,134 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Casual Slides — PowerPoint-flavored web presentations</title>
-    <meta name="description" content="Web-based PowerPoint-equivalent with real-time co-editing. Open source (Apache-2.0)." />
+    <title>Casual Slides — PowerPoint-flavored web presentations · Open source</title>
+    <meta
+      name="description"
+      content="Open-source web presentation editor with .pptx round-trip, real-time co-editing, masters/layouts, animations, and a self-hosted Docker image. Looks and behaves like Microsoft PowerPoint. Apache-2.0."
+    />
+    <meta name="author" content="Sachin Sarwa" />
+    <meta name="theme-color" content="#B7472A" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Casual Slides" />
+    <meta property="og:title" content="Casual Slides — PowerPoint-flavored web presentations" />
+    <meta
+      property="og:description"
+      content="Open .pptx in the browser, edit like the web, save back. Real-time co-editing. Self-host via Docker. Open source (Apache-2.0)."
+    />
+    <meta property="og:url" content="https://slide.schnsrw.live/" />
+    <meta property="og:image" content="https://slide.schnsrw.live/og.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Casual Slides — PowerPoint-flavored web presentations by Sachin Sarwa" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Casual Slides — PowerPoint-flavored web presentations" />
+    <meta
+      name="twitter:description"
+      content="Open .pptx in the browser, edit like the web, save back. Real-time co-editing. Self-host via Docker. Open source."
+    />
+    <meta name="twitter:image" content="https://slide.schnsrw.live/og.png" />
+    <meta name="twitter:image:alt" content="Casual Slides — PowerPoint-flavored web presentations" />
+
+    <meta
+      name="robots"
+      content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1"
+    />
+    <meta
+      name="keywords"
+      content="web presentation, PowerPoint for the web, pptx editor, open-source presentation, self-hosted presentation, real-time presentation, collaborative slides, Univer OSS, Yjs, Hocuspocus, Docker presentation, Apache-2.0, Casual Slides, Sachin Sarwa"
+    />
+
+    <link rel="canonical" href="https://slide.schnsrw.live/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+
+    <!--
+      JSON-LD: SoftwareApplication + Person + WebSite. Mirrors the
+      shape used by the sister sheet site so the LLM/Google indexers
+      see a coherent family.
+    -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://slide.schnsrw.live/#app",
+            "name": "Casual Slides",
+            "alternateName": "casual-slides",
+            "applicationCategory": "BusinessApplication",
+            "applicationSubCategory": "PresentationApplication",
+            "operatingSystem": "Web Browser",
+            "url": "https://slide.schnsrw.live/",
+            "codeRepository": "https://github.com/schnsrw/slides",
+            "softwareVersion": "0.0.0",
+            "license": "https://www.apache.org/licenses/LICENSE-2.0",
+            "description": "Open-source, self-hostable web presentation editor that opens and saves native .pptx with real-time multi-user co-editing. Behaves like Microsoft PowerPoint — ribbon, slide-panel thumbnails, file-centric workflow. Built on Univer OSS (Apache-2.0) with a custom Office-style shell and bespoke pptx I/O. Sister product to Casual Sheets.",
+            "image": "https://slide.schnsrw.live/og.png",
+            "screenshot": "https://slide.schnsrw.live/og.png",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock"
+            },
+            "author": { "@id": "https://schnsrw.live/#person" },
+            "creator": { "@id": "https://schnsrw.live/#person" },
+            "publisher": { "@id": "https://schnsrw.live/#person" },
+            "featureList": [
+              "Open and save native .pptx files (planned)",
+              "Real-time multi-user co-editing via Yjs and Hocuspocus (planned)",
+              "PowerPoint-shaped slide model — pages, masters, layouts, notes",
+              "Page elements: text frames, shapes, images, tables, charts, lines, video (rolling)",
+              "Animations and transitions (planned)",
+              "Presenter mode with speaker view + notes + timer (planned)",
+              "Self-hostable Docker image — same self-host platform as Casual Sheets (planned)",
+              "Anonymous room URLs with optional password-protected co-edit (planned)"
+            ],
+            "softwareRequirements": "Modern desktop browser (Chrome, Firefox, Safari, Edge). Docker 20+ for self-hosting (planned).",
+            "isAccessibleForFree": true,
+            "keywords": "presentation, pptx editor, open source, real-time, co-editing, self-hosted, Docker, Univer OSS, Yjs"
+          },
+          {
+            "@type": "Person",
+            "@id": "https://schnsrw.live/#person",
+            "name": "Sachin Sarwa",
+            "url": "https://schnsrw.live/",
+            "sameAs": [
+              "https://github.com/schnsrw",
+              "https://hub.docker.com/u/schnsrw"
+            ]
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://slide.schnsrw.live/#website",
+            "url": "https://slide.schnsrw.live/",
+            "name": "Casual Slides",
+            "publisher": { "@id": "https://schnsrw.live/#person" }
+          }
+        ]
+      }
+    </script>
+
+    <!-- Inter for UI + Material Symbols Outlined for icons. preconnect
+         cuts ~100 ms off the first font request. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300..700,0..1,-50..200&display=block"
+    />
   </head>
   <body>
     <div id="root"></div>
