@@ -473,6 +473,107 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     ).toBe(true);
   });
 
+  test('pptx import preserves text props (size/bold/color) + images', async ({ page }) => {
+    // Round-trip a deck with a styled text frame and an image, then
+    // assert the importer extracted the rich-text props and the image
+    // bytes back out. Catches fidelity regressions in pptx-import.ts.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(800);
+
+    const PNG_1x1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+    const result = await page.evaluate(async (dataUri) => {
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          export(snapshot: unknown): Promise<{ blob: Blob; fileName: string }>;
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      const client = (window as unknown as W).__casualSlides_getPptxClient();
+      const snapshot = {
+        id: 'roundtrip-fidelity',
+        title: 'roundtrip fidelity',
+        pageSize: { width: 960, height: 540 },
+        body: {
+          pageOrder: ['p1'],
+          pages: {
+            p1: {
+              id: 'p1',
+              pageType: 0,
+              zIndex: 1,
+              title: 'p1',
+              description: '',
+              pageBackgroundFill: { rgb: 'rgb(255,255,255)' },
+              pageElements: {
+                'txt-1': {
+                  id: 'txt-1',
+                  zIndex: 1,
+                  left: 80, top: 100, width: 800, height: 100,
+                  title: '', description: '',
+                  type: 2,                           // TEXT
+                  richText: {
+                    text: 'Round-trip me',
+                    fs: 30,
+                    bl: 1,
+                    cl: { rgb: '#FF0000' },
+                  },
+                },
+                'img-1': {
+                  id: 'img-1',
+                  zIndex: 2,
+                  left: 100, top: 300, width: 200, height: 200,
+                  title: '', description: '',
+                  type: 1,                           // IMAGE
+                  image: { imageProperties: { contentUrl: dataUri } },
+                },
+              },
+            },
+          },
+        },
+      };
+      const { blob } = await client.export(snapshot);
+      const buf = await blob.arrayBuffer();
+      const reimported = await client.import(buf, 'roundtrip.pptx');
+      return reimported;
+    }, PNG_1x1);
+
+    // Narrow into the re-imported structure.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = result;
+    const pages = r?.body?.pages ?? {};
+    const firstPage = pages[r?.body?.pageOrder?.[0]];
+    expect(firstPage, 'first page exists').toBeTruthy();
+    const elements = Object.values(firstPage.pageElements ?? {});
+    expect(elements.length, 'page has elements').toBeGreaterThan(0);
+
+    // Find the text element. It should retain fs (30 pt) and bold (1).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text = elements.find((e: any) => e.type === 2);
+    expect(text, 're-imported text element').toBeTruthy();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((text as any).richText?.fs).toBe(30);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((text as any).richText?.bl).toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((text as any).richText?.text).toContain('Round-trip me');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const colorHex = ((text as any).richText?.cl?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(colorHex, 'color round-trips through OOXML srgbClr').toBe('FF0000');
+
+    // Find the image element — contentUrl should be a `data:image/` URI
+    // synthesized from the extracted ppt/media/* bytes.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const img = elements.find((e: any) => e.type === 1);
+    expect(img, 're-imported image element').toBeTruthy();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((img as any).image?.imageProperties?.contentUrl).toMatch(/^data:image\//);
+  });
+
   test('File → Properties shows deck metadata', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(

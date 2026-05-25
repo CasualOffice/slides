@@ -24,7 +24,7 @@ Each sprint balances feature + fidelity work — we are an editor as well as a p
 |---|----------------------------------|-------|----------|-------|
 | 4 | Background color picker          | main  | ✅ landed | Feature. Toolbar "Background" → 16-chip palette popover + custom color input + "Apply to all" toggle. Dispatches `slide.mutation.update-page` for the active slide (or every page when toggle on). |
 | 5 | Selection-aware text formatting  | -     | planned  | Feature. Bold/Italic/Underline buttons active when a text frame is selected. Needs UX design (floating context bar vs sticky toolbar). |
-| 6 | Multi-run rich text (import)     | -     | planned  | Fidelity. Parse `<a:r>` runs into Univer's `IDocumentData`. Big win on real pptx. |
+| 6 | Pptx import fidelity — wave 1    | main  | ✅ landed | Fidelity. Re-imported decks were "text only, no properties, images vanished". Wave 1 lands (a) first-run text props (size / bold / italic / underline / color from `<a:rPr>` + `<a:solidFill><a:srgbClr>`) and (b) image extraction — `<p:pic><a:blip r:embed>` resolves via per-slide rels file to `ppt/media/*` bytes, returned as `data:image/<ext>;base64,…`. Element IDs now per-page-unique (`s${n}-el-${z}`). Wave 2 (multi-run rich text → `IDocumentData`) deferred. |
 | 7 | Recent files (IndexedDB)         | -     | planned  | Feature. Last 10 decks on landing; File menu submenu. |
 | 8 | About dialog                     | -     | planned  | Feature. Help → About — version, repo, license. |
 | 9 | Slide layouts                    | -     | planned  | Feature. "New Slide" dropdown with 6 layout templates. |
