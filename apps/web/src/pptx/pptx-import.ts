@@ -2,8 +2,8 @@ import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
 import type { IPageElement, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
-import type { IBullet, IDocumentData, IParagraph, ITextRun, IParagraphStyle } from '@univerjs/core';
-import { BorderStyleTypes, HorizontalAlign, PresetListType } from '@univerjs/core';
+import type { IBullet, IDocumentData, IDocumentStyle, IParagraph, ITextRun, IParagraphStyle } from '@univerjs/core';
+import { BorderStyleTypes, HorizontalAlign, PresetListType, VerticalAlign } from '@univerjs/core';
 
 // pptx import — JSZip + fast-xml-parser → ISlideData.
 //
@@ -473,6 +473,50 @@ function parseBullet(pPr: unknown, listIdSeed: string, level: number): IBullet |
   return null;
 }
 
+// Wave 7b — text-frame body properties (C10 insets + C11 vertical
+// anchor). OOXML's `<a:bodyPr lIns="…" tIns="…" rIns="…" bIns="…"
+// anchor="t|ctr|b">` controls the inset between the frame's bounding
+// box and its text, plus where the text aligns vertically inside.
+//
+// Defaults (per OOXML §17.16.10): lIns=91440 (0.1in), tIns=45720
+// (0.05in), rIns=91440, bIns=45720, anchor=t. We only emit non-default
+// values to keep the documentStyle small.
+function parseBodyPr(bodyPr: unknown): Partial<IDocumentStyle> | null {
+  if (!bodyPr || typeof bodyPr !== 'object') return null;
+  const node = bodyPr as XmlNode;
+  const out: Partial<IDocumentStyle> = {};
+  const readEmu = (key: string): number | undefined => {
+    const raw = node[key];
+    if (raw === undefined) return undefined;
+    const n = parseInt(String(raw), 10);
+    return Number.isFinite(n) ? n / EMU_PER_PIXEL : undefined;
+  };
+  const lIns = readEmu('@lIns');
+  const tIns = readEmu('@tIns');
+  const rIns = readEmu('@rIns');
+  const bIns = readEmu('@bIns');
+  if (lIns !== undefined) out.marginLeft = lIns;
+  if (tIns !== undefined) out.marginTop = tIns;
+  if (rIns !== undefined) out.marginRight = rIns;
+  if (bIns !== undefined) out.marginBottom = bIns;
+
+  const anchor = node['@anchor'];
+  let verticalAlign: VerticalAlign | null = null;
+  if (typeof anchor === 'string') {
+    switch (anchor) {
+      case 't': verticalAlign = VerticalAlign.TOP; break;
+      case 'ctr': verticalAlign = VerticalAlign.MIDDLE; break;
+      case 'b': verticalAlign = VerticalAlign.BOTTOM; break;
+      default: verticalAlign = null;
+    }
+  }
+  if (verticalAlign !== null) {
+    out.renderConfig = { ...(out.renderConfig ?? {}), verticalAlign };
+  }
+
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 // Wave 7 — paragraph space-before / space-after (C5). Same shape as
 // lnSpc: either `<a:spcPct val=…>` (percent * 1000) or
 // `<a:spcPts val=…>` (100ths of a point). Univer's `spaceAbove` /
@@ -646,11 +690,15 @@ function extractRichDoc(
   // Univer convention: the section-final `\n` sits past the last \r.
   dataStream.push('\n');
 
+  // C10 + C11 — text-frame insets and vertical anchor from `<a:bodyPr>`.
+  const bodyPr = findChild(txBody, 'a:bodyPr');
+  const docStyle = parseBodyPr(bodyPr) ?? {};
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rich: IDocumentData = {
     id: `${elementId}-doc`,
     body: { dataStream: dataStream.join(''), textRuns, paragraphs },
-    documentStyle: {},
+    documentStyle: docStyle,
   } as any;
 
   // Flat fallback fields = layout/master defaults spread under first

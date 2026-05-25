@@ -1438,6 +1438,86 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(paraStyle?.spaceBelow?.v, 'spcAft 600 → 6pt').toBe(6);
   });
 
+  test('pptx import wave 7b — bodyPr insets + vertical anchor (C10 + C11)', async ({ page }) => {
+    // Text frame with custom bodyPr insets and anchor="ctr".
+    // lIns/tIns/rIns/bIns are EMU; anchor=ctr → VerticalAlign.MIDDLE (2).
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      // bodyPr with lIns=457200 (48px), tIns=228600 (24px), rIns=914400
+      // (96px), bIns=457200 (48px), anchor="ctr".
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="t"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="914400" y="914400"/><a:ext cx="4000000" cy="2000000"/></a:xfrm></p:spPr>` +
+        `<p:txBody>` +
+        `<a:bodyPr lIns="457200" tIns="228600" rIns="914400" bIns="457200" anchor="ctr"/>` +
+        `<a:lstStyle/>` +
+        `<a:p><a:r><a:rPr lang="en-US"/><a:t>centered</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave7b.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text: any = Object.values(firstPage.pageElements ?? {})[0];
+    const docStyle = text?.richText?.rich?.documentStyle;
+    expect(docStyle, 'documentStyle populated from bodyPr').toBeTruthy();
+
+    // C10 — insets in px (EMU / 9525).
+    expect(docStyle.marginLeft, 'lIns=457200 → 48 px').toBeCloseTo(48, 0);
+    expect(docStyle.marginTop, 'tIns=228600 → 24 px').toBeCloseTo(24, 0);
+    expect(docStyle.marginRight, 'rIns=914400 → 96 px').toBeCloseTo(96, 0);
+    expect(docStyle.marginBottom, 'bIns=457200 → 48 px').toBeCloseTo(48, 0);
+
+    // C11 — anchor="ctr" → VerticalAlign.MIDDLE (2).
+    expect(docStyle.renderConfig?.verticalAlign, 'anchor=ctr → MIDDLE (2)').toBe(2);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

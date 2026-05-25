@@ -10,9 +10,9 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7)
+## Snapshot — 2026-05-26 (post wave 7b)
 
-**30 / 87 items at ✅, 7 at ⚠️.** Wave 7 lands C5 (`<a:spcBef>` / `<a:spcAft>` → spaceAbove/spaceBelow), D15 (`<a:prstDash>` → `BorderStyleTypes`), and degraded gradient fallback for D9 / A3 — `<a:gradFill>` shapes and slide backgrounds now render with the first colour stop instead of dropping to white. True multi-stop gradient rendering is fork-patch territory (`IColorStyle` has no gradient slot); first-stop degradation keeps brand colour visible without invasive changes. Remaining "looks wrong" gaps are concentrated in shadow / glow effects (D18-D20), bodyPr layout (C10-C14), and Univer-blocked items (G1 tables, H1 charts).
+**32 / 87 items at ✅, 7 at ⚠️.** Wave 7b lands the text-frame layout pair: C10 (`<a:bodyPr lIns/tIns/rIns/bIns>` → `documentStyle.margin*`) and C11 (`<a:bodyPr anchor>` → `renderConfig.verticalAlign`). Combined with waves 4 → 7, every common content surface — placeholder titles, bulleted bodies with mixed-style runs, centered headers, themed shapes with rotation and dashed borders, gradient backgrounds, multi-inset framed text — now survives a real-world pptx round-trip. The remaining gaps are either fork-patch territory (D9/A3 true gradients, D18-D20 effects, G1/H1 tables/charts) or low-frequency in business decks (D6 custGeom, K5-K8 comments / ink / SmartArt).
 
 ## A. Slide-level
 
@@ -65,8 +65,8 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | C7 | Bullets — auto-numbered (`<a:buAutoNum>`) | ✅ | Med | Med | Wave 6b — `<a:buAutoNum>` → `IBullet { listType: ORDER_LIST, listId: <elementId>-ord, nestingLevel }`. `@type` (arabicPeriod / romanUcPeriod / …) not yet read; restarts per text frame. |
 | C8 | Bullet indent levels (`<a:pPr lvl>`) | ✅ | Med | Med | Wave 6b — `@lvl` clamped to 0..8, flows into `IBullet.nestingLevel`. |
 | C9 | RTL paragraphs (`<a:pPr rtl="1">`) | ❌ | Low | Low | — |
-| C10 | Text frame insets (`<a:bodyPr ins{L,T,R,B}>`) | ❌ | Low | Low | — |
-| C11 | Text frame vertical anchor (`<a:bodyPr anchor>`) | ❌ | Med | Low | — |
+| C10 | Text frame insets (`<a:bodyPr ins{L,T,R,B}>`) | ✅ | Low | Low | Wave 7b — `parseBodyPr` reads EMU → px and lands on `documentStyle.marginLeft/Top/Right/Bottom`. |
+| C11 | Text frame vertical anchor (`<a:bodyPr anchor>`) | ✅ | Med | Low | Wave 7b — `anchor=t/ctr/b` → `documentStyle.renderConfig.verticalAlign` (TOP / MIDDLE / BOTTOM). |
 | C12 | Text frame rotation (`<a:bodyPr rot>`) | ❌ | Low | Low | — |
 | C13 | Text frame autofit (`<a:normAutofit>`) | ❌ | Med | Med | — |
 | C14 | Text wrap (`<a:bodyPr wrap>`) | ❌ | Low | Low | — |
