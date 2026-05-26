@@ -183,7 +183,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
-| K1 | Title / author / company metadata | ⚠️ | Low | Low | Set on export (`Casual Slides` author); not read on import. |
+| K1 | Title / author / company metadata | ✅ | Low | Low | Wave 8c — `extractCoreProps` reads `docProps/core.xml` for `<dc:title>`; when present and non-empty, it becomes `snapshot.title`. Filename remains the fallback. `dc:creator` / `dc:description` / `dc:subject` are also harvested into `coreProps` for future UI surfacing. |
 | K2 | Custom properties | ❌ | Low | Low | — |
 | K3 | Default text style (`<p:defaultTextStyle>`) | ❌ | Med | Med | — |
 | K4 | Headers / footers | ❌ | Low | Med | — |

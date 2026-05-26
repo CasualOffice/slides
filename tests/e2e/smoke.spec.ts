@@ -3133,6 +3133,75 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(bodyRun?.ts?.ff, 'rich body run carries minor font').toBe('Body Serif');
   });
 
+  test('pptx import wave 8c — deck metadata from docProps/core.xml (K1)', async ({ page }) => {
+    // Hand-roll a deck with docProps/core.xml carrying dc:title. After
+    // import, snapshot.title comes from the XML, not from the filename.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const emptyRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+      // K1 — docProps/core.xml. The canonical OOXML namespaces are
+      // cp / dc / dcterms / dcmitype / xsi.
+      const core =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
+        `<dc:title>Q3 Roadmap Review</dc:title>` +
+        `<dc:creator>Pat Author</dc:creator>` +
+        `<dc:description>Internal-only briefing deck.</dc:description>` +
+        `<dc:subject>Roadmap</dc:subject>` +
+        `</cp:coreProperties>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', emptyRels);
+      zip.file('docProps/core.xml', core);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      const client = (window as unknown as W).__casualSlides_getPptxClient();
+      return await client.import(buf, 'fallback-filename.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    // K1 — title from <dc:title>, not from the filename.
+    expect(r.title, 'snapshot.title from dc:title').toBe('Q3 Roadmap Review');
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

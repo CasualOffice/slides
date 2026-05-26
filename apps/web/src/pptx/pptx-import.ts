@@ -2355,6 +2355,36 @@ async function extractSlideBackgroundImage(
   };
 }
 
+// K1 — read `docProps/core.xml` for `<dc:title>`. When present (and
+// non-empty), this becomes the deck's display title instead of the
+// filename. Other metadata (creator / description / subject) is
+// captured here too in case future UI surfaces them; for now we only
+// thread the title back into `snapshot.title`.
+function extractCoreProps(coreXml: string): { title?: string; creator?: string; description?: string; subject?: string } {
+  const out: { title?: string; creator?: string; description?: string; subject?: string } = {};
+  const parsed = parser.parse(coreXml) as XmlNode;
+  const root = findChild(parsed, 'cp:coreProperties') as XmlNode | undefined;
+  if (!root) return out;
+  const readText = (key: string): string | undefined => {
+    const node = findChild(root, key);
+    if (typeof node === 'string') return node;
+    if (node && typeof node === 'object') {
+      const t = (node as XmlNode)['#text'];
+      if (typeof t === 'string') return t;
+    }
+    return undefined;
+  };
+  const title = readText('dc:title');
+  const creator = readText('dc:creator');
+  const description = readText('dc:description');
+  const subject = readText('dc:subject');
+  if (title && title.length > 0) out.title = title;
+  if (creator && creator.length > 0) out.creator = creator;
+  if (description && description.length > 0) out.description = description;
+  if (subject && subject.length > 0) out.subject = subject;
+  return out;
+}
+
 export async function importPptxToSlides(file: ArrayBuffer, fileName: string): Promise<ISlideData> {
   const zip = await JSZip.loadAsync(file);
 
@@ -2371,6 +2401,12 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     width: emu2px((sldSz?.['@cx'] as string | undefined) ?? '9144000'),
     height: emu2px((sldSz?.['@cy'] as string | undefined) ?? '6858000'),
   };
+
+  // K1 — `docProps/core.xml` → snapshot.title (via <dc:title>). When
+  // absent / empty, we fall back to the filename below. Reading happens
+  // up here so it's available alongside pageSize before the slide loop.
+  const coreXml = await zip.file('docProps/core.xml')?.async('string');
+  const coreProps = coreXml ? extractCoreProps(coreXml) : {};
 
   const sldIdLst = findChild(presentation, 'p:sldIdLst');
   const sldIds = toArray(findChild(sldIdLst, 'p:sldId'));
@@ -2540,9 +2576,13 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     Object.keys(rawInk).length > 0 ||
     Object.keys(rawCharts).length > 0;
 
+  // K1 — prefer the deck-authored title from docProps/core.xml; fall
+  // back to filename when absent so legacy decks still round-trip.
+  const title = coreProps.title ?? fileName.replace(/\.pptx$/i, '');
+
   return {
     id: `imported-${Date.now().toString(36)}`,
-    title: fileName.replace(/\.pptx$/i, ''),
+    title,
     pageSize,
     body: { pages, pageOrder },
     ...(hasPassthrough
