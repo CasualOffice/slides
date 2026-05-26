@@ -3950,6 +3950,113 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(chartEl.chart.series[0].values, 'series values').toEqual([10, 20, 30]);
   });
 
+  test('pptx import wave 9e — image colour adjust + effects (E5 + E6)', async ({ page }) => {
+    // Slide carries <p:pic> with <a:blip> containing:
+    //   <a:lum bright="20000" contrast="-10000"/>  → +20 / -10 %
+    //   <a:grayscl/>
+    //   <a:duotone><a:srgbClr val="FF0000"/><a:srgbClr val="0000FF"/></a:duotone>
+    //   <a:effectLst><a:outerShdw blurRad="50800" dist="38100"><a:srgbClr val="000000"/></a:outerShdw></a:effectLst>
+    // After import, imageProperties carries brightness, contrast,
+    // grayscale, duotone, and effectLst.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      // Minimal 1×1 PNG (red pixel) base64 → bytes for the image part.
+      const png1x1Red = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9Q DwADhgGAWjR9awAAAABJRU5ErkJggg=='.replace(/\s+/g, '');
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:pic>` +
+        `<p:nvPicPr><p:cNvPr id="2" name="pic1"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>` +
+        `<p:blipFill>` +
+        `<a:blip r:embed="rId2">` +
+        `<a:lum bright="20000" contrast="-10000"/>` +
+        `<a:grayscl/>` +
+        `<a:duotone>` +
+        `<a:srgbClr val="FF0000"/>` +
+        `<a:srgbClr val="0000FF"/>` +
+        `</a:duotone>` +
+        `</a:blip>` +
+        `<a:stretch><a:fillRect/></a:stretch>` +
+        `</p:blipFill>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="1828800" cy="1371600"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+        `<a:effectLst>` +
+        `<a:outerShdw blurRad="50800" dist="38100" dir="2700000">` +
+        `<a:srgbClr val="000000"/>` +
+        `</a:outerShdw>` +
+        `</a:effectLst>` +
+        `</p:spPr>` +
+        `</p:pic>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>` +
+        `</Relationships>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/media/image1.png', png1x1Red, { base64: true });
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave9e-imgcolor.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pic = Object.values(firstPage.pageElements ?? {}).find((e: any) => e.type === 1) as any;
+    expect(pic, 'image element extracted').toBeTruthy();
+    const ip = pic.image?.imageProperties;
+    expect(ip, 'imageProperties present').toBeTruthy();
+    // E5 — lum bright="20000" → 0.2; contrast="-10000" → -0.1.
+    expect(ip.brightness, 'brightness +0.2').toBeCloseTo(0.2, 3);
+    expect(ip.contrast, 'contrast -0.1').toBeCloseTo(-0.1, 3);
+    expect(ip.grayscale, 'grayscale flag set').toBe(true);
+    expect(ip.duotone, 'duotone hex pair').toBeTruthy();
+    expect((ip.duotone[0] ?? '').toUpperCase().replace('#', '')).toBe('FF0000');
+    expect((ip.duotone[1] ?? '').toUpperCase().replace('#', '')).toBe('0000FF');
+    // E6 — effectLst shadow.
+    expect(ip.effectLst, 'effectLst present').toBeTruthy();
+    expect(ip.effectLst.outerShdw, 'outerShdw decoded').toBeTruthy();
+    expect((ip.effectLst.outerShdw.color?.rgb ?? '').toUpperCase().replace('#', '')).toBe('000000');
+    expect(ip.effectLst.outerShdw.blurRad).toBe(50800);
+    expect(ip.effectLst.outerShdw.dist).toBe(38100);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

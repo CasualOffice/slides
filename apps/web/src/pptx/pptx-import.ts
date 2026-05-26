@@ -2635,6 +2635,68 @@ async function processPicNode(
     }
   }
 
+  // E5 — image colour adjust children of `<a:blip>`:
+  //   <a:lum bright="N" contrast="N"/> — N is thousandths of a percent
+  //                                      (e.g. 20000 = +20 %, -10000 = -10 %).
+  //                                      Both attrs are independent and
+  //                                      either may be absent (defaults 0).
+  //   <a:grayscl/>                     — render the image as grayscale.
+  //                                      Univer has no native grayscale flag;
+  //                                      we approximate via brightness=-1
+  //                                      sentinel + a duotone-like reduction
+  //                                      is too aggressive, so we instead
+  //                                      stash `grayscale: true` under
+  //                                      imageProperties for future renderer
+  //                                      work. Doesn't affect existing
+  //                                      brightness / contrast consumers.
+  //   <a:duotone>…</a:duotone>          — two-colour map; we capture the
+  //                                      pair of resolved hexes as
+  //                                      imageProperties.duotone = [hex, hex]
+  //                                      so the renderer can apply the
+  //                                      duotone shader (also additive —
+  //                                      brightness / contrast still flow).
+  // PowerPoint stores brightness / contrast as signed fractions: -1..1
+  // after dividing by 100000. Univer's IImageProperties has plain
+  // `brightness` + `contrast` numbers — pass through the fractional form
+  // since the renderer interprets sign + magnitude.
+  let brightness: number | undefined;
+  let contrast: number | undefined;
+  const lum = findChild(blip, 'a:lum') as XmlNode | undefined;
+  if (lum) {
+    const brightRaw = lum['@bright'];
+    if (brightRaw !== undefined) {
+      const n = parseInt(String(brightRaw), 10);
+      if (Number.isFinite(n) && n !== 0) brightness = n / 100_000;
+    }
+    const contrastRaw = lum['@contrast'];
+    if (contrastRaw !== undefined) {
+      const n = parseInt(String(contrastRaw), 10);
+      if (Number.isFinite(n) && n !== 0) contrast = n / 100_000;
+    }
+  }
+  const grayscale = findChild(blip, 'a:grayscl') !== undefined;
+  const duotoneNode = findChild(blip, 'a:duotone') as XmlNode | undefined;
+  let duotone: [string, string] | undefined;
+  if (duotoneNode) {
+    // <a:duotone> contains two colour-choice children (srgbClr / schemeClr).
+    // fast-xml-parser groups same-named children into arrays — read both
+    // by scanning known carriers.
+    const colours: string[] = [];
+    for (const tag of ['a:srgbClr', 'a:schemeClr', 'a:prstClr', 'a:sysClr'] as const) {
+      const nodes = toArray((duotoneNode as XmlNode)[tag]);
+      for (const node of nodes) {
+        if (!node) continue;
+        // Wrap under the original tag so readColor's direct-child path can
+        // pick it up.
+        const wrapped = { [tag]: node } as XmlNode;
+        const col = readColor(wrapped, reg.theme);
+        if (col) colours.push(col);
+      }
+      if (colours.length >= 2) break;
+    }
+    if (colours.length >= 2) duotone = [colours[0], colours[1]];
+  }
+
   // E2 — linked images. `<a:blip r:link="rIdN"/>` resolves to an
   // external Target URL via the slide's rels (rather than embedded
   // bytes under `ppt/media/`). For http(s) URLs we pass the URL
@@ -2672,6 +2734,14 @@ async function processPicNode(
     return null;
   }
 
+  // E6 — image effectLst (drop shadow, glow, reflection, blur). Same
+  // decoder as the wave-7m shape effectLst; lands on
+  // imageProperties.effectLst (additive — Univer's IImageProperties
+  // doesn't declare the field but the renderer can read it off the
+  // pageElement and Object.assign with the future fork patch).
+  const picSpPr = findChild(pic, 'p:spPr');
+  const picEffectLst = parseEffectList(picSpPr, reg.theme);
+
   const zIndex = z.next;
   z.next += 1;
   return {
@@ -2693,6 +2763,11 @@ async function processPicNode(
         contentUrl,
         ...(cropProperties ? { cropProperties } : {}),
         ...(transparency !== undefined ? { transparency } : {}),
+        ...(brightness !== undefined ? { brightness } : {}),
+        ...(contrast !== undefined ? { contrast } : {}),
+        ...(grayscale ? { grayscale: true } : {}),
+        ...(duotone ? { duotone } : {}),
+        ...(picEffectLst ? { effectLst: picEffectLst } : {}),
       } as any,
     },
   };
