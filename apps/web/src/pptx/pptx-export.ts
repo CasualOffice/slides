@@ -177,6 +177,60 @@ function emitTextElement(slide: pptxgen.Slide, element: IPageElement, richText: 
   });
 }
 
+// G1-G4 — emit a TABLE page element through PptxGenJS `addTable`. Maps:
+//  • cells with rowSpan/colSpan → PptxGenJS rowspan/colspan (skip merge
+//    target cells that are just placeholders — hMerge/vMerge=true)
+//  • fillRgb → cell.options.fill
+//  • outlineRgb/outlineWeight → cell.options.border
+//  • text (or rich first-run text) → cell.text
+function emitTableElement(slide: pptxgen.Slide, element: IPageElement): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const table = (element as any).table;
+  if (!table?.rows?.length) return;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type TableRow = { height?: number; cells: Array<any> };
+  const rows: TableRow[] = table.rows;
+
+  const pgRows: pptxgen.TableRow[] = [];
+  for (const row of rows) {
+    const pgCells: pptxgen.TableCell[] = [];
+    for (const cell of row.cells) {
+      // Skip merge-target cells — they don't render content, the
+      // origin cell's rowspan/colspan covers them.
+      if (cell.hMerge || cell.vMerge) {
+        pgCells.push({ text: '' });
+        continue;
+      }
+      const opts: pptxgen.TableCellProps = {};
+      if (typeof cell.rowSpan === 'number' && cell.rowSpan > 1) opts.rowspan = cell.rowSpan;
+      if (typeof cell.colSpan === 'number' && cell.colSpan > 1) opts.colspan = cell.colSpan;
+      if (typeof cell.fillRgb === 'string') {
+        opts.fill = { color: normalizeColor(cell.fillRgb, 'FFFFFF') };
+      }
+      if (typeof cell.outlineRgb === 'string') {
+        opts.border = {
+          color: normalizeColor(cell.outlineRgb, '000000'),
+          pt: cell.outlineWeight ?? 1,
+        } as pptxgen.BorderProps;
+      }
+      pgCells.push({ text: cell.text ?? '', options: opts });
+    }
+    pgRows.push(pgCells);
+  }
+
+  const opts: pptxgen.TableProps = {
+    x: px2in(element.left),
+    y: px2in(element.top),
+    w: px2in(element.width),
+    h: px2in(element.height),
+  };
+  if (Array.isArray(table.columnWidths) && table.columnWidths.length > 0) {
+    opts.colW = table.columnWidths.map((px: number) => px2in(px));
+  }
+  slide.addTable(pgRows, opts);
+}
+
 function emitPage(deck: pptxgen, page: ISlidePage) {
   // Only SLIDE-type pages are emitted as real pptx slides for now. Masters /
   // layouts / notes round-trip via the resources passthrough in P1+.
@@ -207,8 +261,16 @@ function emitPage(deck: pptxgen, page: ISlidePage) {
       emitImageElement(slide, element, element.image);
       continue;
     }
-    // TABLE / CHART / LINE / VIDEO — blocked on Gap 3 (page-element types
-    // missing in Univer Slides). Skipping is the right move.
+    // G1-G4 — native TABLE page element (Wave 7o).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (element.type === (6 as any) && (element as any).table) {
+      emitTableElement(slide, element);
+      continue;
+    }
+    // CHART / VIDEO — captured on import via passthrough; the chart XML
+    // rides via ISlideData.resources and is re-injected by
+    // restorePassthrough, but the slide-XML reference is not emitted
+    // (would need post-generation surgery on the slide XML). Future wave.
   }
 }
 
@@ -255,6 +317,7 @@ interface PptxRawPayload {
   comments?: Record<string, string>;
   diagrams?: Record<string, string>;
   ink?: Record<string, string>;
+  charts?: Record<string, string>;
   rels?: Record<string, string>;
 }
 
@@ -273,7 +336,7 @@ async function restorePassthrough(blob: Blob, snapshot: ISlideData): Promise<Blo
 
   // Restore only the categories PptxGenJS doesn't generate. Skipping
   // layouts/masters/themes preserves PptxGenJS's wired rels.
-  const restorableBuckets: Array<keyof PptxRawPayload> = ['notesSlides', 'comments', 'diagrams', 'ink', 'rels'];
+  const restorableBuckets: Array<keyof PptxRawPayload> = ['notesSlides', 'comments', 'diagrams', 'ink', 'charts', 'rels'];
   let hasAny = false;
   for (const key of restorableBuckets) {
     if (payload[key] && Object.keys(payload[key] ?? {}).length > 0) {

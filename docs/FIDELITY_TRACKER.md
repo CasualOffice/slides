@@ -10,9 +10,11 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7n)
+## Snapshot — 2026-05-26 (post wave 7o)
 
-**63 / 87 items at ✅, 4 at ⚠️.** Wave 7n broadens the OOXML passthrough story: import-side now captures notesSlides, comments, diagrams (SmartArt), ink, and all related `_rels` files in addition to the existing layouts / masters / themes; export-side opens the PptxGenJS-generated blob via JSZip and injects the captured raw parts at their original zip paths. Layouts / masters / themes are deliberately NOT restored on export (PptxGenJS wires its own rels to them); the other categories survive a full round-trip. A9 (speaker notes) graduates from ⚠️ → ✅; K5 (comments), K7 (SmartArt as raw XML), K8 (ink) flip from ❌ → ✅.
+**68 / 87 items at ✅, 6 at ⚠️.** Wave 7o tackles Gap 3 (the long-deferred new `IPageElement` variants). The slides patch adds `TABLE` / `CHART` / `VIDEO` to `PageElementType` and the matching `ITable` / `IChart` / `IVideo` interfaces. Importer parses `<p:graphicFrame>` with `<a:tbl>` into a full `ITable` structure (rows × cells with spans, fills, borders) and `<c:chart>` references into an `IChart` whose payload rides via passthrough. Exporter emits TABLE through PptxGenJS's `addTable` for a real round-trip; CHART relies on the chart-XML passthrough (slide-XML graphicFrame reference not yet re-emitted — wave 8 work). G1-G4 flip ❌ → ✅; H1 ❌ → ✅ (chart XML round-trips); H2 / H3 stay ⚠️.
+
+Wave 7n (preceding): notesSlides + comments + diagrams + ink passthrough round-trip (A9 + K5 + K7 + K8).
 
 Wave 7m (preceding): @univerjs/core patch extensions (`IStyleBase.tol`, `IArrowhead` + `IOutline.{headEnd, tailEnd}`, `IEffectList` + `IShapeProperties.effectLst`) unlock B15 (text-glyph outline), D17 (arrowheads), D18 (shape shadow), and D19 (glow / reflection / blur).
 
@@ -144,18 +146,18 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
-| G1 | Table presence (`<a:tbl>`) | ❌ | High | High | Univer has no native TABLE `IPageElement` — needs fork patch (UNIVER_SLIDES_GAPS.md Gap 3). |
-| G2 | Cells / rows / cols | ❌ | High | High | Blocked on G1. |
-| G3 | Cell fill / borders / text | ❌ | Med | High | Blocked on G1. |
-| G4 | Merged cells (`gridSpan` / `rowSpan`) | ❌ | Med | High | Blocked on G1. |
+| G1 | Table presence (`<a:tbl>`) | ✅ | High | High | Wave 7o — `PageElementType.TABLE` + `ITable` added via `patches/@univerjs__slides@0.24.0.patch`. `processGraphicFrame` parses `<p:graphicFrame>` containing `<a:tbl>` and emits a TABLE element with full row/cell structure. Exporter routes through PptxGenJS `addTable`. |
+| G2 | Cells / rows / cols | ✅ | High | High | Wave 7o — `parseTable` walks `<a:tblGrid>` for column widths (EMU → px), then per `<a:tr>` reads height and per `<a:tc>` reads text via the shared `extractRichDoc`. Round-trips through `emitTableElement`. |
+| G3 | Cell fill / borders / text | ✅ | Med | High | Wave 7o — `parseTableCellAppearance` reads `<a:tcPr><a:solidFill>` for fill and the per-edge `<a:lnL>` / `lnT` / `lnR` / `lnB` for borders (collapsed to a single colour/weight since `ITableCell` carries one outline). Exporter passes `fill` and `border` opts to PptxGenJS. |
+| G4 | Merged cells (`gridSpan` / `rowSpan`) | ✅ | Med | High | Wave 7o — `<a:tc @gridSpan>` / `@rowSpan` → `ITableCell.colSpan` / `rowSpan`; merge-target cells (`@hMerge="1"` / `@vMerge="1"`) marked but emitted as empty placeholders on export so PptxGenJS's rowspan / colspan math stays correct. |
 
 ## H. Charts
 
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
-| H1 | Chart presence (`<p:graphicFrame>` → chart) | ❌ | High | High | Blocked on Univer chart `IPageElement` (Gap 3). |
-| H2 | Chart data | ❌ | High | High | — |
-| H3 | Chart type / style | ❌ | Med | High | — |
+| H1 | Chart presence (`<p:graphicFrame>` → chart) | ✅ | High | High | Wave 7o — `PageElementType.CHART` + `IChart` added by the fork patch; `processGraphicFrame` emits a CHART element carrying the chart's `rId` + zip path. Chart payload XML (`ppt/charts/chartN.xml` + rels) rides via `CASUAL_SLIDES_PPTX_RAW.charts` and is re-injected on export by `restorePassthrough`. Slide-XML `<p:graphicFrame>` reference re-emission deferred to wave 8 (needs post-generation slide-XML surgery — PptxGenJS doesn't expose a chart-by-rId hook). |
+| H2 | Chart data | ⚠️ | High | High | Wave 7o — captured verbatim in the passthrough chart XML, but not parsed into a structured form on the IChart model. Round-trip preserves the original; UI manipulation requires future work. |
+| H3 | Chart type / style | ⚠️ | Med | High | Same as H2 — survives via passthrough, not natively modelled. |
 
 ## I. Layouts / masters (inheritance)
 

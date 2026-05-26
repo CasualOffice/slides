@@ -1740,6 +1740,16 @@ async function processSpTree(
     if (result) out.push(result);
   }
 
+  // G1-G4 + H1 — `<p:graphicFrame>` wraps tables (via `<a:tbl>`) and
+  // charts (via `<c:chart>`). Both share the graphicFrame xfrm + a
+  // `<a:graphicData>` with a uri discriminator. Walk once and dispatch
+  // per uri.
+  for (const gf of toArray(findChild(spTree, 'p:graphicFrame'))) {
+    if (!gf || typeof gf !== 'object') continue;
+    const result = processGraphicFrame(gf, reg, groupXfrm, pageOrdinal, z);
+    if (result) out.push(result);
+  }
+
   // <p:grpSp> — recurse. Compose this group's xfrm with the inherited
   // group transform so nested groups stack correctly.
   for (const grp of toArray(findChild(spTree, 'p:grpSp'))) {
@@ -1753,6 +1763,183 @@ async function processSpTree(
     // preserve the visual stack.
     await processSpTree(grp, reg, pageOrdinal, childXfrm, z, out);
   }
+}
+
+// G1-G4 — table parser. `<a:tbl>` carries:
+//   <a:tblGrid><a:gridCol w="EMU"/>…</a:tblGrid>  (column widths)
+//   <a:tr h="EMU">                                 (rows; h is row height)
+//     <a:tc gridSpan="N" rowSpan="N" hMerge vMerge>
+//       <a:txBody>…</a:txBody>                     (cell text)
+//       <a:tcPr>
+//         <a:solidFill><a:srgbClr val=…/></a:solidFill>  (cell fill)
+//         <a:lnL>…</a:lnL> / lnR / lnT / lnB         (per-edge borders;
+//                                                    we collapse to a
+//                                                    single colour/weight)
+//       </a:tcPr>
+//     </a:tc>
+//   </a:tr>
+function parseTableCellAppearance(tcPr: unknown, theme: ThemeMap | null): { fillRgb?: string; outlineRgb?: string; outlineWeight?: number } {
+  if (!tcPr) return {};
+  const out: { fillRgb?: string; outlineRgb?: string; outlineWeight?: number } = {};
+  const fill = readColor(tcPr, theme) ?? parseSrgbColor(tcPr);
+  if (fill) out.fillRgb = fill;
+  // Borders — left edge wins if present, else top, else right, else bottom.
+  // This is lossy on a per-edge basis but matches our single-colour cell
+  // border model. A future widening could surface per-edge.
+  for (const k of ['a:lnL', 'a:lnT', 'a:lnR', 'a:lnB'] as const) {
+    const ln = findChild(tcPr, k) as XmlNode | undefined;
+    if (!ln) continue;
+    const rgb = readColor(ln, theme) ?? parseSrgbColor(ln);
+    if (rgb && !out.outlineRgb) out.outlineRgb = rgb;
+    const w = ln['@w'];
+    if ((typeof w === 'string' || typeof w === 'number') && out.outlineWeight === undefined) {
+      const emu = parseInt(String(w), 10);
+      if (Number.isFinite(emu)) out.outlineWeight = emu / EMU_PER_PIXEL;
+    }
+    if (out.outlineRgb && out.outlineWeight !== undefined) break;
+  }
+  return out;
+}
+
+function parseTable(tbl: unknown, reg: ImageRegistry, elementId: string): { rows: Array<{ height?: number; cells: Array<{ text?: string; richText?: unknown; fillRgb?: string; outlineRgb?: string; outlineWeight?: number; colSpan?: number; rowSpan?: number; hMerge?: boolean; vMerge?: boolean }> }>; columnWidths?: number[] } {
+  const rows: Array<{ height?: number; cells: Array<{ text?: string; richText?: unknown; fillRgb?: string; outlineRgb?: string; outlineWeight?: number; colSpan?: number; rowSpan?: number; hMerge?: boolean; vMerge?: boolean }> }> = [];
+  const columnWidths: number[] = [];
+  const tblGrid = findChild(tbl, 'a:tblGrid');
+  for (const col of toArray(findChild(tblGrid, 'a:gridCol'))) {
+    if (!col || typeof col !== 'object') continue;
+    const w = (col as XmlNode)['@w'];
+    if (typeof w === 'string' || typeof w === 'number') {
+      const emu = parseInt(String(w), 10);
+      if (Number.isFinite(emu)) columnWidths.push(emu / EMU_PER_PIXEL);
+    }
+  }
+  let rowIdx = 0;
+  for (const tr of toArray(findChild(tbl, 'a:tr'))) {
+    if (!tr || typeof tr !== 'object') continue;
+    const trNode = tr as XmlNode;
+    const hRaw = trNode['@h'];
+    const height = typeof hRaw === 'string' || typeof hRaw === 'number'
+      ? (Number.isFinite(parseInt(String(hRaw), 10)) ? parseInt(String(hRaw), 10) / EMU_PER_PIXEL : undefined)
+      : undefined;
+    const cells: Array<{ text?: string; richText?: unknown; fillRgb?: string; outlineRgb?: string; outlineWeight?: number; colSpan?: number; rowSpan?: number; hMerge?: boolean; vMerge?: boolean }> = [];
+    let cellIdx = 0;
+    for (const tc of toArray(findChild(tr, 'a:tc'))) {
+      if (!tc || typeof tc !== 'object') continue;
+      const tcNode = tc as XmlNode;
+      const gridSpan = tcNode['@gridSpan'];
+      const rowSpan = tcNode['@rowSpan'];
+      const cell: { text?: string; richText?: unknown; fillRgb?: string; outlineRgb?: string; outlineWeight?: number; colSpan?: number; rowSpan?: number; hMerge?: boolean; vMerge?: boolean } = {};
+      if (typeof gridSpan === 'string' || typeof gridSpan === 'number') {
+        const n = parseInt(String(gridSpan), 10);
+        if (Number.isFinite(n) && n > 1) cell.colSpan = n;
+      }
+      if (typeof rowSpan === 'string' || typeof rowSpan === 'number') {
+        const n = parseInt(String(rowSpan), 10);
+        if (Number.isFinite(n) && n > 1) cell.rowSpan = n;
+      }
+      if (tcNode['@hMerge'] === '1' || tcNode['@hMerge'] === 1 || tcNode['@hMerge'] === 'true') cell.hMerge = true;
+      if (tcNode['@vMerge'] === '1' || tcNode['@vMerge'] === 1 || tcNode['@vMerge'] === 'true') cell.vMerge = true;
+      const tcPr = findChild(tc, 'a:tcPr');
+      Object.assign(cell, parseTableCellAppearance(tcPr, reg.theme));
+      const txBody = findChild(tc, 'a:txBody');
+      if (txBody) {
+        const cellElId = `${elementId}-r${rowIdx}-c${cellIdx}`;
+        const { text, props, rich } = extractRichDoc(txBody, cellElId, undefined, reg.theme, reg.imageRelMap);
+        if (text) cell.text = text;
+        if (rich) cell.richText = { text, ...props, rich };
+      }
+      cells.push(cell);
+      cellIdx += 1;
+    }
+    rows.push({ ...(height !== undefined ? { height } : {}), cells });
+    rowIdx += 1;
+  }
+  return { rows, ...(columnWidths.length > 0 ? { columnWidths } : {}) };
+}
+
+// G1-G4 + H1 — graphicFrame dispatch. Returns a TABLE or CHART
+// IPageElement based on the `<a:graphicData uri>` discriminator.
+function processGraphicFrame(
+  gf: unknown,
+  reg: ImageRegistry,
+  groupXfrm: GroupXfrm,
+  pageOrdinal: number,
+  z: ZCounter,
+): IPageElement | null {
+  // graphicFrame uses `<p:xfrm>` (not `<p:spPr><a:xfrm>`). Position +
+  // size come from the same `<a:off>` / `<a:ext>` child structure.
+  const xfrm = findChild(gf, 'p:xfrm');
+  const off = findChild(xfrm, 'a:off') as XmlNode | undefined;
+  const ext = findChild(xfrm, 'a:ext') as XmlNode | undefined;
+  const rawLeft = emu2px(off?.['@x'] as string | undefined);
+  const rawTop = emu2px(off?.['@y'] as string | undefined);
+  const rawW = emu2px(ext?.['@cx'] as string | undefined);
+  const rawH = emu2px(ext?.['@cy'] as string | undefined);
+  const { x: left, y: top } = applyXfrm(groupXfrm, rawLeft, rawTop);
+  const width = rawW * groupXfrm.scaleX;
+  const height = rawH * groupXfrm.scaleY;
+  const { angle, flipX, flipY } = readXfrmExtras(xfrm);
+
+  const graphic = findChild(gf, 'a:graphic');
+  const graphicData = findChild(graphic, 'a:graphicData') as XmlNode | undefined;
+  const uri = graphicData?.['@uri'];
+
+  const zIndex = z.next;
+  z.next += 1;
+
+  // G1-G4 — table.
+  const tbl = findChild(graphicData, 'a:tbl');
+  if (tbl) {
+    const elId = `s${pageOrdinal}-tbl-${zIndex}`;
+    const table = parseTable(tbl, reg, elId);
+    return {
+      id: elId,
+      zIndex,
+      left,
+      top,
+      width,
+      height,
+      angle,
+      flipX,
+      flipY,
+      title: '',
+      description: '',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      type: 6 as any, // PageElementType.TABLE (added via fork patch)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      table: table as any,
+    } as unknown as IPageElement;
+  }
+
+  // H1 — chart. The chart payload (categories, series, type) lives in
+  // ppt/charts/chartN.xml, captured via the resources passthrough. Here
+  // we only emit the reference id so the renderer / hit-test layer can
+  // locate it.
+  const chartNode = findChild(graphicData, 'c:chart') as XmlNode | undefined;
+  if (chartNode && typeof uri === 'string' && uri.endsWith('/chart')) {
+    const chartId = (chartNode['@r:id'] as string | undefined) ?? '';
+    const chartTarget = chartId ? reg.imageRelMap.get(chartId) : undefined;
+    const elId = `s${pageOrdinal}-chart-${zIndex}`;
+    return {
+      id: elId,
+      zIndex,
+      left,
+      top,
+      width,
+      height,
+      angle,
+      flipX,
+      flipY,
+      title: '',
+      description: '',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      type: 7 as any, // PageElementType.CHART
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      chart: { chartId, ...(chartTarget ? { chartPath: chartTarget } : {}) } as any,
+    } as unknown as IPageElement;
+  }
+
+  return null;
 }
 
 // Pic processing factored out of processSpTree so group recursion can
@@ -2040,6 +2227,10 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
   const rawComments: Record<string, string> = {};
   const rawDiagrams: Record<string, string> = {};
   const rawInk: Record<string, string> = {};
+  // H1 — `ppt/charts/chartN.xml` carries the chart's full series + style.
+  // Captured via passthrough and re-injected on export so the round-trip
+  // preserves authored charts even though our IChart only stores the rId.
+  const rawCharts: Record<string, string> = {};
   const rawRels: Record<string, string> = {};
 
   for (let i = 0; i < sldIds.length; i += 1) {
@@ -2118,7 +2309,8 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     if (zipPath.startsWith('ppt/slideLayouts/_rels/') || zipPath.startsWith('ppt/slideMasters/_rels/') ||
         zipPath.startsWith('ppt/notesSlides/_rels/') || zipPath.startsWith('ppt/notesMasters/_rels/') ||
         zipPath.startsWith('ppt/diagrams/_rels/') || zipPath.startsWith('ppt/theme/_rels/') ||
-        zipPath.startsWith('ppt/comments/_rels/') || zipPath.startsWith('ppt/ink/_rels/')) {
+        zipPath.startsWith('ppt/comments/_rels/') || zipPath.startsWith('ppt/ink/_rels/') ||
+        zipPath.startsWith('ppt/charts/_rels/')) {
       // _rels files come along for the ride — they wire the captured
       // parts together. Export-side injection writes them verbatim.
       rawRels[zipPath] = '';
@@ -2136,6 +2328,8 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
       rawDiagrams[zipPath] = '';
     } else if (zipPath.startsWith('ppt/ink/') && zipPath.endsWith('.xml')) {
       rawInk[zipPath] = '';
+    } else if (zipPath.startsWith('ppt/charts/') && zipPath.endsWith('.xml')) {
+      rawCharts[zipPath] = '';
     }
   });
   const readAll = async (bucket: Record<string, string>) => {
@@ -2153,6 +2347,7 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     readAll(rawComments),
     readAll(rawDiagrams),
     readAll(rawInk),
+    readAll(rawCharts),
     readAll(rawRels),
   ]);
 
@@ -2163,7 +2358,8 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     Object.keys(rawNotesSlides).length > 0 ||
     Object.keys(rawComments).length > 0 ||
     Object.keys(rawDiagrams).length > 0 ||
-    Object.keys(rawInk).length > 0;
+    Object.keys(rawInk).length > 0 ||
+    Object.keys(rawCharts).length > 0;
 
   return {
     id: `imported-${Date.now().toString(36)}`,
@@ -2183,6 +2379,7 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
                 comments: rawComments,
                 diagrams: rawDiagrams,
                 ink: rawInk,
+                charts: rawCharts,
                 rels: rawRels,
               }),
             },

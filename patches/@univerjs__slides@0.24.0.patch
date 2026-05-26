@@ -1,8 +1,18 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..77eed202a80e615bc90a91424f4df7bc43d4ddce 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..c14248fd13e49a3ad37b492f033e0d80aae56376 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
-@@ -136,10 +136,15 @@ var SlideDataModel = class extends _univerjs_core.UnitModel {
+@@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
+ 	PageElementType[PageElementType["SPREADSHEET"] = 3] = "SPREADSHEET";
+ 	PageElementType[PageElementType["DOCUMENT"] = 4] = "DOCUMENT";
+ 	PageElementType[PageElementType["SLIDE"] = 5] = "SLIDE";
++	PageElementType[PageElementType["TABLE"] = 6] = "TABLE";
++	PageElementType[PageElementType["CHART"] = 7] = "CHART";
++	PageElementType[PageElementType["VIDEO"] = 8] = "VIDEO";
+ 	return PageElementType;
+ }({});
+ let RelativeSlideLink = /* @__PURE__ */ function(RelativeSlideLink) {
+@@ -136,10 +139,15 @@ var SlideDataModel = class extends _univerjs_core.UnitModel {
  		this._unitId = (_this$_snapshot$id2 = this._snapshot.id) !== null && _this$_snapshot$id2 !== void 0 ? _this$_snapshot$id2 : (0, _univerjs_core.generateRandomId)(6);
  	}
  	getRev() {
@@ -22,10 +32,20 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..77eed202a80e615bc90a91424f4df7bc
  		return this._snapshot;
  	}
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..0d9df3b37ff47b3f2d785781af261e945f36f2c0 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..3e35e675e77c37a244ba4189c50696aad3217a9b 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
-@@ -135,10 +135,15 @@ var SlideDataModel = class extends UnitModel {
+@@ -44,6 +44,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
+ 	PageElementType[PageElementType["SPREADSHEET"] = 3] = "SPREADSHEET";
+ 	PageElementType[PageElementType["DOCUMENT"] = 4] = "DOCUMENT";
+ 	PageElementType[PageElementType["SLIDE"] = 5] = "SLIDE";
++	PageElementType[PageElementType["TABLE"] = 6] = "TABLE";
++	PageElementType[PageElementType["CHART"] = 7] = "CHART";
++	PageElementType[PageElementType["VIDEO"] = 8] = "VIDEO";
+ 	return PageElementType;
+ }({});
+ let RelativeSlideLink = /* @__PURE__ */ function(RelativeSlideLink) {
+@@ -135,10 +138,15 @@ var SlideDataModel = class extends UnitModel {
  		this._unitId = (_this$_snapshot$id2 = this._snapshot.id) !== null && _this$_snapshot$id2 !== void 0 ? _this$_snapshot$id2 : generateRandomId(6);
  	}
  	getRev() {
@@ -58,7 +78,7 @@ index f22ab09ec126799709980b2d50cf54585e2d634d..c4d21f0b7baee04bc3b5e19295ca0c09
      getUnitId(): string;
      getPages(): {
 diff --git a/lib/types/types/interfaces/i-slide-data.d.ts b/lib/types/types/interfaces/i-slide-data.d.ts
-index 88df969eec8ab5685575597e40aaa007d4eb0823..468851b600275f85d4c610ee74e0873b6df39b55 100644
+index 88df969eec8ab5685575597e40aaa007d4eb0823..ba5282b7ea056b4b1bcc6c667405be7a33b1b736 100644
 --- a/lib/types/types/interfaces/i-slide-data.d.ts
 +++ b/lib/types/types/interfaces/i-slide-data.d.ts
 @@ -13,14 +13,27 @@
@@ -90,3 +110,70 @@ index 88df969eec8ab5685575597e40aaa007d4eb0823..468851b600275f85d4c610ee74e0873b
  }
  interface IReferenceSource {
      master?: {
+@@ -111,6 +124,12 @@ export interface IPageElement {
+     document?: IDocumentData;
+     /** @deprecated */
+     slide?: ISlideData;
++    /** Native table — set when `type === PageElementType.TABLE`. */
++    table?: ITable;
++    /** Native chart reference — set when `type === PageElementType.CHART`. */
++    chart?: IChart;
++    /** Embedded video — set when `type === PageElementType.VIDEO`. */
++    video?: IVideo;
+     customBlock?: ICustomBlock;
+ }
+ export declare enum PageType {
+@@ -126,7 +145,10 @@ export declare enum PageElementType {
+     TEXT = 2,
+     SPREADSHEET = 3,
+     DOCUMENT = 4,
+-    SLIDE = 5
++    SLIDE = 5,
++    TABLE = 6,
++    CHART = 7,
++    VIDEO = 8
+ }
+ /**
+  * IShape
+@@ -155,4 +177,41 @@ export declare enum RelativeSlideLink {
+     FIRST_SLIDE = 3,// A link to the first slide in the presentation.
+     LAST_SLIDE = 4
+ }
++/**
++ * Native table. Maps to OOXML `<a:tbl>` inside a `<p:graphicFrame>`.
++ */
++export interface ITable {
++    rows: ITableRow[];
++    columnWidths?: number[];
++}
++export interface ITableRow {
++    height?: number;
++    cells: ITableCell[];
++}
++export interface ITableCell {
++    text?: string;
++    richText?: ISlideRichTextProps;
++    fillRgb?: string;
++    outlineRgb?: string;
++    outlineWeight?: number;
++    colSpan?: number;
++    rowSpan?: number;
++    hMerge?: boolean;
++    vMerge?: boolean;
++}
++/**
++ * Chart reference — the chart's data + style lives in
++ * `ppt/charts/chartN.xml`, captured via the resources passthrough.
++ */
++export interface IChart {
++    chartId: string;
++    chartPath?: string;
++}
++/**
++ * Embedded video — maps to OOXML `<p:pic>` with an `<a:videoFile>` ext.
++ */
++export interface IVideo {
++    contentUrl?: string;
++    posterUrl?: string;
++}
+ export {};
