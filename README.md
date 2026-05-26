@@ -10,7 +10,7 @@
 [![Version](https://img.shields.io/badge/version-v0.0.0%20%C2%B7%20pre--tag-orange)](./PLAN.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
-[Architecture →](./docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Fidelity tracker →](./docs/FIDELITY_TRACKER.md) &nbsp;·&nbsp; [Univer Slides gaps →](./docs/UNIVER_SLIDES_GAPS.md) &nbsp;·&nbsp; [Product page →](https://schnsrw.live/casual-slides/)
+[**Live Demo →**](https://slide.schnsrw.live/) &nbsp;·&nbsp; [Architecture →](./docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Fidelity tracker →](./docs/FIDELITY_TRACKER.md) &nbsp;·&nbsp; [Univer Slides gaps →](./docs/UNIVER_SLIDES_GAPS.md) &nbsp;·&nbsp; [Product page →](https://schnsrw.live/casual-slides/)
 
 </div>
 
