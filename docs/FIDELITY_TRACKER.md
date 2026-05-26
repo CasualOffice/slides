@@ -10,9 +10,11 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7i)
+## Snapshot — 2026-05-26 (post wave 7j)
 
-**47 / 87 items at ✅, 5 at ⚠️.** Wave 7i lands the biggest remaining non-fork-blocked item: B17 (hyperlinks). `<a:rPr><a:hlinkClick r:id="rIdN"/>` resolves via the slide's rels file to an http(s) URL and emits an `ICustomRange` with `rangeType: CustomRangeType.HYPERLINK` on the text frame's `IDocumentBody.customRanges`. Slide-internal jump targets are skipped (we don't surface pageId at the run level today).
+**49 / 87 items at ✅, 5 at ⚠️.** Wave 7j closes the last two open `<a:bodyPr>` items: C12 (body rotation) and C13 (text-frame autofit). `<a:bodyPr rot="N">` (60000ths of a degree, positive clockwise) lands on `documentStyle.renderConfig.centerAngle` in degrees. `<a:bodyPr><a:normAutofit fontScale="N"/></a:bodyPr>` multiplies each run's `fs` (and the inherited placeholder default that flows into `props.fs`) by `fontScale / 100000` at import — Univer's `IDocumentRenderConfig` has no autofit slot, so the shrink is baked in. `lnSpcReduction` is deferred (Univer's line-spacing model is multiplicative; layering autofit on top needs a runtime check).
+
+Wave 7i (preceding): B17 — `<a:rPr><a:hlinkClick r:id="rIdN"/>` resolves via the slide's rels file to an http(s) URL and emits an `ICustomRange` with `rangeType: CustomRangeType.HYPERLINK` on the text frame's `IDocumentBody.customRanges`. Slide-internal jump targets are skipped (we don't surface pageId at the run level today).
 
 Wave 7h (preceding): B12 (`<a:prstClr>` named-colour table + `<a:sysClr lastClr>` passthrough), E4 (`<a:alphaModFix amt>` → `imageProperties.transparency`), and C9 (`<a:pPr rtl="1">` → `paragraphStyle.direction = RIGHT_TO_LEFT`).
 
@@ -79,8 +81,8 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | C9 | RTL paragraphs (`<a:pPr rtl="1">`) | ✅ | Low | Low | Wave 7h — `<a:pPr @rtl="1"\|"true">` lands on `paragraphStyle.direction = TextDirection.RIGHT_TO_LEFT`. Default LTR matches Univer's renderer default; only explicit RTL is emitted to keep `IDocumentData` minimal. |
 | C10 | Text frame insets (`<a:bodyPr ins{L,T,R,B}>`) | ✅ | Low | Low | Wave 7b — `parseBodyPr` reads EMU → px and lands on `documentStyle.marginLeft/Top/Right/Bottom`. |
 | C11 | Text frame vertical anchor (`<a:bodyPr anchor>`) | ✅ | Med | Low | Wave 7b — `anchor=t/ctr/b` → `documentStyle.renderConfig.verticalAlign` (TOP / MIDDLE / BOTTOM). |
-| C12 | Text frame rotation (`<a:bodyPr rot>`) | ❌ | Low | Low | — |
-| C13 | Text frame autofit (`<a:normAutofit>`) | ❌ | Med | Med | — |
+| C12 | Text frame rotation (`<a:bodyPr rot>`) | ✅ | Low | Low | Wave 7j — `<a:bodyPr @rot>` (60000ths of a degree, positive clockwise) → `documentStyle.renderConfig.centerAngle` (degrees). Only emitted when finite + non-zero so the default (no rotation) stays implicit. |
+| C13 | Text frame autofit (`<a:normAutofit>`) | ✅ | Med | Med | Wave 7j — `<a:bodyPr><a:normAutofit @fontScale>` (thousandths of a percent kept; default 100000 = 100 %) multiplies each run's `fs` at import (and the inherited fallback `fs` that flows into the flat `props`). Lossy on round-trip — exported `fs` is already shrunk — but visual fidelity at read is correct. `lnSpcReduction` deferred (Univer's line-spacing model is multiplicative; layering on top is risky without a runtime check). |
 | C14 | Text wrap (`<a:bodyPr wrap>`) | ✅ | Low | Low | Wave 7g — `parseBodyPr` maps `<a:bodyPr wrap="square">` to `WrapStrategy.WRAP` and `wrap="none"` to `WrapStrategy.OVERFLOW`, landing on `documentStyle.renderConfig.wrapStrategy`. Absent attribute keeps the renderer default. |
 
 ## D. Shape geometry / appearance

@@ -592,7 +592,53 @@ function parseBodyPr(bodyPr: unknown): Partial<IDocumentStyle> | null {
     out.renderConfig = { ...(out.renderConfig ?? {}), wrapStrategy: WrapStrategy.WRAP };
   }
 
+  // C12 — body rotation. OOXML's `<a:bodyPr rot="N">` is the in-frame
+  // text rotation in 60000ths of a degree (positive = clockwise). Common
+  // values: 5400000 (90°), 10800000 (180°), 16200000 (270°). Univer's
+  // `IDocumentRenderConfig.centerAngle` is the equivalent (degrees,
+  // applied to text content within the doc body). Only emit when an
+  // explicit, finite, non-zero value is present so the default
+  // (no rotation) stays implicit.
+  const rotRaw = node['@rot'];
+  if (rotRaw !== undefined) {
+    const rot = parseInt(String(rotRaw), 10);
+    if (Number.isFinite(rot) && rot !== 0) {
+      out.renderConfig = { ...(out.renderConfig ?? {}), centerAngle: rot / 60000 };
+    }
+  }
+
   return Object.keys(out).length > 0 ? out : null;
+}
+
+// C13 — text-frame autofit. OOXML's
+// `<a:bodyPr><a:normAutofit fontScale="N" lnSpcReduction="N"/></a:bodyPr>`
+// tells the renderer to shrink text proportionally until it fits the
+// frame. `fontScale` is the kept fraction of the original font size in
+// thousandths of a percent (default 100000 = 100 %). `lnSpcReduction`
+// (default 0) is the amount the line-spacing should be reduced by.
+//
+// Univer's `IDocumentRenderConfig` has no explicit autofit slot. The
+// practical compromise: apply the fontScale to the run's font size at
+// import time (multiply `fs` by `fontScale / 100000`). This bakes the
+// shrunk size into the text style. It's lossy on round-trip — exported
+// `fs` will already be shrunk — but it gets the correct visual at
+// import, which is the whole game for read fidelity.
+//
+// `lnSpcReduction` is NOT applied for v1 — Univer's line-spacing model
+// is multiplicative; layering this on top is risky without a runtime
+// check.
+//
+// Returns the multiplier (e.g. 0.8 for fontScale="80000") or 1 when
+// the attribute is absent / not finite.
+function parseBodyPrFontScale(bodyPr: unknown): number {
+  if (!bodyPr || typeof bodyPr !== 'object') return 1;
+  const normAutofit = findChild(bodyPr, 'a:normAutofit') as XmlNode | undefined;
+  if (!normAutofit) return 1;
+  const raw = normAutofit['@fontScale'];
+  if (raw === undefined) return 1;
+  const n = parseInt(String(raw), 10);
+  if (!Number.isFinite(n) || n <= 0) return 1;
+  return n / 100_000;
 }
 
 // Wave 7 — paragraph space-before / space-after (C5). Same shape as
@@ -695,6 +741,7 @@ function extractRichDoc(
   fallbackProps?: Partial<ISlideRichTextProps>,
   theme: ThemeMap | null = null,
   relMap: Map<string, string> | null = null,
+  fontScale: number = 1,
 ): {
   text: string;
   props: Partial<ISlideRichTextProps>;
@@ -730,7 +777,21 @@ function extractRichDoc(
       // defaults < this run's rPr.
       const rPr = findChild(r, 'a:rPr');
       const runStyle = parseRunProps(rPr, theme);
+      // C13 — apply `<a:normAutofit fontScale>` to the run's font
+      // size at import. Scale both the explicit run override and the
+      // inherited fallback so frames that rely on placeholder defaults
+      // still shrink correctly. Round to 0.1 pt to keep numbers tidy.
+      if (fontScale !== 1) {
+        if (typeof runStyle.fs === 'number') {
+          runStyle.fs = Math.round(runStyle.fs * fontScale * 10) / 10;
+        }
+      }
       const ts = { ...(fallbackProps ?? {}), ...runStyle };
+      if (fontScale !== 1 && typeof ts.fs === 'number' && runStyle.fs === undefined) {
+        // Run didn't override fs; scale the inherited value so the
+        // autofit shrink still applies.
+        ts.fs = Math.round(ts.fs * fontScale * 10) / 10;
+      }
 
       if (txt.length > 0) {
         textRuns.push({ st: cursor, ed: cursor + txt.length, ts });
@@ -826,7 +887,14 @@ function extractRichDoc(
   // run's overrides. Run-level wins by field.
   const props: Partial<ISlideRichTextProps> = fallbackProps
     ? { ...fallbackProps, ...firstRunProps }
-    : firstRunProps;
+    : { ...firstRunProps };
+  // C13 — if the first run didn't carry an explicit fs but the
+  // placeholder fallback did, the flat `fs` exposed to legacy paths
+  // (PptxGenJS export + non-rich renderer) still needs to reflect the
+  // autofit shrink. Scale once at the end so we don't double-apply.
+  if (fontScale !== 1 && typeof props.fs === 'number' && firstRunProps.fs === undefined) {
+    props.fs = Math.round(props.fs * fontScale * 10) / 10;
+  }
 
   return { text: lines.join('\n'), props, rich };
 }
@@ -1352,12 +1420,18 @@ async function processSpTree(
     const txBody = findChild(sp, 'p:txBody');
     if (txBody) {
       const elId = `s${pageOrdinal}-el-${zIndex}`;
+      // C13 — read `<a:bodyPr><a:normAutofit fontScale="…"/></a:bodyPr>`
+      // before walking runs so the autofit shrink applies to every per-run
+      // `fs` (including those inherited from placeholder defaults).
+      const txBodyPr = findChild(txBody, 'a:bodyPr');
+      const fontScale = parseBodyPrFontScale(txBodyPr);
       const { text, props, rich } = extractRichDoc(
         txBody,
         elId,
         phInherited?.defaultRunProps,
         reg.theme,
         reg.imageRelMap,
+        fontScale,
       );
       const richText: ISlideRichTextProps = {
         text,
