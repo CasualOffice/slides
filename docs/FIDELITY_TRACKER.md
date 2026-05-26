@@ -176,7 +176,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 |------|------|--------|--------|-----------|-------|
 | J1 | Theme XML passthrough | ✅ | Med | Low | Wave 7k — every `ppt/theme/*.xml` part captured into the same `CASUAL_SLIDES_PPTX_RAW` payload under `themes`. Complements J2's parsed `<a:clrScheme>` lookup — the raw XML keeps `<a:fontScheme>` and `<a:fmtScheme>` (which we don't model) intact for export. |
 | J2 | **Color scheme resolution** (`<a:schemeClr>` → hex) | ✅ | High | Med | Wave 5 — `resolveThemeForSlide` walks slide → layout → master → theme; `parseThemeColors` reads `<a:clrScheme>`; `resolveSchemeColor` handles tx/bg aliases. Wave 5b layered lumMod / lumOff / tint / shade on top. satMod / hueMod / alpha still drop. |
-| J3 | Font scheme (major / minor typefaces) | ❌ | Med | Med | Falls back from B3 when `<a:latin>` is absent. |
+| J3 | Font scheme (major / minor typefaces) | ✅ | Med | Med | Wave 8b — `parseThemeColors` also harvests `<a:fontScheme><a:majorFont><a:latin>` / `<a:minorFont><a:latin>` into reserved `__majorLatin` / `__minorLatin` keys on the same ThemeMap. `parseRunProps` falls back when no explicit `<a:latin>` / `<a:ea>` / `<a:cs>` is set: title-type placeholders (`<p:ph type="title"\|"ctrTitle">`) get the major font, everything else the minor. Inline `+mj-lt` / `+mn-lt` typeface sentinels resolve through the same lookup. |
 | J4 | Format scheme (default fills / lines / effects) | ❌ | Low | High | Defer. |
 
 ## K. Document-level

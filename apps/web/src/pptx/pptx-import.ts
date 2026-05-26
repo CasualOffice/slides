@@ -110,7 +110,16 @@ function resolveRelTarget(target: string, baseDir: string): string {
 // color to lighten/darken. Worth ~5 % more fidelity; deferred behind
 // the rest of wave 5/6 since the base-colour fix already unlocks the
 // majority of "title is invisible because text is white-on-white" cases.
+//
+// J3 — the theme also carries `<a:fontScheme>` with `<a:majorFont>` and
+// `<a:minorFont>` Latin typefaces. They flow through the same map under
+// reserved keys (`__majorLatin` / `__minorLatin`) — the color-scheme
+// names never collide with the double-underscore prefix, so a single
+// Map keeps the threading lightweight.
 type ThemeMap = Map<string, string>;
+
+const FONT_MAJOR_KEY = '__majorLatin';
+const FONT_MINOR_KEY = '__minorLatin';
 
 const SCHEME_ALIASES: Record<string, string> = {
   bg1: 'lt1',
@@ -147,17 +156,38 @@ function parseThemeColors(themeXml: string): ThemeMap {
   const theme = findChild(parsed, 'a:theme');
   const themeElements = findChild(theme, 'a:themeElements');
   const clrScheme = findChild(themeElements, 'a:clrScheme') as XmlNode | undefined;
-  if (!clrScheme) return map;
+  if (clrScheme) {
+    // a:clrScheme's children are named by scheme slot (dk1, lt1, accent1, …)
+    // — iterate the keys rather than reaching for known names.
+    for (const key of Object.keys(clrScheme)) {
+      if (key.startsWith('@')) continue; // skip attributes
+      if (!key.startsWith('a:')) continue;
+      const slotName = key.slice(2); // strip "a:" prefix
+      if (slotName === 'extLst') continue;
+      const hex = readClrSchemeChildColor(clrScheme[key]);
+      if (hex) map.set(slotName, hex);
+    }
+  }
 
-  // a:clrScheme's children are named by scheme slot (dk1, lt1, accent1, …)
-  // — iterate the keys rather than reaching for known names.
-  for (const key of Object.keys(clrScheme)) {
-    if (key.startsWith('@')) continue; // skip attributes
-    if (!key.startsWith('a:')) continue;
-    const slotName = key.slice(2); // strip "a:" prefix
-    if (slotName === 'extLst') continue;
-    const hex = readClrSchemeChildColor(clrScheme[key]);
-    if (hex) map.set(slotName, hex);
+  // J3 — `<a:fontScheme>` carries the deck-wide major (heading) and minor
+  // (body) typefaces. We harvest the Latin entry from each since Univer's
+  // single `IStyleBase.ff` slot stores a single font-family string — the
+  // East-Asian / complex-script subfonts (`<a:ea>`, `<a:cs>`) are
+  // followed by the parseRunProps fallback chain already (B4).
+  const fontScheme = findChild(themeElements, 'a:fontScheme') as XmlNode | undefined;
+  if (fontScheme) {
+    const majorFont = findChild(fontScheme, 'a:majorFont') as XmlNode | undefined;
+    const majorLatin = findChild(majorFont, 'a:latin') as XmlNode | undefined;
+    const majorTypeface = majorLatin?.['@typeface'];
+    if (typeof majorTypeface === 'string' && majorTypeface.length > 0) {
+      map.set(FONT_MAJOR_KEY, majorTypeface);
+    }
+    const minorFont = findChild(fontScheme, 'a:minorFont') as XmlNode | undefined;
+    const minorLatin = findChild(minorFont, 'a:latin') as XmlNode | undefined;
+    const minorTypeface = minorLatin?.['@typeface'];
+    if (typeof minorTypeface === 'string' && minorTypeface.length > 0) {
+      map.set(FONT_MINOR_KEY, minorTypeface);
+    }
   }
   return map;
 }
@@ -415,7 +445,11 @@ function readT(node: unknown): string {
 //
 // Color extraction handles `<a:solidFill><a:srgbClr val="HEX"/></>` —
 // theme colors (`<a:schemeClr>`) are deferred until we read the theme.
-function parseRunProps(rPr: unknown, theme: ThemeMap | null = null): Partial<ISlideRichTextProps> {
+function parseRunProps(
+  rPr: unknown,
+  theme: ThemeMap | null = null,
+  isTitle: boolean = false,
+): Partial<ISlideRichTextProps> {
   if (!rPr || typeof rPr !== 'object') return {};
   const node = rPr as XmlNode;
   const out: Partial<ISlideRichTextProps> = {};
@@ -512,22 +546,42 @@ function parseRunProps(rPr: unknown, theme: ThemeMap | null = null): Partial<ISl
     }
   }
 
-  // Font family (B3 + B4): prefer `<a:latin>`, then fall back to
+  // Font family (B3 + B4 + J3): prefer `<a:latin>`, then fall back to
   // `<a:ea>` (East-Asian) and `<a:cs>` (complex-script). Univer's
   // IStyleBase has a single `ff` slot, so the priority order picks the
   // one most likely to render the run's glyphs. CJK-only decks that
   // omit `<a:latin>` previously fell through to the renderer default —
   // now they get the authored typeface.
+  //
+  // J3 — when none of the three is present (a bare `<a:rPr>` or no
+  // run-level font), fall back to the theme's `<a:fontScheme>`:
+  // title-type placeholders pick up `<a:majorFont><a:latin>`; everything
+  // else inherits `<a:minorFont><a:latin>`. The `isTitle` flag carries
+  // the placeholder type from the caller (extractPlaceholderRects /
+  // extractRichDoc).
+  //
+  // OOXML also uses two special `<a:latin typeface>` sentinels that
+  // reference the theme indirectly: `+mj-lt` (major Latin) and `+mn-lt`
+  // (minor Latin). When we see those, resolve them right here instead of
+  // passing the literal "+mj-lt" string to the renderer.
   const latin = findChild(node, 'a:latin') as XmlNode | undefined;
   const ea = findChild(node, 'a:ea') as XmlNode | undefined;
   const cs = findChild(node, 'a:cs') as XmlNode | undefined;
+  const resolveThemeSentinel = (raw: string | false): string | false => {
+    if (raw === '+mj-lt') return theme?.get(FONT_MAJOR_KEY) ?? raw;
+    if (raw === '+mn-lt') return theme?.get(FONT_MINOR_KEY) ?? raw;
+    return raw;
+  };
   const typeface =
-    (typeof latin?.['@typeface'] === 'string' && latin['@typeface']) ||
-    (typeof ea?.['@typeface'] === 'string' && ea['@typeface']) ||
-    (typeof cs?.['@typeface'] === 'string' && cs['@typeface']) ||
+    resolveThemeSentinel(typeof latin?.['@typeface'] === 'string' && latin['@typeface']) ||
+    resolveThemeSentinel(typeof ea?.['@typeface'] === 'string' && ea['@typeface']) ||
+    resolveThemeSentinel(typeof cs?.['@typeface'] === 'string' && cs['@typeface']) ||
     '';
   if (typeof typeface === 'string' && typeface.length > 0) {
     out.ff = typeface;
+  } else if (theme) {
+    const themeFont = isTitle ? theme.get(FONT_MAJOR_KEY) : theme.get(FONT_MINOR_KEY);
+    if (themeFont) out.ff = themeFont;
   }
 
   return out;
@@ -803,6 +857,7 @@ function extractRichDoc(
   theme: ThemeMap | null = null,
   relMap: Map<string, string> | null = null,
   fontScale: number = 1,
+  isTitle: boolean = false,
 ): {
   text: string;
   props: Partial<ISlideRichTextProps>;
@@ -837,7 +892,7 @@ function extractRichDoc(
       // Build the run's style: layout/master defaults < layout pPr
       // defaults < this run's rPr.
       const rPr = findChild(r, 'a:rPr');
-      const runStyle = parseRunProps(rPr, theme);
+      const runStyle = parseRunProps(rPr, theme, isTitle);
       // C13 — apply `<a:normAutofit fontScale>` to the run's font
       // size at import. Scale both the explicit run override and the
       // inherited fallback so frames that rely on placeholder defaults
@@ -1320,14 +1375,26 @@ function extractPlaceholderRects(layoutOrMasterXml: string, theme: ThemeMap | nu
     // <p:txBody><a:lstStyle><a:lvl1pPr><a:defRPr ...>.
     // Use lvl1 as our canonical placeholder default; deeper levels
     // (a:lvl2pPr etc.) matter once bullets land in wave 6.
+    //
+    // J3 — title-type placeholders fall back to the major font; everything
+    // else to the minor font. parseRunProps consults the flag when the
+    // defRPr has no explicit `<a:latin>` / `<a:ea>` / `<a:cs>`.
+    const phType = ph['@type'];
+    const isTitlePh = phType === 'title' || phType === 'ctrTitle';
     let defaultRunProps: Partial<ISlideRichTextProps> | undefined;
     const txBody = findChild(sp, 'p:txBody');
     const lstStyle = findChild(txBody, 'a:lstStyle');
     const lvl1pPr = findChild(lstStyle, 'a:lvl1pPr');
     const defRPr = findChild(lvl1pPr, 'a:defRPr');
     if (defRPr) {
-      const parsed = parseRunProps(defRPr, theme);
+      const parsed = parseRunProps(defRPr, theme, isTitlePh);
       if (Object.keys(parsed).length > 0) defaultRunProps = parsed;
+    } else if (theme) {
+      // No defRPr but we still want the theme font fallback so the
+      // placeholder's inherited default reflects the deck's heading /
+      // body typeface. Emit a minimal ff-only defaultRunProps.
+      const themeFont = isTitlePh ? theme.get(FONT_MAJOR_KEY) : theme.get(FONT_MINOR_KEY);
+      if (themeFont) defaultRunProps = { ff: themeFont };
     }
 
     // Either an xfrm rect or text-style defaults is enough to be worth
@@ -1639,6 +1706,14 @@ async function processSpTree(
       // `fs` (including those inherited from placeholder defaults).
       const txBodyPr = findChild(txBody, 'a:bodyPr');
       const fontScale = parseBodyPrFontScale(txBodyPr);
+      // J3 — title-type placeholders inherit the theme's major Latin
+      // font; everything else picks up the minor Latin font. The flag
+      // also feeds parseRunProps for inline `+mj-lt` / `+mn-lt` sentinels.
+      const nvSpPr = findChild(sp, 'p:nvSpPr');
+      const nvPr = findChild(nvSpPr, 'p:nvPr');
+      const ph = findChild(nvPr, 'p:ph') as XmlNode | undefined;
+      const phType = ph?.['@type'];
+      const isTitle = phType === 'title' || phType === 'ctrTitle';
       const { text, props, rich } = extractRichDoc(
         txBody,
         elId,
@@ -1646,6 +1721,7 @@ async function processSpTree(
         reg.theme,
         reg.imageRelMap,
         fontScale,
+        isTitle,
       );
       const richText: ISlideRichTextProps = {
         text,

@@ -2975,6 +2975,164 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(reimported.chartXml, 'chart XML restored on export').toContain('c:barChart');
   });
 
+  test('pptx import wave 8b — theme font scheme fallback (J3)', async ({ page }) => {
+    // Hand-roll a deck where:
+    //   • theme defines majorFont latin="Heading Sans" and minorFont latin="Body Serif"
+    //   • slide carries TWO placeholders, neither with an explicit
+    //     `<a:latin typeface=…>` in the run rPr:
+    //       1. type="title" — should pick up the major font
+    //       2. type="body" idx="1" — should pick up the minor font
+    // After J3, parseRunProps falls back to the theme's font scheme; before,
+    // both runs landed with no ff and rendered in the default browser font.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      // Two placeholders: title + body. Neither run carries <a:latin>.
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        // Title placeholder
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr/><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="914400" y="457200"/><a:ext cx="7315200" cy="1371600"/></a:xfrm></p:spPr>` +
+        `<p:txBody><a:bodyPr/><a:lstStyle/>` +
+        `<a:p><a:r><a:rPr lang="en-US"/><a:t>Heading text</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        // Body placeholder
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="3" name="Body"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="914400" y="2057400"/><a:ext cx="7315200" cy="3429000"/></a:xfrm></p:spPr>` +
+        `<p:txBody><a:bodyPr/><a:lstStyle/>` +
+        `<a:p><a:r><a:rPr lang="en-US"/><a:t>Body content</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>` +
+        `</Relationships>`;
+      const layout =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sldLayout>`;
+      const layoutRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>` +
+        `</Relationships>`;
+      const master =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sldMaster>`;
+      const masterRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>` +
+        `</Relationships>`;
+      // Theme — fontScheme carries majorFont=Heading Sans, minorFont=Body Serif.
+      const theme =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:themeElements>` +
+        `<a:clrScheme name="Test">` +
+        `<a:dk1><a:srgbClr val="000000"/></a:dk1>` +
+        `<a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>` +
+        `<a:dk2><a:srgbClr val="44546A"/></a:dk2>` +
+        `<a:lt2><a:srgbClr val="F0F0F0"/></a:lt2>` +
+        `<a:accent1><a:srgbClr val="E84B6A"/></a:accent1>` +
+        `<a:accent2><a:srgbClr val="ED7D31"/></a:accent2>` +
+        `<a:accent3><a:srgbClr val="A5A5A5"/></a:accent3>` +
+        `<a:accent4><a:srgbClr val="FFC000"/></a:accent4>` +
+        `<a:accent5><a:srgbClr val="5B9BD5"/></a:accent5>` +
+        `<a:accent6><a:srgbClr val="70AD47"/></a:accent6>` +
+        `<a:hlink><a:srgbClr val="0563C1"/></a:hlink>` +
+        `<a:folHlink><a:srgbClr val="954F72"/></a:folHlink>` +
+        `</a:clrScheme>` +
+        `<a:fontScheme name="TestFonts">` +
+        `<a:majorFont><a:latin typeface="Heading Sans"/></a:majorFont>` +
+        `<a:minorFont><a:latin typeface="Body Serif"/></a:minorFont>` +
+        `</a:fontScheme>` +
+        `</a:themeElements></a:theme>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/slideLayouts/slideLayout1.xml', layout);
+      zip.file('ppt/slideLayouts/_rels/slideLayout1.xml.rels', layoutRels);
+      zip.file('ppt/slideMasters/slideMaster1.xml', master);
+      zip.file('ppt/slideMasters/_rels/slideMaster1.xml.rels', masterRels);
+      zip.file('ppt/theme/theme1.xml', theme);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave8b-font-scheme.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    expect(firstPage, 'first page extracted').toBeTruthy();
+    const elements = Object.values(firstPage.pageElements ?? {});
+    expect(elements.length, 'two placeholders captured').toBe(2);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const titleEl = elements.find((e: any) => e.richText?.text?.includes('Heading')) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bodyEl = elements.find((e: any) => e.richText?.text?.includes('Body')) as any;
+    expect(titleEl, 'title element extracted').toBeTruthy();
+    expect(bodyEl, 'body element extracted').toBeTruthy();
+
+    // The run-level ff falls back to the theme's major / minor Latin
+    // typeface. Both flat (legacy) and rich (per-run) paths reflect it —
+    // we assert via the flat field since that's what the renderer
+    // fallback consults.
+    expect(titleEl.richText?.ff, 'title falls back to major font').toBe('Heading Sans');
+    expect(bodyEl.richText?.ff, 'body falls back to minor font').toBe('Body Serif');
+    // And the rich path's first textRun carries the same ts.ff so the
+    // multi-run renderer also resolves correctly.
+    const titleRun = titleEl.richText?.rich?.body?.textRuns?.[0];
+    const bodyRun = bodyEl.richText?.rich?.body?.textRuns?.[0];
+    expect(titleRun?.ts?.ff, 'rich title run carries major font').toBe('Heading Sans');
+    expect(bodyRun?.ts?.ff, 'rich body run carries minor font').toBe('Body Serif');
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.
