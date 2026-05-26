@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..c14248fd13e49a3ad37b492f033e0d80aae56376 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..9ef67b94bc298a02bcd6ed2e5ddcc0c1bfa38c2c 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -31,8 +31,36 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..c14248fd13e49a3ad37b492f033e0d80
  	getSnapshot() {
  		return this._snapshot;
  	}
+@@ -699,7 +707,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+ 			forceRender: true
+ 		};
+ 		let isNotNull = false;
+-		if (text != null) {
++		if (rich != null) {
++			config = {
++				...config,
++				richText: rich
++			};
++			isNotNull = true;
++		} else if (text != null) {
+ 			config = {
+ 				...config,
+ 				text,
+@@ -715,12 +729,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+ 				cl
+ 			};
+ 			isNotNull = true;
+-		} else if (rich != null) {
+-			config = {
+-				...config,
+-				richText: rich
+-			};
+-			isNotNull = true;
+ 		}
+ 		if (isNotNull === false) return;
+ 		return new _univerjs_engine_render.RichText(this._localeService, id, config);
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..3e35e675e77c37a244ba4189c50696aad3217a9b 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..89c0201a4b469c890e6ec4aab5e192932544b55e 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -44,6 +44,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -64,6 +92,34 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..3e35e675e77c37a244ba4189c50696aa
  	getSnapshot() {
  		return this._snapshot;
  	}
+@@ -698,7 +706,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+ 			forceRender: true
+ 		};
+ 		let isNotNull = false;
+-		if (text != null) {
++		if (rich != null) {
++			config = {
++				...config,
++				richText: rich
++			};
++			isNotNull = true;
++		} else if (text != null) {
+ 			config = {
+ 				...config,
+ 				text,
+@@ -714,12 +728,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+ 				cl
+ 			};
+ 			isNotNull = true;
+-		} else if (rich != null) {
+-			config = {
+-				...config,
+-				richText: rich
+-			};
+-			isNotNull = true;
+ 		}
+ 		if (isNotNull === false) return;
+ 		return new RichText(this._localeService, id, config);
 diff --git a/lib/types/data-model/slide-data-model.d.ts b/lib/types/data-model/slide-data-model.d.ts
 index f22ab09ec126799709980b2d50cf54585e2d634d..c4d21f0b7baee04bc3b5e19295ca0c09464151af 100644
 --- a/lib/types/data-model/slide-data-model.d.ts
