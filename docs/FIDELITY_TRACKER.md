@@ -10,9 +10,11 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7c)
+## Snapshot — 2026-05-26 (post wave 7d)
 
-**34 / 87 items at ✅, 7 at ⚠️.** Wave 7c lands F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch — outline + dash + rotation all flow through unchanged) and E3 (`<a:srcRect l/t/r/b>` → `image.cropProperties` normalised offsets). With this, the only bounded items left are fork-patch territory (true gradients, shape shadow/glow effects, tables, charts) or vanishingly rare in business decks (custGeom, ink, SmartArt). The fidelity climb on import is effectively done for non-Univer-blocked content.
+**37 / 87 items at ✅, 5 at ⚠️.** Wave 7d closes three loose ends without any fork patch: D12 (`<a:noFill/>` distinguished from absent fill via a transparent sentinel — round-trips because the export side skips PptxGenJS's `fill` opt when it sees the sentinel), F4 (line-like prsts inflate their zero-dimension bbox to the stroke width so horizontal/vertical lines actually render), and B4 (font-family fallback chain `<a:latin>` → `<a:ea>` → `<a:cs>` for CJK / complex-script decks). With this, the only bounded items left are fork-patch territory (true gradients, shape shadow/glow effects, tables, charts) or vanishingly rare in business decks (custGeom, ink, SmartArt). The fidelity climb on import is effectively done for non-Univer-blocked content.
+
+Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and E3 (`<a:srcRect l/t/r/b>` → `image.cropProperties`).
 
 ## A. Slide-level
 
@@ -37,7 +39,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | B1 | Text content (`<a:t>`) | ✅ | Critical | — | — |
 | B2 | Font size (`<a:rPr sz>`) | ✅ | High | — | First run only; multi-run = B16. |
 | B3 | **Font family** (`<a:rPr><a:latin typeface>`) | ✅ | High | Low | Wave 2 — `IStyleBase.ff` populated from `<a:latin typeface>`. Export side now passes `fontFace` to PptxGenJS so the round-trip is symmetric. |
-| B4 | Font East-Asian / complex-script (`<a:ea>`, `<a:cs>`) | ❌ | Med | Low | Same parse path as B3. |
+| B4 | Font East-Asian / complex-script (`<a:ea>`, `<a:cs>`) | ✅ | Med | Low | Wave 7d — `parseRunProps` falls back `<a:latin>` → `<a:ea>` → `<a:cs>` for the single `ff` slot. Mixed-script runs (Latin + CJK in the same run with different typefaces) still collapse to the priority winner — true per-script fonts need a model widening (Univer's `IStyleBase` has one `ff`). |
 | B5 | Bold (`<a:rPr b>`) | ✅ | High | — | First run only. |
 | B6 | Italic (`<a:rPr i>`) | ✅ | Med | — | First run only. |
 | B7 | Underline (`<a:rPr u>`) | ✅ | Low | — | First run only. |
@@ -86,7 +88,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | D9 | Gradient fill (`<a:gradFill>`) | ⚠️ | High | Med | Wave 7 — degraded to first colour stop. Brand colour visible; gradient interpolation needs an IColorStyle widening (fork patch). |
 | D10 | Pattern fill (`<a:pattFill>`) | ❌ | Low | Med | — |
 | D11 | Picture fill on shape | ❌ | Low | Med | — |
-| D12 | No fill (`<a:noFill>`) | ⚠️ | High | Low | Currently treated as white. Need to distinguish from missing fill. |
+| D12 | No fill (`<a:noFill>`) | ✅ | High | Low | Wave 7d — `parseShapeAppearance` detects `<a:noFill/>` as a direct child of `<p:spPr>` and emits `shapeBackgroundFill.rgb = 'rgba(0,0,0,0)'` (the `TRANSPARENT_FILL` sentinel). Line-like prsts default to the same sentinel since they conceptually have no fill. Export side: `isTransparentFill` recognises the sentinel and skips PptxGenJS's `fill` opt entirely — round-trip preserves no-fill semantics. |
 | D13 | Outline color (srgbClr) | ✅ | High | — | — |
 | D14 | Outline weight | ✅ | High | — | EMU → px. |
 | D15 | Outline dash pattern (`<a:prstDash>`) | ✅ | Med | Low | Wave 7 — `parsePrstDash` maps PowerPoint's preset dash values to Univer's `BorderStyleTypes` (DOTTED / DASHED / DASH_DOT etc.). |
@@ -116,7 +118,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 | F1 | **Group shapes** (`<p:grpSp>`) | ✅ | High | Low | Wave 2 — recursive descent through nested groups; children flatten into the page's z-ordered element list. Univer has no native group `IPageElement` (Gap 3); we lose the group binding for editing but the visuals survive. |
 | F2 | Group transform (offset+ext+chOff+chExt) | ✅ | High | Med | Wave 2 — `readGroupXfrm` + `composeXfrm` map child coords → slide space; verified by an e2e fixture with `chOff`/`chExt`. |
 | F3 | Connector lines (`<p:cxnSp>`) | ✅ | Med | Low | Wave 7c — processSpTree iterates `<p:cxnSp>` alongside `<p:sp>` and reuses the SHAPE branch (prstGeom + outline + dash + rotation all flow through). |
-| F4 | Line shapes (prstGeom `line`) | ⚠️ | Med | Low | Works as a 0-height rect — not a line. |
+| F4 | Line shapes (prstGeom `line`) | ✅ | Med | Low | Wave 7d — `inflateLineBbox` widens zero-dimension lines (horizontal: `cy=0`, vertical: `cx=0`) to the outline stroke width so the stroke renders. Applied in both `<p:sp>` and `<p:cxnSp>` branches. `isLineLikeShape` covers `line`, `straightConnector*`, `bentConnector*`, `curvedConnector*`. |
 
 ## G. Tables
 

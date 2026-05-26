@@ -1621,6 +1621,119 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(crop.offsetBottom, 'b=10000 → 0.1').toBeCloseTo(0.1, 3);
   });
 
+  test('pptx import wave 7d — noFill + line bbox inflate + ea font fallback (D12 + F4 + B4)', async ({ page }) => {
+    // D12 — <a:noFill/> survives as the TRANSPARENT_FILL sentinel.
+    // F4 — line shape with cy=0 inflates to the outline weight so the
+    //      stroke renders instead of being clipped to a zero-height bbox.
+    // B4 — `<a:ea typeface="SimSun"/>` without `<a:latin>` populates the
+    //      element's ff (CJK / complex-script fallback chain).
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        // D12 — rect with explicit <a:noFill/>.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="transparent"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `<a:noFill/>` +
+        `<a:ln w="12700"><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></a:ln>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        // F4 — horizontal line: cy=0.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="3" name="hline"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="3000000"/><a:ext cx="3000000" cy="0"/></a:xfrm>` +
+        `<a:prstGeom prst="line"/>` +
+        `<a:ln w="19050"><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill></a:ln>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        // B4 — text frame whose run declares only <a:ea typeface="SimSun"/>.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="4" name="cjk"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="4000000"/><a:ext cx="3000000" cy="800000"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `</p:spPr>` +
+        `<p:txBody>` +
+        `<a:bodyPr/>` +
+        `<a:p>` +
+        `<a:r><a:rPr lang="zh-CN" sz="2400"><a:ea typeface="SimSun"/></a:rPr><a:t>你好</a:t></a:r>` +
+        `</a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave7d.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    const elements = Object.values(firstPage.pageElements ?? {});
+
+    // D12 — the rect with <a:noFill/> carries the transparent sentinel.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const transparent = elements.find((e: any) => e.shape?.shapeType === 'rect') as any;
+    expect(transparent, 'noFill rect extracted').toBeTruthy();
+    const fillRgb = (transparent.shape?.shapeProperties?.shapeBackgroundFill?.rgb ?? '').toLowerCase();
+    expect(fillRgb, 'noFill → transparent sentinel').toMatch(/rgba\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/);
+
+    // F4 — horizontal line's zero cy is inflated to the stroke width
+    // (19050 EMU = 2 px) so the rendered bbox isn't clipped to nothing.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const hline = elements.find((e: any) => e.shape?.shapeType === 'line') as any;
+    expect(hline, 'line shape extracted').toBeTruthy();
+    expect(hline.height, 'line height inflated above 0').toBeGreaterThan(0);
+
+    // B4 — the CJK run's ff falls through from <a:ea>.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cjk = elements.find((e: any) => e.richText && e.richText.text?.includes('你')) as any;
+    expect(cjk, 'CJK text frame extracted').toBeTruthy();
+    expect(cjk.richText.ff, '<a:ea typeface> populates ff').toBe('SimSun');
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

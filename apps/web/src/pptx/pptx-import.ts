@@ -392,13 +392,20 @@ function parseRunProps(rPr: unknown, theme: ThemeMap | null = null): Partial<ISl
   const colour = readColor(node, theme);
   if (colour) out.cl = { rgb: colour };
 
-  // Font family (B3): <a:rPr><a:latin typeface="Calibri"/></a:rPr>.
-  // <a:ea> and <a:cs> are deferred (B4) — currently we use the Latin
-  // typeface as the canonical font; if a deck only declared `<a:ea>`,
-  // it'd fall back to the renderer default. That covers > 95 % of
-  // Western decks today.
+  // Font family (B3 + B4): prefer `<a:latin>`, then fall back to
+  // `<a:ea>` (East-Asian) and `<a:cs>` (complex-script). Univer's
+  // IStyleBase has a single `ff` slot, so the priority order picks the
+  // one most likely to render the run's glyphs. CJK-only decks that
+  // omit `<a:latin>` previously fell through to the renderer default —
+  // now they get the authored typeface.
   const latin = findChild(node, 'a:latin') as XmlNode | undefined;
-  const typeface = latin?.['@typeface'];
+  const ea = findChild(node, 'a:ea') as XmlNode | undefined;
+  const cs = findChild(node, 'a:cs') as XmlNode | undefined;
+  const typeface =
+    (typeof latin?.['@typeface'] === 'string' && latin['@typeface']) ||
+    (typeof ea?.['@typeface'] === 'string' && ea['@typeface']) ||
+    (typeof cs?.['@typeface'] === 'string' && cs['@typeface']) ||
+    '';
   if (typeof typeface === 'string' && typeface.length > 0) {
     out.ff = typeface;
   }
@@ -761,6 +768,41 @@ function parsePrstDash(ln: unknown): BorderStyleTypes | null {
   }
 }
 
+// D12 — `<a:noFill/>` is a direct child of spPr that means "no fill",
+// distinct from an absent fill (which inherits from theme/layout). We
+// signal it with the CSS-style transparent string so the renderer reads
+// alpha=0; the export side recognises the sentinel and skips PptxGenJS's
+// `fill` opt entirely, preserving the no-fill semantics on round-trip.
+const TRANSPARENT_FILL = 'rgba(0,0,0,0)';
+
+// F4 — pptx encodes lines (and connectors) with one zero dimension —
+// height=0 for a horizontal line, width=0 for a vertical line. The
+// bbox-based renderer clips zero-area shapes to nothing, hiding the
+// stroke. Inflate the zero side to the stroke width so the line
+// survives. Affects `prst="line"` and connector families.
+function isLineLikeShape(prst: string): boolean {
+  return (
+    prst === 'line' ||
+    prst.startsWith('straightConnector') ||
+    prst.startsWith('bentConnector') ||
+    prst.startsWith('curvedConnector')
+  );
+}
+
+function inflateLineBbox(
+  shapeType: string,
+  width: number,
+  height: number,
+  outlineWeightPx: number | null,
+): { width: number; height: number } {
+  if (!isLineLikeShape(shapeType)) return { width, height };
+  const stroke = Math.max(1, outlineWeightPx ?? 1);
+  return {
+    width: width > 0 ? width : stroke,
+    height: height > 0 ? height : stroke,
+  };
+}
+
 function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   shapeType: string;
   fillRgb: string | null;
@@ -772,7 +814,15 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   const prstAttr = prstGeom?.['@prst'];
   const shapeType = typeof prstAttr === 'string' && prstAttr.length > 0 ? prstAttr : 'rect';
 
-  const fillRgb = readColor(spPr, theme) ?? parseSrgbColor(spPr);
+  // D12 first — explicit `<a:noFill/>` beats any inherited / solid fill.
+  // Line-like shapes also conceptually carry no fill (only a stroke);
+  // emit transparent so they don't paint a phantom rectangle behind
+  // the stroke when the OOXML omits `<a:noFill/>`.
+  const hasNoFill =
+    findChild(spPr, 'a:noFill') !== undefined || isLineLikeShape(shapeType);
+  const fillRgb = hasNoFill
+    ? TRANSPARENT_FILL
+    : readColor(spPr, theme) ?? parseSrgbColor(spPr);
 
   let outlineRgb: string | null = null;
   let outlineWeightPx: number | null = null;
@@ -1219,6 +1269,7 @@ async function processSpTree(
 
     if (spPr) {
       const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash } = parseShapeAppearance(spPr, reg.theme);
+      const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shapeProperties: any = {};
       if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
@@ -1234,8 +1285,8 @@ async function processSpTree(
         zIndex,
         left,
         top,
-        width,
-        height,
+        width: inflated.width,
+        height: inflated.height,
         angle,
         flipX,
         flipY,
@@ -1271,6 +1322,7 @@ async function processSpTree(
     const zIndex = z.next;
     z.next += 1;
     const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash } = parseShapeAppearance(spPr, reg.theme);
+    const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shapeProperties: any = {};
     if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
@@ -1286,8 +1338,8 @@ async function processSpTree(
       zIndex,
       left,
       top,
-      width,
-      height,
+      width: inflated.width,
+      height: inflated.height,
       angle,
       flipX,
       flipY,

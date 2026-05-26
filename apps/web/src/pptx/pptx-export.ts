@@ -24,6 +24,17 @@ const px2in = (px: number | undefined): number => (px ?? 0) / 96;
  */
 // Note: Univer's `Nullable<T>` is `T | null | undefined | void`. Accept the
 // same surface and treat anything falsy as the fallback.
+// D12 — detect the transparent sentinel emitted by the import side for
+// shapes carrying `<a:noFill/>` (and for line-like prsts). When present,
+// the export skips PptxGenJS's `fill` opt entirely so the resulting
+// pptx round-trips the no-fill semantics rather than baking white in.
+function isTransparentFill(rgb: string | null | undefined | void): boolean {
+  if (!rgb) return false;
+  const t = rgb.trim().toLowerCase();
+  if (t === 'transparent') return true;
+  return /^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*0(?:\.0+)?\s*\)$/.test(t);
+}
+
 function normalizeColor(rgb: string | null | undefined | void, fallback = '000000'): string {
   if (!rgb) return fallback;
   const trimmed = rgb.trim();
@@ -65,9 +76,11 @@ function emitShapeElement(slide: pptxgen.Slide, element: IPageElement, shape: IS
     rotate: element.angle ?? 0,
     flipH: !!element.flipX,
     flipV: !!element.flipY,
-    fill: shape.shapeProperties?.shapeBackgroundFill?.rgb
-      ? { color: normalizeColor(shape.shapeProperties.shapeBackgroundFill.rgb, 'FFFFFF') }
-      : undefined,
+    fill:
+      shape.shapeProperties?.shapeBackgroundFill?.rgb &&
+      !isTransparentFill(shape.shapeProperties.shapeBackgroundFill.rgb)
+        ? { color: normalizeColor(shape.shapeProperties.shapeBackgroundFill.rgb, 'FFFFFF') }
+        : undefined,
     line: shape.shapeProperties?.outline
       ? {
           color: normalizeColor(shape.shapeProperties.outline.outlineFill?.rgb, '000000'),
