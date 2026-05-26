@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index fafb8476bdd10d7a5224234dc0d7494756933de3..9e4ffbaa6aec7ede64df04941b07e6607c4d1149 100644
+index fafb8476bdd10d7a5224234dc0d7494756933de3..b89338a68c2068c3efb107a7b25e53a48eb5e852 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -19655,6 +19655,24 @@ var Image$1 = class extends Shape {
@@ -27,7 +27,44 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..9e4ffbaa6aec7ede64df04941b07e660
  		this._draw(mainCtx, void 0, realWidth, realHeight);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -24644,7 +24662,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
+@@ -20633,9 +20651,16 @@ var RichText = class extends BaseObject {
+ 		const docModel = this.documentModel = new _univerjs_core.DocumentDataModel(this._documentData);
+ 		const docViewModel = new DocumentViewModel(docModel);
+ 		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
++		// Casual Slides patch — honour documentStyle.margin* as text-frame
++		// insets instead of hardcoding zero. PowerPoint's <a:bodyPr> lIns
++		// / tIns / rIns / bIns flow through our parser into
++		// documentStyle.marginLeft / marginTop / marginRight / marginBottom.
++		// Without this read the text always butts up against the frame's
++		// upper-left edge regardless of the inset.
++		const _csDocStyle = (this._documentData && this._documentData.documentStyle) || {};
+ 		this._documents = new Documents(`${this.oKey}_DOCUMENTS`, this._documentSkeleton, {
+-			pageMarginLeft: 0,
+-			pageMarginTop: 0
++			pageMarginLeft: _csDocStyle.marginLeft || 0,
++			pageMarginTop: _csDocStyle.marginTop || 0
+ 		});
+ 		this._initialProps(props);
+ 		this.onTransformChange$.subscribeEvent((changeState) => {
+@@ -20644,8 +20669,15 @@ var RichText = class extends BaseObject {
+ 				docModel.updateDocumentDataPageSize(this.width);
+ 				this._documentSkeleton.makeDirty(true);
+ 				this._documentSkeleton.calculate();
+-				const size = this.getDocsSkeletonPageSize();
+-				this.height = (size === null || size === void 0 ? void 0 : size.height) || this.height;
++				// Casual Slides patch — DO NOT auto-grow `this.height` to the
++				// laid-out text size. The original behaviour assigned the
++				// rendered text height back to the frame, which made imported
++				// pptx text frames silently expand past their authored
++				// bounding box ("text out of canvas box" — slides authored
++				// with autofit / clip semantics expect the frame to stay put
++				// while text overflows or shrinks). Keeping the original
++				// height respects the imported frame; autofit (font shrink)
++				// is parsed by the importer as a fs multiplier on each run.
+ 				this._setTransForm();
+ 				this.refreshDocumentByDocData();
+ 			}
+@@ -24644,7 +24676,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
@@ -38,7 +75,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..9e4ffbaa6aec7ede64df04941b07e660
  	}
  	_onKeyDown(evt) {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..c24c074a3dd206d909f1010351aeb4a621f76661 100644
+index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..24f73e73c912f996eeb14033da332270e9e24066 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -19626,6 +19626,24 @@ var Image$1 = class extends Shape {
@@ -66,7 +103,44 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..c24c074a3dd206d909f1010351aeb4a6
  		this._draw(mainCtx, void 0, realWidth, realHeight);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -24615,7 +24633,8 @@ var InputManager = class InputManager extends Disposable {
+@@ -20604,9 +20622,16 @@ var RichText = class extends BaseObject {
+ 		const docModel = this.documentModel = new DocumentDataModel(this._documentData);
+ 		const docViewModel = new DocumentViewModel(docModel);
+ 		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
++		// Casual Slides patch — honour documentStyle.margin* as text-frame
++		// insets instead of hardcoding zero. PowerPoint's <a:bodyPr> lIns
++		// / tIns / rIns / bIns flow through our parser into
++		// documentStyle.marginLeft / marginTop / marginRight / marginBottom.
++		// Without this read the text always butts up against the frame's
++		// upper-left edge regardless of the inset.
++		const _csDocStyle = (this._documentData && this._documentData.documentStyle) || {};
+ 		this._documents = new Documents(`${this.oKey}_DOCUMENTS`, this._documentSkeleton, {
+-			pageMarginLeft: 0,
+-			pageMarginTop: 0
++			pageMarginLeft: _csDocStyle.marginLeft || 0,
++			pageMarginTop: _csDocStyle.marginTop || 0
+ 		});
+ 		this._initialProps(props);
+ 		this.onTransformChange$.subscribeEvent((changeState) => {
+@@ -20615,8 +20640,15 @@ var RichText = class extends BaseObject {
+ 				docModel.updateDocumentDataPageSize(this.width);
+ 				this._documentSkeleton.makeDirty(true);
+ 				this._documentSkeleton.calculate();
+-				const size = this.getDocsSkeletonPageSize();
+-				this.height = (size === null || size === void 0 ? void 0 : size.height) || this.height;
++				// Casual Slides patch — DO NOT auto-grow `this.height` to the
++				// laid-out text size. The original behaviour assigned the
++				// rendered text height back to the frame, which made imported
++				// pptx text frames silently expand past their authored
++				// bounding box ("text out of canvas box" — slides authored
++				// with autofit / clip semantics expect the frame to stay put
++				// while text overflows or shrinks). Keeping the original
++				// height respects the imported frame; autofit (font shrink)
++				// is parsed by the importer as a fs multiplier on each run.
+ 				this._setTransForm();
+ 				this.refreshDocumentByDocData();
+ 			}
+@@ -24615,7 +24647,8 @@ var InputManager = class InputManager extends Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
