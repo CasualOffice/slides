@@ -3846,6 +3846,110 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect((grad.stops[2].color ?? '').toUpperCase().replace('#', '')).toBe('0000FF');
   });
 
+  test('pptx import wave 9d — chart data + type parsed (H2 + H3)', async ({ page }) => {
+    // Slide carries a graphicFrame referencing chart1.xml. The chart
+    // is a <c:barChart> with categories [A, B, C] and series Sales
+    // [10, 20, 30]. After import, the CHART element's `chart` payload
+    // carries chartType='bar' + categories + series.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:graphicFrame>` +
+        `<p:nvGraphicFramePr><p:cNvPr id="2" name="chart-1"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>` +
+        `<p:xfrm><a:off x="914400" y="914400"/><a:ext cx="3657600" cy="2743200"/></p:xfrm>` +
+        `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">` +
+        `<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId2"/>` +
+        `</a:graphicData></a:graphic>` +
+        `</p:graphicFrame>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/>` +
+        `</Relationships>`;
+      const chartXml =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+        `<c:chart>` +
+        `<c:plotArea>` +
+        `<c:layout/>` +
+        `<c:barChart>` +
+        `<c:barDir val="col"/>` +
+        `<c:grouping val="clustered"/>` +
+        `<c:ser>` +
+        `<c:idx val="0"/><c:order val="0"/>` +
+        `<c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Sales</c:v></c:pt></c:strCache></c:strRef></c:tx>` +
+        `<c:cat><c:strRef><c:f>Sheet1!$A$2:$A$4</c:f><c:strCache><c:ptCount val="3"/>` +
+        `<c:pt idx="0"><c:v>A</c:v></c:pt>` +
+        `<c:pt idx="1"><c:v>B</c:v></c:pt>` +
+        `<c:pt idx="2"><c:v>C</c:v></c:pt>` +
+        `</c:strCache></c:strRef></c:cat>` +
+        `<c:val><c:numRef><c:f>Sheet1!$B$2:$B$4</c:f><c:numCache><c:ptCount val="3"/>` +
+        `<c:pt idx="0"><c:v>10</c:v></c:pt>` +
+        `<c:pt idx="1"><c:v>20</c:v></c:pt>` +
+        `<c:pt idx="2"><c:v>30</c:v></c:pt>` +
+        `</c:numCache></c:numRef></c:val>` +
+        `</c:ser>` +
+        `</c:barChart>` +
+        `</c:plotArea>` +
+        `</c:chart>` +
+        `</c:chartSpace>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/charts/chart1.xml', chartXml);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave9d-chart.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const chartEl = Object.values(firstPage.pageElements ?? {}).find((e: any) => e.type === 7) as any;
+    expect(chartEl, 'CHART element extracted').toBeTruthy();
+    expect(chartEl.chart?.chartType, 'chartType stripped to "bar"').toBe('bar');
+    expect(chartEl.chart?.categories, 'categories captured').toEqual(['A', 'B', 'C']);
+    expect(chartEl.chart?.series, 'series captured').toBeTruthy();
+    expect(chartEl.chart.series.length, 'one series').toBe(1);
+    expect(chartEl.chart.series[0].name, 'series name').toBe('Sales');
+    expect(chartEl.chart.series[0].values, 'series values').toEqual([10, 20, 30]);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

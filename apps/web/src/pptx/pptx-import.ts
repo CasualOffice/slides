@@ -2190,7 +2190,7 @@ async function processSpTree(
   // per uri.
   for (const gf of toArray(findChild(spTree, 'p:graphicFrame'))) {
     if (!gf || typeof gf !== 'object') continue;
-    const result = processGraphicFrame(gf, reg, groupXfrm, pageOrdinal, z);
+    const result = await processGraphicFrame(gf, reg, groupXfrm, pageOrdinal, z);
     if (result) out.push(result);
   }
 
@@ -2301,15 +2301,172 @@ function parseTable(tbl: unknown, reg: ImageRegistry, elementId: string): { rows
   return { rows, ...(columnWidths.length > 0 ? { columnWidths } : {}) };
 }
 
+// H2 + H3 — parse `<c:chart>` XML payload into a structured IChart so
+// the UI can read chart type + series labels + numeric values without
+// re-walking the OOXML. Goal: "see the chart data on screen", not
+// "edit the chart". We pull:
+//   • chartType — first child of <c:plotArea> matching a known chart
+//     element (barChart / lineChart / pieChart / scatterChart /
+//     areaChart / doughnutChart / radarChart / surfaceChart / bubbleChart).
+//   • categories — <c:cat><c:strRef> or <c:numRef> values from the FIRST
+//     series (PowerPoint repeats categories across series, so the first
+//     is sufficient).
+//   • series — each <c:ser>:
+//       - name from <c:tx><c:strRef><c:strCache><c:pt><c:v> or <c:tx><c:v>
+//       - values from <c:val><c:numRef><c:numCache><c:pt><c:v> in order
+//   These are enough to drive a basic bar/line/pie chart UI without
+//   touching the chart's full OOXML.
+const CHART_TYPE_TAGS = [
+  'c:barChart', 'c:bar3DChart',
+  'c:lineChart', 'c:line3DChart',
+  'c:pieChart', 'c:pie3DChart', 'c:doughnutChart',
+  'c:scatterChart',
+  'c:areaChart', 'c:area3DChart',
+  'c:radarChart',
+  'c:surfaceChart', 'c:surface3DChart',
+  'c:bubbleChart',
+  'c:stockChart',
+  'c:ofPieChart',
+] as const;
+
+interface IChartSeries {
+  name?: string;
+  values: number[];
+}
+
+interface IChartStructured {
+  chartId: string;
+  chartPath?: string;
+  // H3 — chart type (e.g. 'bar', 'line', 'pie', 'scatter'). Stripped of
+  // the 'c:' prefix and the trailing 'Chart' suffix so consumers can
+  // switch on a clean enum-ish string.
+  chartType?: string;
+  categories?: string[];
+  series?: IChartSeries[];
+}
+
+function readChartCellValues(ref: unknown, cacheKey: string): { values: string[]; numeric: number[] } {
+  // Both <c:strRef> and <c:numRef> wrap a <c:strCache> / <c:numCache>
+  // with a <c:ptCount @val> + repeating <c:pt idx><c:v>VALUE</c:v></c:pt>.
+  // Index ordering matters for line / bar charts (X-axis position) — sort
+  // by @idx ascending so the array index lines up.
+  const values: string[] = [];
+  const numeric: number[] = [];
+  const cache = findChild(ref, cacheKey);
+  if (!cache) return { values, numeric };
+  const pts = toArray(findChild(cache, 'c:pt'));
+  const sorted = pts.slice().sort((a, b) => {
+    const ia = parseInt(String((a as XmlNode)['@idx'] ?? '0'), 10);
+    const ib = parseInt(String((b as XmlNode)['@idx'] ?? '0'), 10);
+    return (Number.isFinite(ia) ? ia : 0) - (Number.isFinite(ib) ? ib : 0);
+  });
+  for (const pt of sorted) {
+    const v = findChild(pt, 'c:v');
+    let text: string;
+    if (typeof v === 'string') text = v;
+    else if (typeof v === 'number') text = String(v);
+    else if (v && typeof v === 'object') {
+      const inner = (v as XmlNode)['#text'];
+      text = inner === undefined ? '' : String(inner);
+    } else {
+      text = '';
+    }
+    values.push(text);
+    const n = parseFloat(text);
+    numeric.push(Number.isFinite(n) ? n : 0);
+  }
+  return { values, numeric };
+}
+
+function parseChartXml(chartXml: string, chartId: string, chartPath?: string): IChartStructured {
+  const out: IChartStructured = { chartId, ...(chartPath ? { chartPath } : {}) };
+  const parsed = parser.parse(chartXml) as XmlNode;
+  const chartSpace = findChild(parsed, 'c:chartSpace');
+  const chart = findChild(chartSpace, 'c:chart');
+  const plotArea = findChild(chart, 'c:plotArea');
+  if (!plotArea) return out;
+
+  // H3 — chart type. Walk known chart child tags; the first match wins.
+  // Stripping the prefix / suffix gives us a clean identifier:
+  //   'c:barChart' → 'bar', 'c:line3DChart' → 'line3D', 'c:pieChart' → 'pie'.
+  let chartContainer: unknown | undefined;
+  for (const tag of CHART_TYPE_TAGS) {
+    const node = findChild(plotArea, tag);
+    if (node) {
+      const stripped = tag.replace(/^c:/, '').replace(/Chart$/, '');
+      out.chartType = stripped;
+      chartContainer = node;
+      break;
+    }
+  }
+  if (!chartContainer) return out;
+
+  // H2 — categories + series. Walk every <c:ser>; per OOXML, scatter +
+  // bubble charts use <c:xVal> + <c:yVal> instead of <c:cat> + <c:val>,
+  // so handle both.
+  const sers = toArray(findChild(chartContainer, 'c:ser'));
+  const series: IChartSeries[] = [];
+  let categories: string[] | undefined;
+  for (const ser of sers) {
+    if (!ser || typeof ser !== 'object') continue;
+    const s: IChartSeries = { values: [] };
+
+    // Series name — <c:tx> wraps either <c:strRef> (cell ref + cached
+    // string) or a literal <c:v>.
+    const tx = findChild(ser, 'c:tx');
+    if (tx) {
+      const strRef = findChild(tx, 'c:strRef');
+      if (strRef) {
+        const { values } = readChartCellValues(strRef, 'c:strCache');
+        if (values.length > 0) s.name = values[0];
+      } else {
+        const v = findChild(tx, 'c:v');
+        const txt = typeof v === 'string' ? v : (v && typeof v === 'object' ? ((v as XmlNode)['#text'] as string | undefined) : undefined);
+        if (txt) s.name = txt;
+      }
+    }
+
+    // Categories — read off the first series only (they repeat).
+    if (categories === undefined) {
+      const cat = findChild(ser, 'c:cat');
+      if (cat) {
+        const strRef = findChild(cat, 'c:strRef');
+        const numRef = findChild(cat, 'c:numRef');
+        if (strRef) categories = readChartCellValues(strRef, 'c:strCache').values;
+        else if (numRef) categories = readChartCellValues(numRef, 'c:numCache').values;
+      } else {
+        // scatter / bubble — x-axis is the "category" for our purposes.
+        const xVal = findChild(ser, 'c:xVal');
+        if (xVal) {
+          const numRef = findChild(xVal, 'c:numRef');
+          if (numRef) categories = readChartCellValues(numRef, 'c:numCache').values;
+        }
+      }
+    }
+
+    // Values — y values for line/bar/pie/area/radar; yVal for scatter/bubble.
+    const val = findChild(ser, 'c:val') ?? findChild(ser, 'c:yVal');
+    if (val) {
+      const numRef = findChild(val, 'c:numRef');
+      if (numRef) s.values = readChartCellValues(numRef, 'c:numCache').numeric;
+    }
+
+    series.push(s);
+  }
+  if (categories && categories.length > 0) out.categories = categories;
+  if (series.length > 0) out.series = series;
+  return out;
+}
+
 // G1-G4 + H1 — graphicFrame dispatch. Returns a TABLE or CHART
 // IPageElement based on the `<a:graphicData uri>` discriminator.
-function processGraphicFrame(
+async function processGraphicFrame(
   gf: unknown,
   reg: ImageRegistry,
   groupXfrm: GroupXfrm,
   pageOrdinal: number,
   z: ZCounter,
-): IPageElement | null {
+): Promise<IPageElement | null> {
   // graphicFrame uses `<p:xfrm>` (not `<p:spPr><a:xfrm>`). Position +
   // size come from the same `<a:off>` / `<a:ext>` child structure.
   const xfrm = findChild(gf, 'p:xfrm');
@@ -2356,14 +2513,34 @@ function processGraphicFrame(
   }
 
   // H1 — chart. The chart payload (categories, series, type) lives in
-  // ppt/charts/chartN.xml, captured via the resources passthrough. Here
-  // we only emit the reference id so the renderer / hit-test layer can
-  // locate it.
+  // ppt/charts/chartN.xml. We resolve the rId via slide rels to the
+  // chart path inside the zip, then fetch + parse it into a structured
+  // IChart (H2 + H3) so the UI can read chart type / series / values.
+  // The full XML still rides via passthrough so authored fidelity
+  // survives the round-trip.
   const chartNode = findChild(graphicData, 'c:chart') as XmlNode | undefined;
   if (chartNode && typeof uri === 'string' && uri.endsWith('/chart')) {
     const chartId = (chartNode['@r:id'] as string | undefined) ?? '';
     const chartTarget = chartId ? reg.imageRelMap.get(chartId) : undefined;
     const elId = `s${pageOrdinal}-chart-${zIndex}`;
+    let structured: IChartStructured = { chartId, ...(chartTarget ? { chartPath: chartTarget } : {}) };
+    if (chartTarget) {
+      // chartTarget is rels-relative (e.g. '../charts/chart1.xml');
+      // resolve against the slide's dir to a zip path.
+      const chartPath = chartTarget.startsWith('/')
+        ? chartTarget.slice(1)
+        : resolveRelTarget(chartTarget, 'ppt/slides/');
+      const chartXml = await reg.zip.file(chartPath)?.async('string');
+      if (chartXml) {
+        try {
+          structured = parseChartXml(chartXml, chartId, chartTarget);
+        } catch {
+          // Malformed chart XML — fall back to id-only. Authored payload
+          // still survives via passthrough so the export round-trip is
+          // unaffected.
+        }
+      }
+    }
     return {
       id: elId,
       zIndex,
@@ -2379,7 +2556,7 @@ function processGraphicFrame(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       type: 7 as any, // PageElementType.CHART
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      chart: { chartId, ...(chartTarget ? { chartPath: chartTarget } : {}) } as any,
+      chart: structured as any,
     } as unknown as IPageElement;
   }
 
