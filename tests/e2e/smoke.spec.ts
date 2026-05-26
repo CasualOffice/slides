@@ -2142,6 +2142,95 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(img.image?.imageProperties?.transparency, 'amt=40000 → transparency ≈ 0.6').toBeCloseTo(0.6, 3);
   });
 
+  test('pptx import wave 7i — hyperlinks via customRanges (B17)', async ({ page }) => {
+    // <a:rPr><a:hlinkClick r:id="rId5"/></a:rPr> → ICustomRange on the
+    // text frame's IDocumentBody.customRanges with rangeType=HYPERLINK (0)
+    // and properties.url set to the rels Target.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="text"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="5000000" cy="1000000"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `</p:spPr>` +
+        `<p:txBody>` +
+        `<a:bodyPr/>` +
+        // Two runs: plain prefix + hyperlinked suffix.
+        `<a:p>` +
+        `<a:r><a:rPr lang="en-US"/><a:t>visit </a:t></a:r>` +
+        `<a:r><a:rPr lang="en-US"><a:hlinkClick r:id="rId2"/></a:rPr><a:t>anthropic</a:t></a:r>` +
+        `</a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://anthropic.com" TargetMode="External"/>` +
+        `</Relationships>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave7i.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    const elements = Object.values(firstPage.pageElements ?? {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text = elements.find((e: any) => e.richText?.rich) as any;
+    expect(text, 'text frame extracted with rich IDocumentData').toBeTruthy();
+
+    const customRanges = text.richText.rich?.body?.customRanges ?? [];
+    expect(customRanges.length, 'one hyperlink range emitted').toBe(1);
+    const hl = customRanges[0];
+    // CustomRangeType.HYPERLINK = 0.
+    expect(hl.rangeType, 'rangeType = HYPERLINK (0)').toBe(0);
+    expect(hl.properties?.url, 'url passes through from rels Target').toBe('https://anthropic.com');
+    // The hyperlink covers the second run ("anthropic", 9 chars) after
+    // the plain prefix ("visit ", 6 chars).
+    expect(hl.startIndex, 'range starts after prefix').toBe(6);
+    expect(hl.endIndex, 'range ends after hyperlinked run').toBe(15);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

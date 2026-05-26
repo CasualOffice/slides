@@ -2,8 +2,8 @@ import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
 import type { IPageElement, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
-import type { IBullet, IDocumentData, IDocumentStyle, IParagraph, ITextRun, IParagraphStyle } from '@univerjs/core';
-import { BaselineOffset, BorderStyleTypes, HorizontalAlign, PresetListType, TextDirection, VerticalAlign, WrapStrategy } from '@univerjs/core';
+import type { IBullet, ICustomRange, IDocumentData, IDocumentStyle, IParagraph, ITextRun, IParagraphStyle } from '@univerjs/core';
+import { BaselineOffset, BorderStyleTypes, CustomRangeType, HorizontalAlign, PresetListType, TextDirection, VerticalAlign, WrapStrategy } from '@univerjs/core';
 
 // pptx import — JSZip + fast-xml-parser → ISlideData.
 //
@@ -694,6 +694,7 @@ function extractRichDoc(
   elementId: string,
   fallbackProps?: Partial<ISlideRichTextProps>,
   theme: ThemeMap | null = null,
+  relMap: Map<string, string> | null = null,
 ): {
   text: string;
   props: Partial<ISlideRichTextProps>;
@@ -708,6 +709,10 @@ function extractRichDoc(
   const textRuns: ITextRun[] = [];
   const paragraphs: IParagraph[] = [];
   const lines: string[] = [];
+  // B17 — accumulate hyperlink ranges as we walk runs; rangeId is a
+  // per-frame counter so multiple links in one frame stay distinct.
+  const customRanges: ICustomRange[] = [];
+  let hlinkCounter = 0;
   let cursor = 0;
   let firstRunProps: Partial<ISlideRichTextProps> = {};
   let capturedFirstRun = false;
@@ -730,6 +735,31 @@ function extractRichDoc(
       if (txt.length > 0) {
         textRuns.push({ st: cursor, ed: cursor + txt.length, ts });
       }
+
+      // B17 — `<a:rPr><a:hlinkClick r:id="rIdN"/></a:rPr>` resolves
+      // through the slide's rels file to either an http(s) URL or a
+      // slide-internal jump. We pass http(s) URLs through to Univer's
+      // hyperlink custom range; slide-internal jumps need the slide
+      // model's pageId, which we don't surface here, so they're
+      // skipped today (treated as plain text).
+      if (rPr && relMap && txt.length > 0) {
+        const hlink = findChild(rPr, 'a:hlinkClick') as XmlNode | undefined;
+        const rId = hlink?.['@r:id'] ?? hlink?.['@r:embed'];
+        if (typeof rId === 'string') {
+          const target = relMap.get(rId);
+          if (target && /^https?:\/\//i.test(target)) {
+            hlinkCounter += 1;
+            customRanges.push({
+              startIndex: cursor,
+              endIndex: cursor + txt.length,
+              rangeId: `${elementId}-hl-${hlinkCounter}`,
+              rangeType: CustomRangeType.HYPERLINK,
+              properties: { url: target },
+            });
+          }
+        }
+      }
+
       cursor += txt.length;
 
       if (!capturedFirstRun && Object.keys(runStyle).length > 0) {
@@ -783,7 +813,12 @@ function extractRichDoc(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rich: IDocumentData = {
     id: `${elementId}-doc`,
-    body: { dataStream: dataStream.join(''), textRuns, paragraphs },
+    body: {
+      dataStream: dataStream.join(''),
+      textRuns,
+      paragraphs,
+      ...(customRanges.length > 0 ? { customRanges } : {}),
+    },
     documentStyle: docStyle,
   } as any;
 
@@ -1322,6 +1357,7 @@ async function processSpTree(
         elId,
         phInherited?.defaultRunProps,
         reg.theme,
+        reg.imageRelMap,
       );
       const richText: ISlideRichTextProps = {
         text,

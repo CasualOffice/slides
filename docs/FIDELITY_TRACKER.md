@@ -10,9 +10,11 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7h)
+## Snapshot — 2026-05-26 (post wave 7i)
 
-**46 / 87 items at ✅, 5 at ⚠️.** Wave 7h closes three small colour + image + paragraph items: B12 (`<a:prstClr>` named-colour table + `<a:sysClr lastClr>` passthrough), E4 (`<a:alphaModFix amt>` → `imageProperties.transparency`), and C9 (`<a:pPr rtl="1">` → `paragraphStyle.direction = RIGHT_TO_LEFT`).
+**47 / 87 items at ✅, 5 at ⚠️.** Wave 7i lands the biggest remaining non-fork-blocked item: B17 (hyperlinks). `<a:rPr><a:hlinkClick r:id="rIdN"/>` resolves via the slide's rels file to an http(s) URL and emits an `ICustomRange` with `rangeType: CustomRangeType.HYPERLINK` on the text frame's `IDocumentBody.customRanges`. Slide-internal jump targets are skipped (we don't surface pageId at the run level today).
+
+Wave 7h (preceding): B12 (`<a:prstClr>` named-colour table + `<a:sysClr lastClr>` passthrough), E4 (`<a:alphaModFix amt>` → `imageProperties.transparency`), and C9 (`<a:pPr rtl="1">` → `paragraphStyle.direction = RIGHT_TO_LEFT`).
 
 Wave 7g (preceding): A6 (`<p:sld show="0">` → `ISlideProperties.isSkipped`) and C14 (`<a:bodyPr wrap="none|square">` → `WrapStrategy.OVERFLOW|WRAP`).
 
@@ -60,7 +62,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | B14 | Letter spacing (`<a:rPr spc>`) | ❌ | Low | Low | — |
 | B15 | Text outline (`<a:rPr><a:ln>`) | ❌ | Low | Med | — |
 | B16 | **Multi-run paragraphs** (mixed bold / color / size mid-line) | ✅ | High | Med | Wave 6 — `extractRichDoc` emits one `ITextRun` per `<a:r>` with its own style; placed into `richText.rich` as a full `IDocumentData`. Flat `richText.text` / `fs` / `bl` etc. are still populated for export and renderer-fallback paths. |
-| B17 | Hyperlinks (`<a:hlinkClick>`) | ❌ | Med | Med | — |
+| B17 | Hyperlinks (`<a:hlinkClick>`) | ✅ | Med | Med | Wave 7i — `<a:rPr><a:hlinkClick r:id="rIdN"/>` resolves through the slide's rels (already threaded into `extractRichDoc` via `reg.imageRelMap`) to a Target URL. http(s) URLs emit an `ICustomRange { rangeType: CustomRangeType.HYPERLINK, properties: { url } }` over the run's character span on `IDocumentBody.customRanges`. Slide-internal targets (action="ppaction://hlinksldjump") skipped — needs pageId resolution at the run level (P2 work). |
 
 ## C. Text — paragraphs / frame
 
