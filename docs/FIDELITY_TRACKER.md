@@ -10,9 +10,18 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
+## Snapshot — 2026-05-27 (post renderer effects + image filter wave)
+
+**74 / 87 items at ✅, 6 at ⚠️, 7 at ❌.** Renderer-side fidelity push:
+
+- **ShapeAdaptor** now also honours `effectLst.glow` — re-uses the canvas shadow channel with zero offset + larger blur (1.5x outerShdw's scale) and `opacity 0.6` to fake a halo. outerShdw still wins when both are set, matching PowerPoint precedence. innerShdw / reflection / blur are now explicit TODOs in the patched bundle rather than dead-letters (commit `3165db6`).
+- **Engine-render Image.render()** now applies `shadow*` props (inherited from Shape but previously ignored — Image overrides `_draw`) and a new `filter` prop before drawing the bitmap. This unlocks the slides ImageAdaptor wiring for shadow / glow + CSS-filter brightness/contrast (commit `c58d728`).
+- **IImageProperties.effectLst** slot added to `@univerjs/core` (re-uses `IEffectList` from the shape side) so the parser has a typed channel for `<a:effectLst>` payloads scoped to `<p:pic>` (commit `b48748a`).
+- **ImageAdaptor** honours `imageProperties.effectLst.outerShdw` / `.glow` (mirrors ShapeAdaptor's decoder) + `imageProperties.brightness` / `.contrast` (CSS filter string `brightness(...) contrast(...)`) + `imageProperties.transparency` (engine-render Image `opacity = 1 - transparency`, kept off the filter path so transparency-only images don't pay the canvas-filter cost). The brightness / contrast hook is forward-compatible: parser populates these from `<a:lum>` / `<a:duotone>` in the sibling parser wave (commit `a9b6a83`).
+
 ## Snapshot — 2026-05-27 (post wave 8b-8f + renderer pipeline)
 
-**74 / 87 items at ✅, 6 at ⚠️, 7 at ❌.** Wave 8b-8f tackles the long tail of parser items: J3 (theme font scheme fallback), K1 (deck title from docProps/core.xml), K2 (custom props passthrough), K3 (`<p:defaultTextStyle>` deck-level defaults), and I5 (footer / date / sldNum service placeholders synthesised from master/layout when the slide doesn't declare them). The combined effect: imported decks now carry author-authored titles, deck-wide typography defaults, and footer / page-number elements that previously dropped silently.
+Wave 8b-8f tackles the long tail of parser items: J3 (theme font scheme fallback), K1 (deck title from docProps/core.xml), K2 (custom props passthrough), K3 (`<p:defaultTextStyle>` deck-level defaults), and I5 (footer / date / sldNum service placeholders synthesised from master/layout when the slide doesn't declare them). The combined effect: imported decks now carry author-authored titles, deck-wide typography defaults, and footer / page-number elements that previously dropped silently.
 
 **Renderer pipeline (parallel session, same date)** — pnpm patches to `@univerjs/slides@0.24.0` `lib/{es,cjs}/index.js` so the canvas actually honours fields the parser was already emitting. Until these landed, many ✅ items in the tracker rendered as if they were ❌:
 
