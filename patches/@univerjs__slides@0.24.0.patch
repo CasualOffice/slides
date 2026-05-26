@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..a9824cbc7565079379f4ea0badcb8b2d5eee7c46 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ff4b91177fc6b1f4c9a8ec6d792f4b54402d0018 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -31,7 +31,87 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..a9824cbc7565079379f4ea0badcb8b2d
  	getSnapshot() {
  		return this._snapshot;
  	}
-@@ -699,7 +707,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -667,6 +675,79 @@ var ImageAdaptorFactory = class {
+ };
+ CanvasObjectProviderRegistry.add(new ImageAdaptorFactory());
+ 
++// Casual Slides patch — minimal TABLE adaptor (PageElementType.TABLE = 6).
++// Renders the table's outer bounding rect with a light fill so the
++// element is visible at the right position and size. Cell text +
++// border rendering is a follow-up wave. Without this adaptor, every
++// pptx that carries a <p:graphicFrame><a:tbl> was invisible.
++var TableAdaptor = class extends ObjectAdaptor {
++	constructor(..._args) {
++		super(..._args);
++		_defineProperty(this, "zIndex", 2);
++		_defineProperty(this, "viewKey", 6);
++	}
++	check(type) {
++		if (type !== this.viewKey) return;
++		return this;
++	}
++	convert(pageElement) {
++		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY } = pageElement;
++		return new _univerjs_engine_render.Rect(id, {
++			fill: "rgba(245, 247, 250, 1)",
++			stroke: "rgba(100, 116, 139, 1)",
++			strokeWidth: 1,
++			top, left, width, height, zIndex,
++			angle, scaleX, scaleY, skewX, skewY, flipX, flipY,
++			forceRender: true
++		});
++	}
++};
++var TableAdaptorFactory = class {
++	constructor() {
++		_defineProperty(this, "zIndex", 5);
++	}
++	create(injector) {
++		return injector.createInstance(TableAdaptor);
++	}
++};
++CanvasObjectProviderRegistry.add(new TableAdaptorFactory());
++
++// Casual Slides patch — minimal CHART adaptor (PageElementType.CHART = 7).
++// Same idea as the table adaptor: render the chart's bounding rect with
++// a placeholder fill so it shows up. Real chart rendering needs to read
++// the passthrough chart XML and draw it; deferred to a later wave.
++var ChartAdaptor = class extends ObjectAdaptor {
++	constructor(..._args) {
++		super(..._args);
++		_defineProperty(this, "zIndex", 2);
++		_defineProperty(this, "viewKey", 7);
++	}
++	check(type) {
++		if (type !== this.viewKey) return;
++		return this;
++	}
++	convert(pageElement) {
++		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY } = pageElement;
++		return new _univerjs_engine_render.Rect(id, {
++			fill: "rgba(239, 246, 255, 1)",
++			stroke: "rgba(59, 130, 246, 1)",
++			strokeWidth: 1,
++			top, left, width, height, zIndex,
++			angle, scaleX, scaleY, skewX, skewY, flipX, flipY,
++			forceRender: true
++		});
++	}
++};
++var ChartAdaptorFactory = class {
++	constructor() {
++		_defineProperty(this, "zIndex", 5);
++	}
++	create(injector) {
++		return injector.createInstance(ChartAdaptor);
++	}
++};
++CanvasObjectProviderRegistry.add(new ChartAdaptorFactory());
++
+ //#endregion
+ //#region src/views/render/adaptors/rich-text-adaptor.ts
+ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -699,7 +780,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  			forceRender: true
  		};
  		let isNotNull = false;
@@ -46,7 +126,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..a9824cbc7565079379f4ea0badcb8b2d
  			config = {
  				...config,
  				text,
-@@ -715,12 +729,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -715,12 +802,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  				cl
  			};
  			isNotNull = true;
@@ -59,7 +139,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..a9824cbc7565079379f4ea0badcb8b2d
  		}
  		if (isNotNull === false) return;
  		return new _univerjs_engine_render.RichText(this._localeService, id, config);
-@@ -796,7 +804,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -796,7 +877,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			...strokeStyle
  		});
  		if (shapeType === "ellipse") {
@@ -67,7 +147,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..a9824cbc7565079379f4ea0badcb8b2d
  			return new _univerjs_engine_render.Circle(id, {
  				fill,
  				top,
-@@ -816,6 +823,29 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -816,6 +896,29 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				...strokeStyle
  			});
  		}
@@ -98,7 +178,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..a9824cbc7565079379f4ea0badcb8b2d
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..a4fe66c34f000600328a3af6d42f59668eb69a36 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..e931e7b832ec1403a3f2746ee47abbe627dfa7cf 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -44,6 +44,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -130,7 +210,87 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..a4fe66c34f000600328a3af6d42f5966
  	getSnapshot() {
  		return this._snapshot;
  	}
-@@ -698,7 +706,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -666,6 +674,79 @@ var ImageAdaptorFactory = class {
+ };
+ CanvasObjectProviderRegistry.add(new ImageAdaptorFactory());
+ 
++// Casual Slides patch — minimal TABLE adaptor (PageElementType.TABLE = 6).
++// Renders the table's outer bounding rect with a light fill so the
++// element is visible at the right position and size. Cell text +
++// border rendering is a follow-up wave. Without this adaptor, every
++// pptx that carries a <p:graphicFrame><a:tbl> was invisible.
++var TableAdaptor = class extends ObjectAdaptor {
++	constructor(..._args) {
++		super(..._args);
++		_defineProperty(this, "zIndex", 2);
++		_defineProperty(this, "viewKey", 6);
++	}
++	check(type) {
++		if (type !== this.viewKey) return;
++		return this;
++	}
++	convert(pageElement) {
++		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY } = pageElement;
++		return new Rect(id, {
++			fill: "rgba(245, 247, 250, 1)",
++			stroke: "rgba(100, 116, 139, 1)",
++			strokeWidth: 1,
++			top, left, width, height, zIndex,
++			angle, scaleX, scaleY, skewX, skewY, flipX, flipY,
++			forceRender: true
++		});
++	}
++};
++var TableAdaptorFactory = class {
++	constructor() {
++		_defineProperty(this, "zIndex", 5);
++	}
++	create(injector) {
++		return injector.createInstance(TableAdaptor);
++	}
++};
++CanvasObjectProviderRegistry.add(new TableAdaptorFactory());
++
++// Casual Slides patch — minimal CHART adaptor (PageElementType.CHART = 7).
++// Same idea as the table adaptor: render the chart's bounding rect with
++// a placeholder fill so it shows up. Real chart rendering needs to read
++// the passthrough chart XML and draw it; deferred to a later wave.
++var ChartAdaptor = class extends ObjectAdaptor {
++	constructor(..._args) {
++		super(..._args);
++		_defineProperty(this, "zIndex", 2);
++		_defineProperty(this, "viewKey", 7);
++	}
++	check(type) {
++		if (type !== this.viewKey) return;
++		return this;
++	}
++	convert(pageElement) {
++		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY } = pageElement;
++		return new Rect(id, {
++			fill: "rgba(239, 246, 255, 1)",
++			stroke: "rgba(59, 130, 246, 1)",
++			strokeWidth: 1,
++			top, left, width, height, zIndex,
++			angle, scaleX, scaleY, skewX, skewY, flipX, flipY,
++			forceRender: true
++		});
++	}
++};
++var ChartAdaptorFactory = class {
++	constructor() {
++		_defineProperty(this, "zIndex", 5);
++	}
++	create(injector) {
++		return injector.createInstance(ChartAdaptor);
++	}
++};
++CanvasObjectProviderRegistry.add(new ChartAdaptorFactory());
++
+ //#endregion
+ //#region src/views/render/adaptors/rich-text-adaptor.ts
+ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -698,7 +779,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  			forceRender: true
  		};
  		let isNotNull = false;
@@ -145,7 +305,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..a4fe66c34f000600328a3af6d42f5966
  			config = {
  				...config,
  				text,
-@@ -714,12 +728,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -714,12 +801,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  				cl
  			};
  			isNotNull = true;
@@ -158,7 +318,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..a4fe66c34f000600328a3af6d42f5966
  		}
  		if (isNotNull === false) return;
  		return new RichText(this._localeService, id, config);
-@@ -795,7 +803,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -795,7 +876,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			...strokeStyle
  		});
  		if (shapeType === "ellipse") {
@@ -166,7 +326,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..a4fe66c34f000600328a3af6d42f5966
  			return new Circle(id, {
  				fill,
  				top,
-@@ -815,6 +822,29 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -815,6 +895,29 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				...strokeStyle
  			});
  		}
