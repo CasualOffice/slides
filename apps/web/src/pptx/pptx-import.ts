@@ -490,6 +490,28 @@ function parseRunProps(rPr: unknown, theme: ThemeMap | null = null): Partial<ISl
     }
   }
 
+  // B15 — `<a:rPr><a:ln>` is the glyph outline (stroke around each
+  // character). Lands on the fork-patched `IStyleBase.tol`. Width is
+  // OOXML EMU on import → pt on the model (matches IOutline.weight on
+  // shapes). Colour resolves via readColor (srgb/scheme/prst/sys).
+  const rln = findChild(node, 'a:ln') as XmlNode | undefined;
+  if (rln) {
+    const tolColor = readColor(rln, theme) ?? parseSrgbColor(rln);
+    const wRaw = rln['@w'];
+    let tolWeight: number | undefined;
+    if (typeof wRaw === 'string' || typeof wRaw === 'number') {
+      const emu = parseInt(String(wRaw), 10);
+      // EMU → pt: 12700 EMU = 1 pt.
+      if (Number.isFinite(emu)) tolWeight = emu / 12700;
+    }
+    if (tolColor || tolWeight !== undefined) {
+      const tol: { color?: { rgb: string }; weight?: number } = {};
+      if (tolColor) tol.color = { rgb: tolColor };
+      if (tolWeight !== undefined) tol.weight = tolWeight;
+      (out as Partial<ISlideRichTextProps> & { tol?: typeof tol }).tol = tol;
+    }
+  }
+
   // Font family (B3 + B4): prefer `<a:latin>`, then fall back to
   // `<a:ea>` (East-Asian) and `<a:cs>` (complex-script). Univer's
   // IStyleBase has a single `ff` slot, so the priority order picks the
@@ -1024,6 +1046,111 @@ function inflateLineBbox(
   };
 }
 
+// D17 — read `<a:headEnd>` / `<a:tailEnd>` arrowhead descriptors.
+// IArrowhead lands on the fork-patched IOutline (added in wave 7m).
+type Arrowhead = { type?: string; w?: 'sm' | 'med' | 'lg'; len?: 'sm' | 'med' | 'lg' };
+function parseArrowhead(node: unknown): Arrowhead | null {
+  if (!node || typeof node !== 'object') return null;
+  const n = node as XmlNode;
+  const out: Arrowhead = {};
+  const type = n['@type'];
+  if (typeof type === 'string' && type.length > 0) out.type = type;
+  const w = n['@w'];
+  if (w === 'sm' || w === 'med' || w === 'lg') out.w = w;
+  const len = n['@len'];
+  if (len === 'sm' || len === 'med' || len === 'lg') out.len = len;
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+// D18 + D19 — read `<a:effectLst>` and decode each child effect. EMU
+// values pass through unchanged; the renderer is expected to convert.
+interface IEffectListPayload {
+  outerShdw?: { color?: { rgb: string }; blurRad?: number; dist?: number; dir?: number };
+  innerShdw?: { color?: { rgb: string }; blurRad?: number; dist?: number; dir?: number };
+  glow?: { color?: { rgb: string }; rad?: number };
+  reflection?: { blurRad?: number; stA?: number; endA?: number };
+  blur?: { rad?: number; grow?: boolean };
+}
+function parseShadow(node: unknown, theme: ThemeMap | null): IEffectListPayload['outerShdw'] | null {
+  if (!node || typeof node !== 'object') return null;
+  const n = node as XmlNode;
+  const out: NonNullable<IEffectListPayload['outerShdw']> = {};
+  const color = readColor(n, theme) ?? parseSrgbColor(n);
+  if (color) out.color = { rgb: color };
+  const blurRadRaw = n['@blurRad'];
+  if (typeof blurRadRaw === 'string' || typeof blurRadRaw === 'number') {
+    const v = parseInt(String(blurRadRaw), 10);
+    if (Number.isFinite(v)) out.blurRad = v;
+  }
+  const distRaw = n['@dist'];
+  if (typeof distRaw === 'string' || typeof distRaw === 'number') {
+    const v = parseInt(String(distRaw), 10);
+    if (Number.isFinite(v)) out.dist = v;
+  }
+  const dirRaw = n['@dir'];
+  if (typeof dirRaw === 'string' || typeof dirRaw === 'number') {
+    const v = parseInt(String(dirRaw), 10);
+    if (Number.isFinite(v)) out.dir = v;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+function parseEffectList(spPr: unknown, theme: ThemeMap | null): IEffectListPayload | null {
+  const effectLst = findChild(spPr, 'a:effectLst');
+  if (!effectLst) return null;
+  const out: IEffectListPayload = {};
+
+  const outerShdw = parseShadow(findChild(effectLst, 'a:outerShdw'), theme);
+  if (outerShdw) out.outerShdw = outerShdw;
+  const innerShdw = parseShadow(findChild(effectLst, 'a:innerShdw'), theme);
+  if (innerShdw) out.innerShdw = innerShdw;
+
+  const glowNode = findChild(effectLst, 'a:glow') as XmlNode | undefined;
+  if (glowNode) {
+    const glow: NonNullable<IEffectListPayload['glow']> = {};
+    const color = readColor(glowNode, theme) ?? parseSrgbColor(glowNode);
+    if (color) glow.color = { rgb: color };
+    const radRaw = glowNode['@rad'];
+    if (typeof radRaw === 'string' || typeof radRaw === 'number') {
+      const v = parseInt(String(radRaw), 10);
+      if (Number.isFinite(v)) glow.rad = v;
+    }
+    if (Object.keys(glow).length > 0) out.glow = glow;
+  }
+
+  const reflNode = findChild(effectLst, 'a:reflection') as XmlNode | undefined;
+  if (reflNode) {
+    const refl: NonNullable<IEffectListPayload['reflection']> = {};
+    const readIntAttr = (k: string) => {
+      const raw = reflNode[k];
+      if (raw === undefined) return;
+      const v = parseInt(String(raw), 10);
+      return Number.isFinite(v) ? v : undefined;
+    };
+    const blurRad = readIntAttr('@blurRad');
+    if (blurRad !== undefined) refl.blurRad = blurRad;
+    const stA = readIntAttr('@stA');
+    if (stA !== undefined) refl.stA = stA;
+    const endA = readIntAttr('@endA');
+    if (endA !== undefined) refl.endA = endA;
+    if (Object.keys(refl).length > 0) out.reflection = refl;
+  }
+
+  const blurNode = findChild(effectLst, 'a:blur') as XmlNode | undefined;
+  if (blurNode) {
+    const blur: NonNullable<IEffectListPayload['blur']> = {};
+    const radRaw = blurNode['@rad'];
+    if (typeof radRaw === 'string' || typeof radRaw === 'number') {
+      const v = parseInt(String(radRaw), 10);
+      if (Number.isFinite(v)) blur.rad = v;
+    }
+    const growRaw = blurNode['@grow'];
+    if (growRaw === '1' || growRaw === 'true' || growRaw === true) blur.grow = true;
+    if (Object.keys(blur).length > 0) out.blur = blur;
+  }
+
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   shapeType: string;
   fillRgb: string | null;
@@ -1031,6 +1158,9 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   outlineWeightPx: number | null;
   outlineDash: BorderStyleTypes | null;
   outlineCap: 'flat' | 'rnd' | 'sq' | null;
+  headEnd: Arrowhead | null;
+  tailEnd: Arrowhead | null;
+  effectLst: IEffectListPayload | null;
 } {
   const prstGeom = findChild(spPr, 'a:prstGeom') as XmlNode | undefined;
   const prstAttr = prstGeom?.['@prst'];
@@ -1050,6 +1180,8 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   let outlineWeightPx: number | null = null;
   let outlineDash: BorderStyleTypes | null = null;
   let outlineCap: 'flat' | 'rnd' | 'sq' | null = null;
+  let headEnd: Arrowhead | null = null;
+  let tailEnd: Arrowhead | null = null;
   const ln = findChild(spPr, 'a:ln') as XmlNode | undefined;
   if (ln) {
     outlineRgb = readColor(ln, theme) ?? parseSrgbColor(ln);
@@ -1061,6 +1193,9 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
     if (capAttr === 'rnd' || capAttr === 'sq' || capAttr === 'flat') {
       outlineCap = capAttr;
     }
+    // D17 — arrowheads.
+    headEnd = parseArrowhead(findChild(ln, 'a:headEnd'));
+    tailEnd = parseArrowhead(findChild(ln, 'a:tailEnd'));
     const w = ln['@w'];
     if (typeof w === 'string' || typeof w === 'number') {
       const emu = parseInt(String(w), 10);
@@ -1075,7 +1210,10 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
     }
   }
 
-  return { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap };
+  // D18 + D19 — `<a:effectLst>` shadow / glow / reflection / blur.
+  const effectLst = parseEffectList(spPr, theme);
+
+  return { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst };
 }
 
 // Placeholder geometry inherited from the slide layout / master (I3).
@@ -1505,19 +1643,22 @@ async function processSpTree(
     }
 
     if (spPr) {
-      const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap } = parseShapeAppearance(spPr, reg.theme);
+      const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
       const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shapeProperties: any = {};
       if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
-      if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null) {
+      if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null || headEnd !== null || tailEnd !== null) {
         shapeProperties.outline = {
           outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
           weight: outlineWeightPx ?? 1,
           ...(outlineDash !== null ? { dashStyle: outlineDash } : {}),
           ...(outlineCap !== null ? { cap: outlineCap } : {}),
+          ...(headEnd !== null ? { headEnd } : {}),
+          ...(tailEnd !== null ? { tailEnd } : {}),
         };
       }
+      if (effectLst !== null) shapeProperties.effectLst = effectLst;
       out.push({
         id: `s${pageOrdinal}-shape-${zIndex}`,
         zIndex,
@@ -1559,19 +1700,22 @@ async function processSpTree(
 
     const zIndex = z.next;
     z.next += 1;
-    const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap } = parseShapeAppearance(spPr, reg.theme);
+    const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
     const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shapeProperties: any = {};
     if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
-    if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null) {
+    if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null || headEnd !== null || tailEnd !== null) {
       shapeProperties.outline = {
         outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
         weight: outlineWeightPx ?? 1,
         ...(outlineDash !== null ? { dashStyle: outlineDash } : {}),
         ...(outlineCap !== null ? { cap: outlineCap } : {}),
+        ...(headEnd !== null ? { headEnd } : {}),
+        ...(tailEnd !== null ? { tailEnd } : {}),
       };
     }
+    if (effectLst !== null) shapeProperties.effectLst = effectLst;
     out.push({
       id: `s${pageOrdinal}-cxn-${zIndex}`,
       zIndex,

@@ -2508,6 +2508,142 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(runs[0]?.ts?.bg?.rgb, '<a:highlight><a:srgbClr val="FFFF00"/> → ts.bg.rgb = #FFFF00').toBe('#FFFF00');
   });
 
+  test('pptx import wave 7m — text outline + arrowheads + effects (B15 + D17 + D18 + D19)', async ({ page }) => {
+    // Four model widenings landed via patches/@univerjs__core@0.24.0.patch
+    // unlock four fidelity items together:
+    //  • B15 — text run with <a:rPr><a:ln w="12700"><a:solidFill><a:srgbClr val="333333"/></a:solidFill></a:ln> → ts.tol.
+    //  • D17 — line shape with <a:ln><a:headEnd type="triangle"/><a:tailEnd type="arrow"/></a:ln> → outline.headEnd/tailEnd.
+    //  • D18 — shape with <a:effectLst><a:outerShdw blurRad="50800" dist="38100" dir="2700000"><a:srgbClr val="000000"/></a:outerShdw> → effectLst.outerShdw.
+    //  • D19 — same shape adds <a:glow rad="63500"><a:srgbClr val="FF0000"/></a:glow> → effectLst.glow.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        // B15 — text run with glyph outline.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="outlined"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="3000000" cy="800000"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `</p:spPr>` +
+        `<p:txBody>` +
+        `<a:bodyPr/>` +
+        `<a:p><a:r>` +
+        `<a:rPr lang="en-US"><a:ln w="12700"><a:solidFill><a:srgbClr val="333333"/></a:solidFill></a:ln></a:rPr>` +
+        `<a:t>outlined</a:t>` +
+        `</a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        // D17 — line shape with both arrowheads.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="3" name="arrow"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="2000000"/><a:ext cx="3000000" cy="0"/></a:xfrm>` +
+        `<a:prstGeom prst="line"/>` +
+        `<a:ln w="19050">` +
+        `<a:solidFill><a:srgbClr val="000000"/></a:solidFill>` +
+        `<a:headEnd type="triangle" w="med" len="med"/>` +
+        `<a:tailEnd type="arrow" w="lg" len="lg"/>` +
+        `</a:ln>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        // D18 + D19 — shape with shadow and glow effects.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="4" name="effects"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="3000000"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>` +
+        `<a:effectLst>` +
+        `<a:outerShdw blurRad="50800" dist="38100" dir="2700000">` +
+        `<a:srgbClr val="000000"/>` +
+        `</a:outerShdw>` +
+        `<a:glow rad="63500">` +
+        `<a:srgbClr val="FF0000"/>` +
+        `</a:glow>` +
+        `</a:effectLst>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave7m.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    const elements = Object.values(firstPage.pageElements ?? {});
+
+    // B15 — text-glyph outline.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const outlinedText = elements.find((e: any) => e.richText?.text === 'outlined') as any;
+    expect(outlinedText, 'text frame with glyph outline extracted').toBeTruthy();
+    const run = outlinedText.richText.rich?.body?.textRuns?.[0];
+    expect(run?.ts?.tol?.color?.rgb, 'tol.color from <a:rPr><a:ln><a:solidFill><a:srgbClr>').toBe('#333333');
+    // weight: 12700 EMU = 1 pt
+    expect(run?.ts?.tol?.weight, 'tol.weight from <a:rPr><a:ln @w> (EMU → pt)').toBeCloseTo(1, 3);
+
+    // D17 — line shape's arrowheads.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const arrow = elements.find((e: any) => e.shape?.shapeType === 'line') as any;
+    expect(arrow, 'line shape extracted').toBeTruthy();
+    expect(arrow.shape?.shapeProperties?.outline?.headEnd?.type, 'headEnd type').toBe('triangle');
+    expect(arrow.shape?.shapeProperties?.outline?.headEnd?.w, 'headEnd w').toBe('med');
+    expect(arrow.shape?.shapeProperties?.outline?.tailEnd?.type, 'tailEnd type').toBe('arrow');
+    expect(arrow.shape?.shapeProperties?.outline?.tailEnd?.len, 'tailEnd len').toBe('lg');
+
+    // D18 + D19 — effectLst.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const effShape = elements.find((e: any) => e.shape?.shapeType === 'rect' && e.shape?.shapeProperties?.effectLst) as any;
+    expect(effShape, 'shape with effectLst extracted').toBeTruthy();
+    const fx = effShape.shape.shapeProperties.effectLst;
+    expect(fx?.outerShdw?.color?.rgb, 'outerShdw color').toBe('#000000');
+    expect(fx?.outerShdw?.blurRad, 'outerShdw blurRad EMU').toBe(50800);
+    expect(fx?.outerShdw?.dist, 'outerShdw dist EMU').toBe(38100);
+    expect(fx?.outerShdw?.dir, 'outerShdw dir (60000ths-deg)').toBe(2700000);
+    expect(fx?.glow?.color?.rgb, 'glow color').toBe('#FF0000');
+    expect(fx?.glow?.rad, 'glow rad EMU').toBe(63500);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

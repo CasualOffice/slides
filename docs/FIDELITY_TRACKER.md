@@ -10,9 +10,11 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7l)
+## Snapshot — 2026-05-26 (post wave 7m)
 
-**55 / 87 items at ✅, 5 at ⚠️.** Wave 7l lands B13 — `<a:rPr><a:highlight>` (any colour-choice child resolves via `readColor`) → `IStyleBase.bg`. Reuses the existing background-colour slot — no fork patch needed.
+**59 / 87 items at ✅, 5 at ⚠️.** Wave 7m extends the @univerjs/core patch with four more model additions (`IStyleBase.tol`, `IArrowhead` + `IOutline.{headEnd, tailEnd}`, `IEffectList` + `IShapeProperties.effectLst`) and lands the matching importer code for B15 (text-glyph outline), D17 (arrowheads), D18 (shape shadow), and D19 (glow / reflection / blur). The single patch artifact `patches/@univerjs__core@0.24.0.patch` now carries all six widenings (B14 spc + D16 cap from wave 7k, plus this wave's four).
+
+Wave 7l (preceding): B13 — `<a:rPr><a:highlight>` → `IStyleBase.bg`. Reuses the existing background-colour slot.
 
 Wave 7k (preceding): B14 (`<a:rPr spc>` → `IStyleBase.spc` — added to core), D16 (`<a:ln cap>` → `IOutline.cap` — added to core), and I1 + I2 + J1 (raw layout/master/theme XML stashed under `ISlideData.resources[CASUAL_SLIDES_PPTX_RAW]` — `resources` slot added to slides). The three fork edits are byte-identical between the fork branch `slide/element-mutations` and the `pnpm patch` artifacts in `patches/@univerjs__core@0.24.0.patch` (new) and `patches/@univerjs__slides@0.24.0.patch` (extended on top of the rev-tracking patch).
 
@@ -66,7 +68,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | B12 | Font color — prstClr / sysClr | ✅ | Low | Low | Wave 7h — `readColor` adds a `PRST_COLOR_MAP` lookup (30 common OOXML named colours: `red`, `black`, `dkBlue` …) and reads `<a:sysClr @lastClr>` as the resolved hex passthrough. Colour modifiers (lumMod / lumOff / tint / shade) flow through the same `applyColorModifiers` path as srgb/scheme. |
 | B13 | Highlight color (`<a:rPr highlight>`) | ✅ | Low | Low | Wave 7l — `<a:rPr><a:highlight>` (any colour-choice child resolves via `readColor`) → `IStyleBase.bg`. Reuses the existing background-colour slot — no fork patch needed. |
 | B14 | Letter spacing (`<a:rPr spc>`) | ✅ | Low | Low | Wave 7k — `<a:rPr @spc>` (hundredths of a point) → `IStyleBase.spc` in pt. `IStyleBase.spc` added by `patches/@univerjs__core@0.24.0.patch` (mirrored from `univer-revamp` on `slide/element-mutations`). Negative values widen-tighten symmetrically. |
-| B15 | Text outline (`<a:rPr><a:ln>`) | ❌ | Low | Med | — |
+| B15 | Text outline (`<a:rPr><a:ln>`) | ✅ | Low | Med | Wave 7m — `<a:rPr><a:ln w=… ><a:solidFill>…</a:ln>` lands on the fork-patched `IStyleBase.tol = { color, weight }`. Weight: EMU → pt (12700 EMU = 1 pt). Colour resolves through the full srgb/scheme/prst/sys cascade. |
 | B16 | **Multi-run paragraphs** (mixed bold / color / size mid-line) | ✅ | High | Med | Wave 6 — `extractRichDoc` emits one `ITextRun` per `<a:r>` with its own style; placed into `richText.rich` as a full `IDocumentData`. Flat `richText.text` / `fs` / `bl` etc. are still populated for export and renderer-fallback paths. |
 | B17 | Hyperlinks (`<a:hlinkClick>`) | ✅ | Med | Med | Wave 7i — `<a:rPr><a:hlinkClick r:id="rIdN"/>` resolves through the slide's rels (already threaded into `extractRichDoc` via `reg.imageRelMap`) to a Target URL. http(s) URLs emit an `ICustomRange { rangeType: CustomRangeType.HYPERLINK, properties: { url } }` over the run's character span on `IDocumentBody.customRanges`. Slide-internal targets (action="ppaction://hlinksldjump") skipped — needs pageId resolution at the run level (P2 work). |
 
@@ -109,9 +111,9 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | D14 | Outline weight | ✅ | High | — | EMU → px. |
 | D15 | Outline dash pattern (`<a:prstDash>`) | ✅ | Med | Low | Wave 7 — `parsePrstDash` maps PowerPoint's preset dash values to Univer's `BorderStyleTypes` (DOTTED / DASHED / DASH_DOT etc.). |
 | D16 | Outline cap (`<a:ln @cap>`) | ✅ | Low | Low | Wave 7k — `<a:ln @cap="flat\|rnd\|sq">` lands on `IOutline.cap`. `IOutline.cap` added by `patches/@univerjs__core@0.24.0.patch`. `flat` is the OOXML default; only explicit non-default values are emitted to keep the shape model lean. Applied to both `<p:sp>` and `<p:cxnSp>` branches. |
-| D17 | Arrowheads (`<a:headEnd>` `<a:tailEnd>`) | ❌ | Med | Low | — |
-| D18 | Shape shadow (`<a:effectLst><a:outerShdw>`) | ❌ | Med | Med | — |
-| D19 | Glow / reflection / blur | ❌ | Low | Med | — |
+| D17 | Arrowheads (`<a:headEnd>` `<a:tailEnd>`) | ✅ | Med | Low | Wave 7m — fork-patched `IOutline.headEnd` / `tailEnd` carry `{ type, w?, len? }`. `parseArrowhead` reads `<a:headEnd>` / `<a:tailEnd>` inside `<a:ln>`; applied in both `<p:sp>` and `<p:cxnSp>` branches. `type` is passed through verbatim (OOXML names: `triangle`, `stealth`, `diamond`, `oval`, `arrow`, `none`); `w` and `len` accept `sm`/`med`/`lg`. |
+| D18 | Shape shadow (`<a:effectLst><a:outerShdw>`) | ✅ | Med | Med | Wave 7m — `parseEffectList` walks `<a:effectLst>` and emits each effect onto the fork-patched `IShapeProperties.effectLst`. `outerShdw` / `innerShdw` carry `color` (resolved via `readColor`) plus `blurRad`, `dist`, `dir` (EMU / 60000ths-of-deg pass through). |
+| D19 | Glow / reflection / blur | ✅ | Low | Med | Wave 7m — same `parseEffectList` decoder: `<a:glow>` → `{ color, rad }`, `<a:reflection>` → `{ blurRad, stA, endA }`, `<a:blur>` → `{ rad, grow }`. Round-trips structurally; the renderer is expected to convert EMU values. |
 | D20 | 3D rotation / extrusion | ❌ | Low | High | Defer. |
 | D21 | Inline shape text (`<p:sp>` with `<p:txBody>`) | ⚠️ | High | Low | We extract the text into a separate TEXT element instead of keeping it bound to the shape — visually OK but loses the shape-text binding for editing. |
 

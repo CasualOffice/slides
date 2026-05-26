@@ -1,8 +1,27 @@
 diff --git a/lib/types/types/interfaces/i-shape-properties.d.ts b/lib/types/types/interfaces/i-shape-properties.d.ts
-index 0af84f2f82f2d8f49e6aeccb6ea30947a3a56239..194c29136ddbd5092173df38d1584ada3ab3160f 100644
+index 0af84f2f82f2d8f49e6aeccb6ea30947a3a56239..a41354f3c0a4b26496ba539f3e72679a10a3ec0c 100644
 --- a/lib/types/types/interfaces/i-shape-properties.d.ts
 +++ b/lib/types/types/interfaces/i-shape-properties.d.ts
-@@ -27,4 +27,8 @@ export interface IOutline {
+@@ -22,9 +22,80 @@ export interface IShapeProperties {
+     shapeBackgroundFill: IColorStyle;
+     radius?: number;
+     outline?: IOutline;
++    /**
++     * Visual effects (shadow / glow / reflection / blur).
++     * Maps to OOXML `<a:effectLst>`.
++     */
++    effectLst?: IEffectList;
++}
++/**
++ * Arrowhead style for line endings. Maps to OOXML `<a:headEnd>` / `<a:tailEnd>`.
++ */
++export type ArrowheadType = 'none' | 'triangle' | 'stealth' | 'diamond' | 'oval' | 'arrow';
++export interface IArrowhead {
++    type?: ArrowheadType;
++    w?: 'sm' | 'med' | 'lg';
++    len?: 'sm' | 'med' | 'lg';
+ }
+ export interface IOutline {
      outlineFill: IColorStyle;
      weight: number;
      dashStyle?: BorderStyleTypes;
@@ -10,12 +29,82 @@ index 0af84f2f82f2d8f49e6aeccb6ea30947a3a56239..194c29136ddbd5092173df38d1584ada
 +     * Line cap. Maps to OOXML `<a:ln cap="flat|rnd|sq">`. 'flat' is the default.
 +     */
 +    cap?: 'flat' | 'rnd' | 'sq';
++    /**
++     * Arrowhead at the line start. Maps to OOXML `<a:ln><a:headEnd>`.
++     */
++    headEnd?: IArrowhead;
++    /**
++     * Arrowhead at the line end. Maps to OOXML `<a:ln><a:tailEnd>`.
++     */
++    tailEnd?: IArrowhead;
++}
++/**
++ * Drop-shadow descriptor. Maps to OOXML `<a:outerShdw>` / `<a:innerShdw>`.
++ */
++export interface IShadow {
++    color?: IColorStyle;
++    /** Blur radius in EMU. */
++    blurRad?: number;
++    /** Distance in EMU. */
++    dist?: number;
++    /** Direction in 60000ths of a degree (positive = clockwise). */
++    dir?: number;
++}
++/**
++ * Glow descriptor. Maps to OOXML `<a:glow>`.
++ */
++export interface IGlow {
++    color?: IColorStyle;
++    /** Radius in EMU. */
++    rad?: number;
++}
++/**
++ * Reflection descriptor. Maps to OOXML `<a:reflection>`.
++ */
++export interface IReflection {
++    blurRad?: number;
++    stA?: number;
++    endA?: number;
++}
++/**
++ * Blur descriptor. Maps to OOXML `<a:blur>`.
++ */
++export interface IBlur {
++    rad?: number;
++    grow?: boolean;
++}
++/**
++ * Combined effects list — analogous to OOXML `<a:effectLst>`.
++ */
++export interface IEffectList {
++    outerShdw?: IShadow;
++    innerShdw?: IShadow;
++    glow?: IGlow;
++    reflection?: IReflection;
++    blur?: IBlur;
  }
 diff --git a/lib/types/types/interfaces/i-style-data.d.ts b/lib/types/types/interfaces/i-style-data.d.ts
-index 702cf1c6ab6a33191b96cf4d6eb8f6feed78b0ce..99c090e23bb7e868b9d0aa674945a631735ecf1b 100644
+index 702cf1c6ab6a33191b96cf4d6eb8f6feed78b0ce..24de94d7b282362005ee34406a6355c9cdc99e6e 100644
 --- a/lib/types/types/interfaces/i-style-data.d.ts
 +++ b/lib/types/types/interfaces/i-style-data.d.ts
-@@ -204,6 +204,11 @@ export interface IStyleBase {
+@@ -46,6 +46,16 @@ export declare const TEXT_DECORATION_KEYS: readonly ["s", "c", "cl", "t"];
+  * Key union of {@link ITextDecoration}.
+  */
+ export type TextDecorationKey = (typeof TEXT_DECORATION_KEYS)[number];
++/**
++ * Outline applied to text glyphs (distinct from underline / strikethrough).
++ * Maps to OOXML `<a:rPr><a:ln>`. Width is in pt to match how `weight` is
++ * used on `IOutline` for shapes.
++ */
++export interface ITextOutline {
++    color?: IColorStyle;
++    /** Stroke width in pt. */
++    weight?: number;
++}
+ /**
+  * RGB color or theme color
+  */
+@@ -204,6 +214,15 @@ export interface IStyleBase {
       * overline
       */
      ol?: ITextDecoration;
@@ -24,6 +113,10 @@ index 702cf1c6ab6a33191b96cf4d6eb8f6feed78b0ce..99c090e23bb7e868b9d0aa674945a631
 +     * Maps to OOXML `<a:rPr spc>` (hundredths of a point) and CSS `letter-spacing`.
 +     */
 +    spc?: number;
++    /**
++     * Text-glyph outline. Maps to OOXML `<a:rPr><a:ln>`.
++     */
++    tol?: ITextOutline;
      /**
       * background
       */
