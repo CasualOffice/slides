@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..9ef67b94bc298a02bcd6ed2e5ddcc0c1bfa38c2c 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..a9824cbc7565079379f4ea0badcb8b2d5eee7c46 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -59,8 +59,46 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..9ef67b94bc298a02bcd6ed2e5ddcc0c1
  		}
  		if (isNotNull === false) return;
  		return new _univerjs_engine_render.RichText(this._localeService, id, config);
+@@ -796,7 +804,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 			...strokeStyle
+ 		});
+ 		if (shapeType === "ellipse") {
+-			console.warn(shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius);
+ 			return new _univerjs_engine_render.Circle(id, {
+ 				fill,
+ 				top,
+@@ -816,6 +823,29 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 				...strokeStyle
+ 			});
+ 		}
++		// Casual Slides patch — fallback for unknown prstGeom values
++		// (triangle, line, arrow, hexagon, the 100+ other OOXML presets).
++		// Drawing them as a filled bounding-rect with their outline keeps
++		// the element visible at the right position instead of dropping
++		// it entirely. Visual approximation only; precise path rendering
++		// per prstGeom is a follow-up wave.
++		return new _univerjs_engine_render.Rect(id, {
++			fill,
++			top,
++			left,
++			width,
++			height,
++			zIndex,
++			angle,
++			scaleX,
++			scaleY,
++			skewX,
++			skewY,
++			flipX,
++			flipY,
++			forceRender: true,
++			...strokeStyle
++		});
+ 	}
+ };
+ var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..89c0201a4b469c890e6ec4aab5e192932544b55e 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..a4fe66c34f000600328a3af6d42f59668eb69a36 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -44,6 +44,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -120,6 +158,44 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..89c0201a4b469c890e6ec4aab5e19293
  		}
  		if (isNotNull === false) return;
  		return new RichText(this._localeService, id, config);
+@@ -795,7 +803,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 			...strokeStyle
+ 		});
+ 		if (shapeType === "ellipse") {
+-			console.warn(shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius);
+ 			return new Circle(id, {
+ 				fill,
+ 				top,
+@@ -815,6 +822,29 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 				...strokeStyle
+ 			});
+ 		}
++		// Casual Slides patch — fallback for unknown prstGeom values
++		// (triangle, line, arrow, hexagon, the 100+ other OOXML presets).
++		// Drawing them as a filled bounding-rect with their outline keeps
++		// the element visible at the right position instead of dropping
++		// it entirely. Visual approximation only; precise path rendering
++		// per prstGeom is a follow-up wave.
++		return new Rect(id, {
++			fill,
++			top,
++			left,
++			width,
++			height,
++			zIndex,
++			angle,
++			scaleX,
++			scaleY,
++			skewX,
++			skewY,
++			flipX,
++			flipY,
++			forceRender: true,
++			...strokeStyle
++		});
+ 	}
+ };
+ var ShapeAdaptorFactory = class {
 diff --git a/lib/types/data-model/slide-data-model.d.ts b/lib/types/data-model/slide-data-model.d.ts
 index f22ab09ec126799709980b2d50cf54585e2d634d..c4d21f0b7baee04bc3b5e19295ca0c09464151af 100644
 --- a/lib/types/data-model/slide-data-model.d.ts
