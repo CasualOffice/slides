@@ -2958,6 +2958,78 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(outlineHex, 'outline srgbClr round-trips').toBe('0044CC');
   });
 
+  test('Toolbar → Layout dropdown inserts slide with template placeholders', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(
+      () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(400);
+
+    // Capture initial slide count from the snapshot via Univer's API.
+    const beforeCount = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const win = window as any;
+      const univer = win.univer;
+      const id = win.__casualSlides__IUniverInstanceService;
+      const instances = univer.__getInjector().get(id);
+      const model = instances.getCurrentUnitOfType(3 /* UniverInstanceType.UNIVER_SLIDE */);
+      return model?.getSnapshot?.()?.body?.pageOrder?.length ?? 0;
+    });
+
+    // Click the toolbar Layout button → opens picker.
+    await page.getByRole('button', { name: 'Layout' }).click();
+    const picker = page.locator('[data-testid="layout-picker"]');
+    await expect(picker).toBeVisible();
+
+    // Pick "title-content" — should insert a slide with two text frames
+    // (title + content). data-testid attribute on the tile button.
+    await page.locator('[data-testid="layout-title-content"]').click();
+
+    // Picker closes after pick.
+    await expect(picker).toHaveCount(0);
+
+    // Snapshot now has one more slide; the new slide carries our
+    // placeholder text strings.
+    await page.waitForFunction(
+      (expected) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const win = window as any;
+        const univer = win.univer;
+        const id = win.__casualSlides__IUniverInstanceService;
+        const instances = univer.__getInjector().get(id);
+        const model = instances.getCurrentUnitOfType(3);
+        return model?.getSnapshot?.()?.body?.pageOrder?.length === expected;
+      },
+      beforeCount + 1,
+      { timeout: 5_000 },
+    );
+
+    const newSlideTexts: string[] = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const win = window as any;
+      const univer = win.univer;
+      const id = win.__casualSlides__IUniverInstanceService;
+      const instances = univer.__getInjector().get(id);
+      const model = instances.getCurrentUnitOfType(3);
+      const snap = model?.getSnapshot?.();
+      // The layout picker inserts after the active page; find by the
+      // template's title field, not by tail-of-order.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pages = Object.values(snap?.body?.pages ?? {}) as any[];
+      const newSlide = pages.find((p) => p?.title === 'Title + content');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const els = Object.values(newSlide?.pageElements ?? {}) as any[];
+      return els
+        .filter((e) => e.type === 2 /* TEXT */)
+        .map((e) => e.richText?.text ?? '');
+    });
+
+    expect(newSlideTexts).toContain('Click to add title');
+    expect(newSlideTexts).toContain('Click to add content');
+  });
+
   test('Help → About shows version + license + dependencies', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(

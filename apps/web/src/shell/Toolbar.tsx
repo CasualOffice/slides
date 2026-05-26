@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { dispatchSlideCommand } from '../univer/commands';
 import { BackgroundPicker } from './BackgroundPicker';
+import { LayoutPicker } from './LayoutPicker';
 import { Icon } from './icons';
 
 // Google Slides-style toolbar — single horizontal row of icon-only
@@ -37,7 +38,7 @@ const TOOLS: (ToolButton | { sep: true })[] = [
   { id: 'comment', icon: 'add_comment', label: 'Add comment', disabled: true },
   { sep: true },
   { id: 'new-slide', icon: 'add_to_photos', label: 'New slide (Ctrl+M)', cmd: 'slide.operation.append-slide' },
-  { id: 'layout', icon: 'view_compact', label: 'Layout', disabled: true },
+  { id: 'layout', icon: 'view_compact', label: 'Layout' /* handled inline below */ },
   { id: 'theme', icon: 'palette', label: 'Theme' /* handled inline below */ },
   { id: 'background', icon: 'format_color_fill', label: 'Background' /* handled inline below */ },
   { id: 'transition', icon: 'auto_awesome_motion', label: 'Transition', disabled: true },
@@ -48,6 +49,7 @@ const isSep = (t: (typeof TOOLS)[number]): t is { sep: true } => 'sep' in t;
 export function Toolbar() {
   const [shapesAnchor, setShapesAnchor] = useState<DOMRect | null>(null);
   const [bgAnchor, setBgAnchor] = useState<DOMRect | null>(null);
+  const [layoutAnchor, setLayoutAnchor] = useState<DOMRect | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,6 +72,10 @@ export function Toolbar() {
     }
     if (btn.id === 'background') {
       setBgAnchor(bgAnchor ? null : anchorEl.getBoundingClientRect());
+      return;
+    }
+    if (btn.id === 'layout') {
+      setLayoutAnchor(layoutAnchor ? null : anchorEl.getBoundingClientRect());
       return;
     }
     if (btn.cmd) void dispatchSlideCommand(btn.cmd, btn.cmdParams);
@@ -133,6 +139,7 @@ export function Toolbar() {
         </div>
       )}
       <BackgroundPicker anchorRect={bgAnchor} onClose={() => setBgAnchor(null)} />
+      <LayoutPicker anchorRect={layoutAnchor} onClose={() => setLayoutAnchor(null)} />
     </div>
   );
 }

@@ -702,6 +702,65 @@ button:disabled { cursor: not-allowed; }
   box-shadow: var(--cs-shadow-2);
 }
 
+/* ============================================================= Layout picker */
+
+.cs-layout-picker {
+  position: fixed;
+  z-index: 80;
+  width: 360px;
+  padding: 12px;
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-2);
+}
+
+.cs-layout-picker__header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cs-text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 4px 8px;
+}
+
+.cs-layout-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.cs-layout-picker__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px;
+  background: transparent;
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius);
+  cursor: pointer;
+  transition: border-color 80ms ease, background 80ms ease, transform 80ms ease;
+}
+.cs-layout-picker__tile:hover {
+  background: var(--cs-hover);
+  border-color: var(--cs-accent, #2563eb);
+  transform: translateY(-1px);
+}
+
+.cs-layout-picker__preview {
+  width: 100%;
+  height: auto;
+  border-radius: 2px;
+}
+
+.cs-layout-picker__label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--cs-text);
+  text-align: center;
+}
+
 .cs-bg-picker__header {
   display: flex;
   align-items: center;
