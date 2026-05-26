@@ -1,3 +1,28 @@
+diff --git a/lib/types/types/interfaces/i-image-properties.d.ts b/lib/types/types/interfaces/i-image-properties.d.ts
+index f17abd2cb5ba7dba10e09565065b5a210da68d80..1409115dd82a5b1aa9950c73939f938f9e4dbdc4 100644
+--- a/lib/types/types/interfaces/i-image-properties.d.ts
++++ b/lib/types/types/interfaces/i-image-properties.d.ts
+@@ -13,6 +13,7 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  */
++import type { IEffectList } from './i-shape-properties';
+ export interface IImageProperties {
+     contentUrl: string;
+     sourceUrl?: string;
+@@ -21,6 +22,12 @@ export interface IImageProperties {
+     transparency?: number;
+     cropProperties?: ICropProperties;
+     angle?: number;
++    /**
++     * Visual effects (shadow / glow / reflection / blur). Same shape as
++     * `IShapeProperties.effectLst`. Maps to OOXML `<a:effectLst>` inside
++     * `<p:pic><p:blipFill>`.
++     */
++    effectLst?: IEffectList;
+ }
+ /**
+  * Properties of crop image
 diff --git a/lib/types/types/interfaces/i-shape-properties.d.ts b/lib/types/types/interfaces/i-shape-properties.d.ts
 index 0af84f2f82f2d8f49e6aeccb6ea30947a3a56239..a41354f3c0a4b26496ba539f3e72679a10a3ec0c 100644
 --- a/lib/types/types/interfaces/i-shape-properties.d.ts
