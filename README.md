@@ -2,61 +2,69 @@
 
 # Casual Slides
 
-**PowerPoint-flavored web presentations with real-time collaborative editing**
+**Open-source self-hosted web slides editor with `.pptx` round-trip — an alternative to Google Slides, PowerPoint Online, and PPTist (deeper fidelity than the latter; closer to native Office UX than the former two).**
 
 [![Deploy](https://github.com/schnsrw/slides/actions/workflows/deploy-pages.yml/badge.svg?branch=main)](https://github.com/schnsrw/slides/actions/workflows/deploy-pages.yml)
+[![Fidelity](https://img.shields.io/badge/pptx%20fidelity-68%2F87%20%E2%9C%93-brightgreen)](./docs/FIDELITY_TRACKER.md)
+[![Wave](https://img.shields.io/badge/latest-wave%207o-blue)](./docs/FIDELITY_TRACKER.md)
+[![Version](https://img.shields.io/badge/version-v0.0.0%20%C2%B7%20pre--tag-orange)](./PLAN.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
-[![Status](https://img.shields.io/badge/status-P0%20spikes-orange)](./PLAN.md)
 
-[Architecture →](./docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Univer Slides gaps →](./docs/UNIVER_SLIDES_GAPS.md) &nbsp;·&nbsp; [Sister: Casual Sheets →](https://github.com/schnsrw/sheets)
+[Architecture →](./docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Fidelity tracker →](./docs/FIDELITY_TRACKER.md) &nbsp;·&nbsp; [Univer Slides gaps →](./docs/UNIVER_SLIDES_GAPS.md) &nbsp;·&nbsp; [Product page →](https://schnsrw.live/casual-slides/)
 
 </div>
 
 ---
 
-Casual Slides is a web-based, self-hostable presentation editor that looks and behaves like Microsoft PowerPoint — ribbon, slide-panel thumbnails, file-centric workflow — with real-time multi-user co-editing. Upload a `.pptx`, share a link, edit together.
+Casual Slides is a **self-hostable, browser-based slides editor** that looks and behaves like Microsoft PowerPoint — Office-style ribbon (Home · Insert · Design · Transitions · Animations · Slide Show · View · Review), slide-panel thumbnails, layouts, themes, file-centric workflow. Upload a `.pptx`, edit it like the web, save it back. **Deep OOXML PresentationML round-trip — 68 of 87 fidelity probes ✅** after wave 7o.
 
-Sister product to [Casual Sheets](https://github.com/schnsrw/sheets). Both are built on [Univer OSS](https://github.com/dream-num/univer) (Apache-2.0). Slides reuses sheets' self-host platform — admin panel, WOPI, JWT auth, webhooks, Docker shell — patterns lifted wholesale.
+**Compares to:** Google Slides · Microsoft PowerPoint Online · PPTist · OnlyOffice Presentation Editor.
 
-> 🛠 **Status: P0 — Spikes.** The bootstrap is up, the docs are written, and the first Univer fork-patch (rev tracking) is live. The pptx round-trip and collab layer are next. See [`PLAN.md`](./PLAN.md).
+Built on [Univer OSS](https://github.com/dream-num/univer) (Apache-2.0) — the OSS variant, **never the Pro package** — with a fork-and-patch layer for the gaps Univer hasn't filled (collab rev tracking, element mutations as `CommandType.MUTATION`, new `IPageElement` variants for tables/charts/video). Sister projects: [Casual Sheets](https://github.com/schnsrw/sheets) (`.xlsx`, v0.2.1) and [Casual Editor](https://github.com/schnsrw/docx) (`.docx`).
+
+> 🛠 **Status: v0.0.0 — pre-tag, fidelity-mature, infra-immature.** Single-user editor works end-to-end with `.pptx` round-trip; the Office ribbon, layouts, themes, backgrounds, slide-show mode, recent files, slide-context-menu are all live. **Co-edit is a Phase-2 spike** — 104-line raw WebSocket broadcast server, single-active-editor sufficient. The Yjs + Hocuspocus migration ([Casual Sheets has it](https://github.com/schnsrw/sheets/blob/main/docs/PRODUCTION_PIPELINE.md)) lands as the v0.1.0 blocker. See [`PLAN.md`](./PLAN.md).
 
 ---
 
-## ✨ What's planned
+## ✨ What works today
 
 ### Presentation engine
 
-- Office-style ribbon — **Home · Insert · Design · Transitions · Animations · Slide Show · View · Review**
-- **Slide-panel thumbnails** on the left rail · reorder · duplicate · hide · section headers
-- **PowerPoint-shaped data model** — pages, masters, layouts, notes pages, theme color scheme
-- Page elements: text frames, shapes, images, lines/connectors, tables, charts, video
-- Transforms: position, size, rotation, scale, skew, flip
-- **Master / layout editor** — full Slide Master view mode
-- **Speaker notes** + presenter view (current · next · notes · timer)
-- **Animations and transitions** — per-element timeline, per-page transitions
-- **Theme picker** — color + font scheme catalog
-- Office-shape keyboard shortcuts: Ctrl+M (new slide), F5 (present), …
+- **Office-style ribbon** — Home · Insert · Design · Transitions · Animations · Slide Show · View · Review
+- **Slide-panel thumbnails** on the left rail · reorder · duplicate · hide · context menu (right-click → duplicate / hide / delete / new)
+- **6 layout templates** picked from the toolbar Layout dropdown (title slide · title + content · two content · comparison · blank · section header)
+- **Theme picker** + **background picker** (solid + gradient fills)
+- **Slide Show mode** (F5) with keyboard navigation
+- **Notes panel** for speaker notes
+- **Recent files** dialog backed by IndexedDB
+- **Properties dialog** · **About dialog** · **Help → Report a Bug** (GitHub issue prefill)
+- **PowerPoint-shaped data model** — pages, masters, layouts, notes pages, theme color scheme, theme fonts
 
 ### File I/O
 
 | Format | Open | Save / Export |
 | --- | :---: | :---: |
-| `.pptx` | 🚧 P0 spike | 🚧 P1 |
-| `.pdf` | — | 🚧 P5 (export only) |
+| `.pptx` | ✅ | ✅ |
+| `.pdf` | — | 🚧 wave 8+ (export only) |
 
-- Parsing runs entirely in **Web Workers** — multi-MB decks don't block the main thread
-- Round-trip strategy: map OOXML PresentationML → Univer's `ISlideData`; passthrough unmapped XML via `resources["CASUAL_SLIDES_PPTX_RAW"]` (same trick sheet uses for VBA + pivots)
+- Parsing + serialisation runs entirely in **Web Workers** — multi-MB decks don't block the main thread
+- **2 493 LOC `pptx-import.ts`** covering deep OOXML PresentationML: slides, layouts, masters, themes, theme color resolution, placeholder inheritance, gradient fills, text outline + arrowheads + effects, hyperlinks via custom ranges, tables + charts as `IPageElement`, picture backgrounds, hidden slides, text wrap, autofit, body rotation, image cropping, connectors, RTL, strikethrough/baseline, bullets + indent + line spacing, multi-run rich text + paragraph alignment, color modifiers + rotation + flips
+- Export via **PptxGenJS** (MIT)
+- Round-trip strategy: map OOXML → Univer's `ISlideData`; passthrough unmapped XML (`notesSlides`, `comments`, `diagrams`, `ink`, raw layout/master/theme) via `ISlideData.resources["CASUAL_SLIDES_PPTX_RAW"]`
+- **68 / 87 fidelity probes ✅** in [`docs/FIDELITY_TRACKER.md`](./docs/FIDELITY_TRACKER.md). Wave 7o snapshot.
 - Full pipeline spec: [`docs/PPTX_PIPELINE.md`](./docs/PPTX_PIPELINE.md)
 
-### Co-editing (P2)
+### Co-editing — Phase 2 spike (Yjs migration queued)
 
-- Yjs CRDT + Hocuspocus, lifted wholesale from sheet
-- **Y.Doc shape mirrors `ISlideData`** — pages, elements, masters, layouts, resources
-- Peer cursors anchored to element handles; live-typing ghost inside text frames
-- Presence avatars, divergence detector, joiner fast-path with gzip-streamed snapshot
-- Same room model as sheet: anonymous URLs, password-protected rooms, view-only role enforced at the engine layer
+Today's collab is the v0.0.x "good enough for one editor at a time" spike:
 
-See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the system diagram and Y.Doc shape.
+- 104-line raw `ws` + `node:http` server in `apps/server/`
+- 173-line bridge that broadcasts mutations via JSON envelopes; sufficient for single-active-editor sessions
+- Anonymous rooms by URL · presence callbacks · echo-loop guard via `fromCollab` flag
+
+**Yjs + Hocuspocus migration is the v0.1.0 blocker.** Same shape Casual Sheets uses ([`apps/server/src/index.ts`](https://github.com/schnsrw/sheets/blob/main/apps/server/src/index.ts) — Fastify + Hocuspocus + rate limit + room cap + replay retry + dead-letter). The migration is mechanical port work; what's holding it is fidelity-first investment.
+
+See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the system diagram and target Y.Doc shape.
 
 ### Self-host platform (P6)
 
@@ -154,6 +162,6 @@ The Univer fork lives in a separate repo: [`schnsrw/univer-revamp`](https://gith
 
 ## 📄 License
 
-Apache-2.0. See [`LICENSE`](./LICENSE) (TBD).
+Apache-2.0. See [`LICENSE`](./LICENSE).
 
-The Univer fork at [`schnsrw/univer-revamp`](https://github.com/schnsrw/univer-revamp) retains its upstream Apache-2.0 license.
+The Univer fork at [`schnsrw/univer-revamp`](https://github.com/schnsrw/univer-revamp) retains its upstream Apache-2.0 license. The `pnpm patch` artifacts under [`patches/`](./patches/) are derived from that fork and are also Apache-2.0.
