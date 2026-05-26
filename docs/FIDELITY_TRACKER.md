@@ -10,9 +10,11 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7m)
+## Snapshot — 2026-05-26 (post wave 7n)
 
-**59 / 87 items at ✅, 5 at ⚠️.** Wave 7m extends the @univerjs/core patch with four more model additions (`IStyleBase.tol`, `IArrowhead` + `IOutline.{headEnd, tailEnd}`, `IEffectList` + `IShapeProperties.effectLst`) and lands the matching importer code for B15 (text-glyph outline), D17 (arrowheads), D18 (shape shadow), and D19 (glow / reflection / blur). The single patch artifact `patches/@univerjs__core@0.24.0.patch` now carries all six widenings (B14 spc + D16 cap from wave 7k, plus this wave's four).
+**63 / 87 items at ✅, 4 at ⚠️.** Wave 7n broadens the OOXML passthrough story: import-side now captures notesSlides, comments, diagrams (SmartArt), ink, and all related `_rels` files in addition to the existing layouts / masters / themes; export-side opens the PptxGenJS-generated blob via JSZip and injects the captured raw parts at their original zip paths. Layouts / masters / themes are deliberately NOT restored on export (PptxGenJS wires its own rels to them); the other categories survive a full round-trip. A9 (speaker notes) graduates from ⚠️ → ✅; K5 (comments), K7 (SmartArt as raw XML), K8 (ink) flip from ❌ → ✅.
+
+Wave 7m (preceding): @univerjs/core patch extensions (`IStyleBase.tol`, `IArrowhead` + `IOutline.{headEnd, tailEnd}`, `IEffectList` + `IShapeProperties.effectLst`) unlock B15 (text-glyph outline), D17 (arrowheads), D18 (shape shadow), and D19 (glow / reflection / blur).
 
 Wave 7l (preceding): B13 — `<a:rPr><a:highlight>` → `IStyleBase.bg`. Reuses the existing background-colour slot.
 
@@ -46,7 +48,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | A6 | Slide hidden flag (`<p:sld show="0">`) | ✅ | Low | Low | Wave 7g — `extractSlideHidden` reads `<p:sld @show>`; when `"0"` / `"false"` the page emits `slideProperties: { isSkipped: true, … }`. Visible slides skip the `slideProperties` block entirely to keep the page model lean. `layoutObjectId` / `masterObjectId` set empty until I3 surfaces the resolved IDs. |
 | A7 | Slide transitions (`<p:transition>`) | ❌ | Low | Med | Skip for v0; deferred behind playback. |
 | A8 | Slide animations (`<p:timing>`) | ❌ | Med | High | Defer. |
-| A9 | Speaker notes (`<p:notesSlide>`) | ⚠️ | Med | Med | Stored in `page.description` round-trip via resources passthrough — not an actual notesSlide. |
+| A9 | Speaker notes (`<p:notesSlide>`) | ✅ | Med | Med | Wave 7n — every `ppt/notesSlides/*.xml` / `ppt/notesMasters/*.xml` part (+ their `_rels`) captured into `CASUAL_SLIDES_PPTX_RAW.notesSlides`. Export-side `restorePassthrough` injects them back into the PptxGenJS-generated zip verbatim. Native rendering of the notes panel remains TODO (P4 work). |
 | A10 | Slide layout reference (`r:id` in slide rels) | ✅ | High | Med | Wave 4 — `findRelTargetByType(rels, '/slideLayout')`. |
 | A11 | Slide master reference | ✅ | High | Med | Wave 4 — layout's rels carry the master pointer. |
 
@@ -183,10 +185,10 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | K2 | Custom properties | ❌ | Low | Low | — |
 | K3 | Default text style (`<p:defaultTextStyle>`) | ❌ | Med | Med | — |
 | K4 | Headers / footers | ❌ | Low | Med | — |
-| K5 | Comments (`<p:cm>`) | ❌ | Med | Med | Tracked also as feature work. |
-| K6 | Audio / video | ❌ | Low | Med | — |
-| K7 | SmartArt (`<a:graphicData>` diagram) | ❌ | Med | High | Renders to image at best. |
-| K8 | Ink | ❌ | Low | High | — |
+| K5 | Comments (`<p:cm>`) | ✅ | Med | Med | Wave 7n — every `ppt/comments/*.xml` part (+ rels) captured into `CASUAL_SLIDES_PPTX_RAW.comments` and re-injected on export. Native UI for comments still TODO (P3 feature work). |
+| K6 | Audio / video | ❌ | Low | Med | Needs binary-part passthrough (current capture is text/xml only). |
+| K7 | SmartArt (`<a:graphicData>` diagram) | ✅ | Med | High | Wave 7n — every `ppt/diagrams/*.xml` part (+ rels) captured into `CASUAL_SLIDES_PPTX_RAW.diagrams` and re-injected on export. Renderer support deferred. |
+| K8 | Ink | ✅ | Low | High | Wave 7n — every `ppt/ink/*.xml` part (+ rels) captured into `CASUAL_SLIDES_PPTX_RAW.ink` and re-injected on export. Renderer support deferred. |
 
 ## Proceed order
 

@@ -2027,9 +2027,20 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
   // ISlideData.resources under CASUAL_SLIDES_PPTX_RAW (matches the
   // ARCHITECTURE.md plan). Keyed by zip-path so the export side can
   // splice them back in unchanged.
+  //
+  // Wave 7n — also capture notesSlides (A9), comments (K5),
+  // diagrams (K7 SmartArt), and ink (K8) plus their `_rels` files
+  // so the export side can restore them verbatim. PptxGenJS doesn't
+  // touch any of these categories, so the inject-on-export pass can
+  // splice them in without breaking the generated zip.
   const rawLayouts: Record<string, string> = {};
   const rawMasters: Record<string, string> = {};
   const rawThemes: Record<string, string> = {};
+  const rawNotesSlides: Record<string, string> = {};
+  const rawComments: Record<string, string> = {};
+  const rawDiagrams: Record<string, string> = {};
+  const rawInk: Record<string, string> = {};
+  const rawRels: Record<string, string> = {};
 
   for (let i = 0; i < sldIds.length; i += 1) {
     const sldId = sldIds[i] as XmlNode;
@@ -2104,30 +2115,55 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
   // them (handles decks where Office authored extra layouts).
   zip.forEach((zipPath, entry) => {
     if (entry.dir) return;
-    if (zipPath.startsWith('ppt/slideLayouts/') && zipPath.endsWith('.xml')) {
+    if (zipPath.startsWith('ppt/slideLayouts/_rels/') || zipPath.startsWith('ppt/slideMasters/_rels/') ||
+        zipPath.startsWith('ppt/notesSlides/_rels/') || zipPath.startsWith('ppt/notesMasters/_rels/') ||
+        zipPath.startsWith('ppt/diagrams/_rels/') || zipPath.startsWith('ppt/theme/_rels/') ||
+        zipPath.startsWith('ppt/comments/_rels/') || zipPath.startsWith('ppt/ink/_rels/')) {
+      // _rels files come along for the ride — they wire the captured
+      // parts together. Export-side injection writes them verbatim.
+      rawRels[zipPath] = '';
+    } else if (zipPath.startsWith('ppt/slideLayouts/') && zipPath.endsWith('.xml')) {
       rawLayouts[zipPath] = '';
     } else if (zipPath.startsWith('ppt/slideMasters/') && zipPath.endsWith('.xml')) {
       rawMasters[zipPath] = '';
     } else if (zipPath.startsWith('ppt/theme/') && zipPath.endsWith('.xml')) {
       rawThemes[zipPath] = '';
+    } else if ((zipPath.startsWith('ppt/notesSlides/') || zipPath.startsWith('ppt/notesMasters/')) && zipPath.endsWith('.xml')) {
+      rawNotesSlides[zipPath] = '';
+    } else if (zipPath.startsWith('ppt/comments/') && zipPath.endsWith('.xml')) {
+      rawComments[zipPath] = '';
+    } else if (zipPath.startsWith('ppt/diagrams/') && zipPath.endsWith('.xml')) {
+      rawDiagrams[zipPath] = '';
+    } else if (zipPath.startsWith('ppt/ink/') && zipPath.endsWith('.xml')) {
+      rawInk[zipPath] = '';
     }
   });
+  const readAll = async (bucket: Record<string, string>) => {
+    await Promise.all(
+      Object.keys(bucket).map(async (p) => {
+        bucket[p] = (await zip.file(p)?.async('string')) ?? '';
+      }),
+    );
+  };
   await Promise.all([
-    ...Object.keys(rawLayouts).map(async (p) => {
-      rawLayouts[p] = (await zip.file(p)?.async('string')) ?? '';
-    }),
-    ...Object.keys(rawMasters).map(async (p) => {
-      rawMasters[p] = (await zip.file(p)?.async('string')) ?? '';
-    }),
-    ...Object.keys(rawThemes).map(async (p) => {
-      rawThemes[p] = (await zip.file(p)?.async('string')) ?? '';
-    }),
+    readAll(rawLayouts),
+    readAll(rawMasters),
+    readAll(rawThemes),
+    readAll(rawNotesSlides),
+    readAll(rawComments),
+    readAll(rawDiagrams),
+    readAll(rawInk),
+    readAll(rawRels),
   ]);
 
   const hasPassthrough =
     Object.keys(rawLayouts).length > 0 ||
     Object.keys(rawMasters).length > 0 ||
-    Object.keys(rawThemes).length > 0;
+    Object.keys(rawThemes).length > 0 ||
+    Object.keys(rawNotesSlides).length > 0 ||
+    Object.keys(rawComments).length > 0 ||
+    Object.keys(rawDiagrams).length > 0 ||
+    Object.keys(rawInk).length > 0;
 
   return {
     id: `imported-${Date.now().toString(36)}`,
@@ -2139,7 +2175,16 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
           resources: [
             {
               name: 'CASUAL_SLIDES_PPTX_RAW',
-              data: JSON.stringify({ layouts: rawLayouts, masters: rawMasters, themes: rawThemes }),
+              data: JSON.stringify({
+                layouts: rawLayouts,
+                masters: rawMasters,
+                themes: rawThemes,
+                notesSlides: rawNotesSlides,
+                comments: rawComments,
+                diagrams: rawDiagrams,
+                ink: rawInk,
+                rels: rawRels,
+              }),
             },
           ],
         }

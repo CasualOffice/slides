@@ -1,3 +1,4 @@
+import JSZip from 'jszip';
 import pptxgen from 'pptxgenjs';
 import type { IImage, IPageElement, IShape, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
@@ -237,5 +238,70 @@ export async function exportSlidesToPptx(snapshot: ISlideData): Promise<Blob> {
   if (!(result instanceof Blob)) {
     throw new Error('PptxGenJS did not return a Blob — runtime mismatch');
   }
-  return result;
+
+  // Wave 7n — restore captured raw OOXML parts. PptxGenJS doesn't touch
+  // notesSlides / comments / diagrams / ink, so injecting our captured
+  // versions verbatim is safe. layouts / masters / themes are
+  // intentionally NOT restored because PptxGenJS generates its own and
+  // the slide rels reference them — overwriting would break the deck.
+  return await restorePassthrough(result, snapshot);
+}
+
+interface PptxRawPayload {
+  layouts?: Record<string, string>;
+  masters?: Record<string, string>;
+  themes?: Record<string, string>;
+  notesSlides?: Record<string, string>;
+  comments?: Record<string, string>;
+  diagrams?: Record<string, string>;
+  ink?: Record<string, string>;
+  rels?: Record<string, string>;
+}
+
+async function restorePassthrough(blob: Blob, snapshot: ISlideData): Promise<Blob> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const resources = (snapshot as any).resources as Array<{ name: string; data: string }> | undefined;
+  const entry = resources?.find((r) => r.name === 'CASUAL_SLIDES_PPTX_RAW');
+  if (!entry) return blob;
+
+  let payload: PptxRawPayload;
+  try {
+    payload = JSON.parse(entry.data) as PptxRawPayload;
+  } catch {
+    return blob;
+  }
+
+  // Restore only the categories PptxGenJS doesn't generate. Skipping
+  // layouts/masters/themes preserves PptxGenJS's wired rels.
+  const restorableBuckets: Array<keyof PptxRawPayload> = ['notesSlides', 'comments', 'diagrams', 'ink', 'rels'];
+  let hasAny = false;
+  for (const key of restorableBuckets) {
+    if (payload[key] && Object.keys(payload[key] ?? {}).length > 0) {
+      hasAny = true;
+      break;
+    }
+  }
+  if (!hasAny) return blob;
+
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  for (const key of restorableBuckets) {
+    const bucket = payload[key] ?? {};
+    for (const [zipPath, content] of Object.entries(bucket)) {
+      if (typeof content === 'string' && content.length > 0) {
+        // `rels` bucket: only inject rels files whose target part also
+        // got injected. Skip rels for layouts/masters/themes since we
+        // don't restore those parts.
+        if (key === 'rels') {
+          const isSkipped =
+            zipPath.startsWith('ppt/slideLayouts/_rels/') ||
+            zipPath.startsWith('ppt/slideMasters/_rels/') ||
+            zipPath.startsWith('ppt/theme/_rels/');
+          if (isSkipped) continue;
+        }
+        zip.file(zipPath, content);
+      }
+    }
+  }
+
+  return await zip.generateAsync({ type: 'blob', mimeType: blob.type || 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
 }

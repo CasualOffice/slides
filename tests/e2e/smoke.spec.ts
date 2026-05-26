@@ -2644,6 +2644,106 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(fx?.glow?.rad, 'glow rad EMU').toBe(63500);
   });
 
+  test('pptx import + export wave 7n — passthrough round-trip (A9 + K5 + K7 + K8)', async ({ page }) => {
+    // Build a synthetic deck carrying notesSlides + comments + diagrams +
+    // ink parts. After import, the resources slot should hold all four
+    // categories. After re-exporting, the produced zip should contain
+    // them at their original paths (since PptxGenJS doesn't generate
+    // these categories, restorePassthrough can safely inject them back).
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const result = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const emptyRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+      const notesSlide = `<?xml version="1.0"?><p:notes xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><speaker>presenter notes</speaker></p:notes>`;
+      const comment = `<?xml version="1.0"?><p:cmLst xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cm authorId="0"><p:text>Looks good</p:text></p:cm></p:cmLst>`;
+      const diagram = `<?xml version="1.0"?><dgm:dataModel xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram"><dgm:ptLst/></dgm:dataModel>`;
+      const ink = `<?xml version="1.0"?><inkml:ink xmlns:inkml="http://www.w3.org/2003/InkML"><inkml:trace>0 0, 1 1, 2 2</inkml:trace></inkml:ink>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', emptyRels);
+      zip.file('ppt/notesSlides/notesSlide1.xml', notesSlide);
+      zip.file('ppt/notesSlides/_rels/notesSlide1.xml.rels', emptyRels);
+      zip.file('ppt/comments/comment1.xml', comment);
+      zip.file('ppt/diagrams/data1.xml', diagram);
+      zip.file('ppt/ink/ink1.xml', ink);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+          export(snapshot: unknown): Promise<{ blob: Blob; fileName: string }>;
+        };
+      };
+      const client = (window as unknown as W).__casualSlides_getPptxClient();
+      const snapshot = await client.import(buf, 'wave7n.pptx');
+
+      // Re-export and re-open the produced blob to verify the parts
+      // survive the round-trip.
+      const { blob } = await client.export(snapshot);
+      const reZip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const notesPath = 'ppt/notesSlides/notesSlide1.xml';
+      const commentPath = 'ppt/comments/comment1.xml';
+      const diagramPath = 'ppt/diagrams/data1.xml';
+      const inkPath = 'ppt/ink/ink1.xml';
+      return {
+        snapshot,
+        exportedNotes: (await reZip.file(notesPath)?.async('string')) ?? null,
+        exportedComment: (await reZip.file(commentPath)?.async('string')) ?? null,
+        exportedDiagram: (await reZip.file(diagramPath)?.async('string')) ?? null,
+        exportedInk: (await reZip.file(inkPath)?.async('string')) ?? null,
+      };
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = result.snapshot;
+    const resources: Array<{ name: string; data: string }> | undefined = r.resources;
+    expect(resources, 'resources slot populated').toBeTruthy();
+    const passthrough = resources!.find((e) => e.name === 'CASUAL_SLIDES_PPTX_RAW');
+    expect(passthrough, 'CASUAL_SLIDES_PPTX_RAW resource exists').toBeTruthy();
+    const raw = JSON.parse(passthrough!.data);
+    expect(Object.keys(raw.notesSlides ?? {}), 'notesSlides captured').toContain('ppt/notesSlides/notesSlide1.xml');
+    expect(Object.keys(raw.comments ?? {}), 'comments captured').toContain('ppt/comments/comment1.xml');
+    expect(Object.keys(raw.diagrams ?? {}), 'diagrams captured').toContain('ppt/diagrams/data1.xml');
+    expect(Object.keys(raw.ink ?? {}), 'ink captured').toContain('ppt/ink/ink1.xml');
+
+    // Export-side restoration.
+    expect(result.exportedNotes, 'notesSlide present in exported zip').toContain('presenter notes');
+    expect(result.exportedComment, 'comment present in exported zip').toContain('Looks good');
+    expect(result.exportedDiagram, 'diagram present in exported zip').toContain('dgm:dataModel');
+    expect(result.exportedInk, 'ink present in exported zip').toContain('inkml:ink');
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.
