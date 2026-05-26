@@ -3,7 +3,7 @@ import { XMLParser } from 'fast-xml-parser';
 import type { IPageElement, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
 import type { IBullet, IDocumentData, IDocumentStyle, IParagraph, ITextRun, IParagraphStyle } from '@univerjs/core';
-import { BaselineOffset, BorderStyleTypes, HorizontalAlign, PresetListType, VerticalAlign, WrapStrategy } from '@univerjs/core';
+import { BaselineOffset, BorderStyleTypes, HorizontalAlign, PresetListType, TextDirection, VerticalAlign, WrapStrategy } from '@univerjs/core';
 
 // pptx import — JSZip + fast-xml-parser → ISlideData.
 //
@@ -324,6 +324,35 @@ function readGradFirstStop(parent: unknown, theme: ThemeMap | null): string | nu
   return null;
 }
 
+// B12 — `<a:prstClr val="red"/>` uses the OOXML named-colour table. Only
+// the common ones make it into real-world decks; map them to hex and
+// skip the long tail. `<a:sysClr lastClr="HEX"/>` carries the value
+// PowerPoint resolved at write time; using `lastClr` round-trips
+// without needing a sysColour lookup table.
+const PRST_COLOR_MAP: Record<string, string> = {
+  black: '000000', white: 'FFFFFF', red: 'FF0000', green: '008000', blue: '0000FF',
+  yellow: 'FFFF00', cyan: '00FFFF', magenta: 'FF00FF', gray: '808080', grey: '808080',
+  silver: 'C0C0C0', maroon: '800000', olive: '808000', lime: '00FF00', aqua: '00FFFF',
+  teal: '008080', navy: '000080', purple: '800080', fuchsia: 'FF00FF', orange: 'FFA500',
+  pink: 'FFC0CB', brown: 'A52A2A', gold: 'FFD700', dkRed: '8B0000', dkBlue: '00008B',
+  dkGreen: '006400', dkGray: 'A9A9A9', dkGrey: 'A9A9A9', ltGray: 'D3D3D3', ltGrey: 'D3D3D3',
+};
+
+function readPrstColor(solid: unknown): string | null {
+  const prst = findChild(solid, 'a:prstClr') as XmlNode | undefined;
+  const val = prst?.['@val'];
+  if (typeof val !== 'string') return null;
+  const hex = PRST_COLOR_MAP[val];
+  return hex ? applyColorModifiers(`#${hex}`, prst) : null;
+}
+
+function readSysColor(solid: unknown): string | null {
+  const sys = findChild(solid, 'a:sysClr') as XmlNode | undefined;
+  const lastClr = sys?.['@lastClr'];
+  if (typeof lastClr !== 'string' || !/^[0-9a-fA-F]{6}$/.test(lastClr)) return null;
+  return applyColorModifiers(`#${lastClr.toUpperCase()}`, sys);
+}
+
 // Combined "read any colour" — srgbClr first, schemeClr as fallback,
 // then a degraded gradient first-stop. Caller passes the parent node
 // that contains `<a:solidFill>` / `<a:gradFill>` / equivalent.
@@ -337,6 +366,13 @@ function readColor(parent: unknown, theme: ThemeMap | null): string | null {
     }
     const schemed = resolveSchemeColor(solid, theme);
     if (schemed) return schemed;
+    // B12 — fall back to preset / system colours before the gradient
+    // degradation. These appear in plain authored decks ("solidFill
+    // with red prstClr") and in legacy templates.
+    const prst = readPrstColor(solid);
+    if (prst) return prst;
+    const sys = readSysColor(solid);
+    if (sys) return sys;
   }
   // Degraded gradient → first-stop solid. Better than dropping the fill.
   return readGradFirstStop(parent, theme);
@@ -712,6 +748,13 @@ function extractRichDoc(
     const spaceAbove = parseSpacePts(findChild(pPr, 'a:spcBef'));
     const spaceBelow = parseSpacePts(findChild(pPr, 'a:spcAft'));
 
+    // C9 — `<a:pPr rtl="1">` (or `"true"`) flips the paragraph to RTL.
+    // OOXML's default is LTR, matching Univer's renderer default; we
+    // only emit `direction` when the deck explicitly opts in so the
+    // produced IDocumentData stays minimal.
+    const rtl = (pPr as XmlNode | undefined)?.['@rtl'];
+    const isRtl = rtl === '1' || rtl === 1 || rtl === 'true';
+
     const paragraphStyle: IParagraphStyle = {};
     if (align !== null) paragraphStyle.horizontalAlign = align;
     if (lineSpacing !== null) paragraphStyle.lineSpacing = lineSpacing;
@@ -719,6 +762,7 @@ function extractRichDoc(
     if (indentFirstLine !== undefined) paragraphStyle.indentFirstLine = { v: indentFirstLine };
     if (spaceAbove !== null) paragraphStyle.spaceAbove = { v: spaceAbove };
     if (spaceBelow !== null) paragraphStyle.spaceBelow = { v: spaceBelow };
+    if (isRtl) paragraphStyle.direction = TextDirection.RIGHT_TO_LEFT;
 
     const paragraph: IParagraph = { startIndex: cursor };
     if (Object.keys(paragraphStyle).length > 0) paragraph.paragraphStyle = paragraphStyle;
@@ -1461,6 +1505,24 @@ async function processPicNode(
   const rEmbed = blip?.['@r:embed'] as string | undefined;
   const rLink = blip?.['@r:link'] as string | undefined;
 
+  // E4 — `<a:blip><a:alphaModFix amt="N"/></a:blip>` (where `amt` is in
+  // thousandths of a percent — 50000 = 50 %) keeps `amt` of the
+  // original alpha. Univer's `IImageProperties.transparency` is the
+  // *removed* fraction (0..1), so we invert: transparency = 1 - amt/100000.
+  // Absent attribute = fully opaque (transparency 0), so we omit the
+  // field entirely.
+  const alphaModFix = findChild(blip, 'a:alphaModFix') as XmlNode | undefined;
+  let transparency: number | undefined;
+  if (alphaModFix) {
+    const amtRaw = alphaModFix['@amt'];
+    const amt = typeof amtRaw === 'string' || typeof amtRaw === 'number'
+      ? parseInt(String(amtRaw), 10)
+      : 100_000;
+    if (Number.isFinite(amt) && amt < 100_000) {
+      transparency = Math.max(0, Math.min(1, 1 - amt / 100_000));
+    }
+  }
+
   // E2 — linked images. `<a:blip r:link="rIdN"/>` resolves to an
   // external Target URL via the slide's rels (rather than embedded
   // bytes under `ppt/media/`). For http(s) URLs we pass the URL
@@ -1518,6 +1580,7 @@ async function processPicNode(
       imageProperties: {
         contentUrl,
         ...(cropProperties ? { cropProperties } : {}),
+        ...(transparency !== undefined ? { transparency } : {}),
       } as any,
     },
   };

@@ -2016,6 +2016,132 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(wrap, 'wrap="none" → WrapStrategy.OVERFLOW').toBe(1);
   });
 
+  test('pptx import wave 7h — prstClr + sysClr + alpha + RTL (B12 + E4 + C9)', async ({ page }) => {
+    // One slide carries three wave-7h items:
+    //  • B12 — shape with <a:solidFill><a:prstClr val="red"/></a:solidFill>
+    //          fill resolves to #FF0000.
+    //  • E4  — <p:pic> with <a:blip><a:alphaModFix amt="40000"/></a:blip>
+    //          → imageProperties.transparency ≈ 0.6 (1 - 0.4).
+    //  • C9  — text frame with <a:pPr rtl="1"> paragraph; first paragraph's
+    //          paragraphStyle.direction === TextDirection.RIGHT_TO_LEFT (2).
+    const PNG_1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async (png) => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        // B12 — shape with prstClr red fill.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="prst"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="2000000" cy="1000000"/></a:xfrm>` +
+        `<a:prstGeom prst="ellipse"/>` +
+        `<a:solidFill><a:prstClr val="red"/></a:solidFill>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        // C9 — text frame with RTL paragraph.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="3" name="rtl"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="2200000"/><a:ext cx="5000000" cy="800000"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `</p:spPr>` +
+        `<p:txBody>` +
+        `<a:bodyPr/>` +
+        `<a:p><a:pPr rtl="1"/><a:r><a:rPr lang="ar"/><a:t>مرحبا</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        // E4 — picture with alphaModFix amt=40000 (60% transparent).
+        `<p:pic>` +
+        `<p:nvPicPr><p:cNvPr id="4" name="alpha"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>` +
+        `<p:blipFill>` +
+        `<a:blip r:embed="rId1"><a:alphaModFix amt="40000"/></a:blip>` +
+        `<a:stretch><a:fillRect/></a:stretch>` +
+        `</p:blipFill>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="3500000"/><a:ext cx="2000000" cy="1500000"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `</p:spPr>` +
+        `</p:pic>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>` +
+        `</Relationships>`;
+
+      const binary = atob(png);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/media/image1.png', bytes);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave7h.pptx');
+    }, PNG_1x1);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    const elements = Object.values(firstPage.pageElements ?? {});
+
+    // B12 — prstClr red shape's fill is #FF0000.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ellipse = elements.find((e: any) => e.shape?.shapeType === 'ellipse') as any;
+    expect(ellipse, 'ellipse with prstClr fill extracted').toBeTruthy();
+    const fillHex = (ellipse.shape?.shapeProperties?.shapeBackgroundFill?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(fillHex, 'prstClr val="red" → #FF0000').toBe('FF0000');
+
+    // C9 — RTL paragraph direction.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rtlText = elements.find((e: any) => e.richText?.text?.includes('مرحبا')) as any;
+    expect(rtlText, 'RTL text frame extracted').toBeTruthy();
+    const paragraphs = rtlText.richText.rich?.body?.paragraphs ?? [];
+    expect(paragraphs.length, 'at least one paragraph').toBeGreaterThan(0);
+    // TextDirection.RIGHT_TO_LEFT = 2.
+    expect(paragraphs[0].paragraphStyle?.direction, '<a:pPr rtl="1"> → direction = RIGHT_TO_LEFT (2)').toBe(2);
+
+    // E4 — alphaModFix amt=40000 → transparency 0.6.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const img = elements.find((e: any) => e.image) as any;
+    expect(img, 'image with alphaModFix extracted').toBeTruthy();
+    expect(img.image?.imageProperties?.transparency, 'amt=40000 → transparency ≈ 0.6').toBeCloseTo(0.6, 3);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

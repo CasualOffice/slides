@@ -10,9 +10,11 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7g)
+## Snapshot — 2026-05-26 (post wave 7h)
 
-**43 / 87 items at ✅, 5 at ⚠️.** Wave 7g lands two more low-impact items: A6 (`<p:sld show="0">` → `ISlideProperties.isSkipped`) and C14 (`<a:bodyPr wrap="none|square">` → `WrapStrategy.OVERFLOW|WRAP` on `documentStyle.renderConfig`).
+**46 / 87 items at ✅, 5 at ⚠️.** Wave 7h closes three small colour + image + paragraph items: B12 (`<a:prstClr>` named-colour table + `<a:sysClr lastClr>` passthrough), E4 (`<a:alphaModFix amt>` → `imageProperties.transparency`), and C9 (`<a:pPr rtl="1">` → `paragraphStyle.direction = RIGHT_TO_LEFT`).
+
+Wave 7g (preceding): A6 (`<p:sld show="0">` → `ISlideProperties.isSkipped`) and C14 (`<a:bodyPr wrap="none|square">` → `WrapStrategy.OVERFLOW|WRAP`).
 
 Wave 7f (preceding): B8 (`<a:rPr strike>` → `IStyleBase.st`), B9 (`<a:rPr baseline>` → `IStyleBase.va` via `BaselineOffset.SUPERSCRIPT` / `SUBSCRIPT`), and E2 (`<a:blip r:link>` → http(s) URL passed through to `imageProperties.contentUrl` directly).
 
@@ -53,7 +55,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | B9 | Subscript / superscript (`<a:rPr baseline>`) | ✅ | Low | Low | Wave 7f — `parseRunProps` maps `<a:rPr baseline="N">` (thousandths of a percent) to `IStyleBase.va`: positive (e.g. `30000`) → `BaselineOffset.SUPERSCRIPT`, negative (e.g. `-25000`) → `BaselineOffset.SUBSCRIPT`, `0` / absent → omitted (NORMAL by default). |
 | B10 | Font color — srgbClr | ✅ | High | — | First run only. |
 | B11 | Font color — schemeClr (theme) | ✅ | High | Med | Wave 5 — `readColor` resolves `<a:solidFill><a:schemeClr val=…>` against the parsed `<a:clrScheme>`. lumMod / lumOff / tint / shade modifiers still drop. |
-| B12 | Font color — prstClr / sysClr | ❌ | Low | Low | — |
+| B12 | Font color — prstClr / sysClr | ✅ | Low | Low | Wave 7h — `readColor` adds a `PRST_COLOR_MAP` lookup (30 common OOXML named colours: `red`, `black`, `dkBlue` …) and reads `<a:sysClr @lastClr>` as the resolved hex passthrough. Colour modifiers (lumMod / lumOff / tint / shade) flow through the same `applyColorModifiers` path as srgb/scheme. |
 | B13 | Highlight color (`<a:rPr highlight>`) | ❌ | Low | Low | — |
 | B14 | Letter spacing (`<a:rPr spc>`) | ❌ | Low | Low | — |
 | B15 | Text outline (`<a:rPr><a:ln>`) | ❌ | Low | Med | — |
@@ -72,7 +74,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | C6 | Bullets — char (`<a:buChar>`) | ✅ | High | Med | Wave 6b — `<a:buChar>` → `IBullet { listType: BULLET_LIST, listId: <elementId>-bul, nestingLevel }`. The actual glyph from `@char` isn't read — Univer's renderer uses its own preset glyphs per level. |
 | C7 | Bullets — auto-numbered (`<a:buAutoNum>`) | ✅ | Med | Med | Wave 6b — `<a:buAutoNum>` → `IBullet { listType: ORDER_LIST, listId: <elementId>-ord, nestingLevel }`. `@type` (arabicPeriod / romanUcPeriod / …) not yet read; restarts per text frame. |
 | C8 | Bullet indent levels (`<a:pPr lvl>`) | ✅ | Med | Med | Wave 6b — `@lvl` clamped to 0..8, flows into `IBullet.nestingLevel`. |
-| C9 | RTL paragraphs (`<a:pPr rtl="1">`) | ❌ | Low | Low | — |
+| C9 | RTL paragraphs (`<a:pPr rtl="1">`) | ✅ | Low | Low | Wave 7h — `<a:pPr @rtl="1"\|"true">` lands on `paragraphStyle.direction = TextDirection.RIGHT_TO_LEFT`. Default LTR matches Univer's renderer default; only explicit RTL is emitted to keep `IDocumentData` minimal. |
 | C10 | Text frame insets (`<a:bodyPr ins{L,T,R,B}>`) | ✅ | Low | Low | Wave 7b — `parseBodyPr` reads EMU → px and lands on `documentStyle.marginLeft/Top/Right/Bottom`. |
 | C11 | Text frame vertical anchor (`<a:bodyPr anchor>`) | ✅ | Med | Low | Wave 7b — `anchor=t/ctr/b` → `documentStyle.renderConfig.verticalAlign` (TOP / MIDDLE / BOTTOM). |
 | C12 | Text frame rotation (`<a:bodyPr rot>`) | ❌ | Low | Low | — |
@@ -112,7 +114,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | E1 | Embedded bytes (`<a:blip r:embed>`) | ✅ | Critical | — | data: URI. |
 | E2 | Linked images (`<a:blip r:link>`) | ✅ | Low | Low | Wave 7f — `processPicNode` reads `<a:blip r:link>` alongside `r:embed`. The rId resolves to an external Target via the slide's rels; `http(s)` URLs pass through to `imageProperties.contentUrl` directly (no fetch, no data-URI conversion). Local-path links (author-filesystem refs) are skipped. |
 | E3 | Image cropping (`<a:srcRect>`) | ✅ | Med | Low | Wave 7c — `srcRect @l/@t/@r/@b` (percent * 1000) → `cropProperties.offsetLeft/Top/Right/Bottom` (0..1 fractions). |
-| E4 | Image transparency (`<a:alphaModFix>`) | ❌ | Low | Low | — |
+| E4 | Image transparency (`<a:alphaModFix>`) | ✅ | Low | Low | Wave 7h — `<a:blip><a:alphaModFix @amt>` (thousandths of a percent kept) inverts to Univer's `imageProperties.transparency` (fraction removed, 0..1): `transparency = 1 - amt/100000`. Fully opaque (amt absent or 100000) omits the field entirely. |
 | E5 | Image colour adjust (lum/duotone/grayscale) | ❌ | Low | Med | — |
 | E6 | Image effects (`<a:effectLst>`) | ❌ | Low | Med | — |
 | E7 | Image rotation / flip | ✅ | Med | Low | Wave 5b — same `readXfrmExtras` plumb feeds `processPicNode`. |
