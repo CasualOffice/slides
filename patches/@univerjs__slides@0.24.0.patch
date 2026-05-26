@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..30be3a87abdc7db449f657644a6c81c020e5b8c6 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..03db3f256bb044ee82c78c11b418cb9af35a40e7 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -139,12 +139,12 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..30be3a87abdc7db449f657644a6c81c0
  		}
  		if (isNotNull === false) return;
  		return new _univerjs_engine_render.RichText(this._localeService, id, config);
-@@ -756,9 +837,32 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -756,9 +837,46 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
 -			const { outlineFill, weight } = outline;
-+			const { outlineFill, weight, dashStyle } = outline;
++			const { outlineFill, weight, dashStyle, cap } = outline;
  			strokeStyle.strokeWidth = weight;
  			strokeStyle.stroke = (0, _univerjs_core.getColorStyle)(outlineFill) || "rgba(0,0,0,1)";
 +			// Casual Slides patch — honour dashStyle (BorderStyleTypes) by
@@ -170,10 +170,24 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..30be3a87abdc7db449f657644a6c81c0
 +				strokeStyle.stroke = "rgba(0,0,0,0)";
 +				strokeStyle.strokeWidth = 0;
 +			}
++			// Casual Slides patch — outline.cap maps to canvas lineCap via
++			// engine-render's strokeLineCap shape prop. 'flat' is the
++			// OOXML default; 'rnd' rounds the stroke ends; 'sq' extends
++			// them by half the stroke width. Most visible on dashed
++			// strokes and on line/connector shapes where the endpoint
++			// shape matters. Only emit when explicitly set so we don't
++			// override the engine-render default unnecessarily.
++			if (cap === "rnd") {
++				strokeStyle.strokeLineCap = "round";
++			} else if (cap === "sq") {
++				strokeStyle.strokeLineCap = "square";
++			} else if (cap === "flat") {
++				strokeStyle.strokeLineCap = "butt";
++			}
  		}
  		if (shapeType === "rect") return new _univerjs_engine_render.Rect(id, {
  			fill,
-@@ -796,7 +900,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -796,7 +914,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			...strokeStyle
  		});
  		if (shapeType === "ellipse") {
@@ -181,7 +195,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..30be3a87abdc7db449f657644a6c81c0
  			return new _univerjs_engine_render.Circle(id, {
  				fill,
  				top,
-@@ -816,6 +919,126 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -816,6 +933,126 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				...strokeStyle
  			});
  		}
@@ -309,7 +323,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..30be3a87abdc7db449f657644a6c81c0
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..8f362836c059e96319973a587492489f1d611214 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..ec58f62e7de7e3e9ca065cc35fb506a7374faf8d 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
@@ -457,12 +471,12 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..8f362836c059e96319973a587492489f
  		}
  		if (isNotNull === false) return;
  		return new RichText(this._localeService, id, config);
-@@ -755,9 +836,32 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -755,9 +836,46 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
 -			const { outlineFill, weight } = outline;
-+			const { outlineFill, weight, dashStyle } = outline;
++			const { outlineFill, weight, dashStyle, cap } = outline;
  			strokeStyle.strokeWidth = weight;
  			strokeStyle.stroke = getColorStyle(outlineFill) || "rgba(0,0,0,1)";
 +			// Casual Slides patch — honour dashStyle (BorderStyleTypes) by
@@ -488,10 +502,24 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..8f362836c059e96319973a587492489f
 +				strokeStyle.stroke = "rgba(0,0,0,0)";
 +				strokeStyle.strokeWidth = 0;
 +			}
++			// Casual Slides patch — outline.cap maps to canvas lineCap via
++			// engine-render's strokeLineCap shape prop. 'flat' is the
++			// OOXML default; 'rnd' rounds the stroke ends; 'sq' extends
++			// them by half the stroke width. Most visible on dashed
++			// strokes and on line/connector shapes where the endpoint
++			// shape matters. Only emit when explicitly set so we don't
++			// override the engine-render default unnecessarily.
++			if (cap === "rnd") {
++				strokeStyle.strokeLineCap = "round";
++			} else if (cap === "sq") {
++				strokeStyle.strokeLineCap = "square";
++			} else if (cap === "flat") {
++				strokeStyle.strokeLineCap = "butt";
++			}
  		}
  		if (shapeType === "rect") return new Rect(id, {
  			fill,
-@@ -795,7 +899,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -795,7 +913,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			...strokeStyle
  		});
  		if (shapeType === "ellipse") {
@@ -499,7 +527,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..8f362836c059e96319973a587492489f
  			return new Circle(id, {
  				fill,
  				top,
-@@ -815,6 +918,130 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -815,6 +932,130 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				...strokeStyle
  			});
  		}
