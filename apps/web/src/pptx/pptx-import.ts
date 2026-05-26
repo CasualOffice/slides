@@ -1137,7 +1137,14 @@ function extractRichDoc(
 
     const paragraphStyle: IParagraphStyle = {};
     if (align !== null) paragraphStyle.horizontalAlign = align;
-    if (lineSpacing !== null) paragraphStyle.lineSpacing = lineSpacing;
+    // Casual Slides — when `<a:lnSpc>` is absent on a paragraph, PowerPoint
+    // defaults to single (1.0x) line spacing. Univer's docs engine
+    // applies a much more generous default (visible as ~2-3x line height
+    // on imported slides — text wraps and second lines fall well below
+    // the authored frame's bottom). Forcing an explicit 1.0 here matches
+    // PowerPoint's authored intent. Decks that explicitly set lnSpc still
+    // win via the `lineSpacing !== null` branch.
+    paragraphStyle.lineSpacing = lineSpacing !== null ? lineSpacing : 1;
     if (indentStart !== undefined) paragraphStyle.indentStart = { v: indentStart };
     if (indentFirstLine !== undefined) paragraphStyle.indentFirstLine = { v: indentFirstLine };
     if (spaceAbove !== null) paragraphStyle.spaceAbove = { v: spaceAbove };
