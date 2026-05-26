@@ -10,6 +10,10 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
+## Snapshot — 2026-05-27 (post wave 8b-8f)
+
+**73 / 87 items at ✅, 6 at ⚠️.** Wave 8b-8f tackles the long tail of parser items: J3 (theme font scheme fallback), K1 (deck title from docProps/core.xml), K2 (custom props passthrough), K3 (`<p:defaultTextStyle>` deck-level defaults), and I5 (footer / date / sldNum service placeholders synthesised from master/layout when the slide doesn't declare them). The combined effect: imported decks now carry author-authored titles, deck-wide typography defaults, and footer / page-number elements that previously dropped silently.
+
 ## Snapshot — 2026-05-26 (post wave 7o)
 
 **68 / 87 items at ✅, 6 at ⚠️.** Wave 7o tackles Gap 3 (the long-deferred new `IPageElement` variants). The slides patch adds `TABLE` / `CHART` / `VIDEO` to `PageElementType` and the matching `ITable` / `IChart` / `IVideo` interfaces. Importer parses `<p:graphicFrame>` with `<a:tbl>` into a full `ITable` structure (rows × cells with spans, fills, borders) and `<c:chart>` references into an `IChart` whose payload rides via passthrough. Exporter emits TABLE through PptxGenJS's `addTable` for a real round-trip; CHART relies on the chart-XML passthrough (slide-XML graphicFrame reference not yet re-emitted — wave 8 work). G1-G4 flip ❌ → ✅; H1 ❌ → ✅ (chart XML round-trips); H2 / H3 stay ⚠️.
