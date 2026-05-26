@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ada23646decdd9798c27c92d9f72aa201d772785 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bda16d884d 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -79,18 +79,85 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ada23646decdd9798c27c92d9f72aa20
  			url: (imageProperties === null || imageProperties === void 0 ? void 0 : imageProperties.contentUrl) || "",
  			top,
  			left,
-@@ -654,7 +701,9 @@ var ImageAdaptor = class extends ObjectAdaptor {
+@@ -654,7 +701,76 @@ var ImageAdaptor = class extends ObjectAdaptor {
  			flipX,
  			flipY,
  			forceRender: true
 -		});
 +		};
 +		if (srcRect) imageConfig.srcRect = srcRect;
++		// Casual Slides patch — honour imageProperties.effectLst (E6).
++		// Mirrors ShapeAdaptor's shadow / glow handling: outerShdw maps
++		// to canvas shadow*; glow re-uses the shadow channel with zero
++		// offset + larger blur as a halo. The engine-render Image patch
++		// applies these in Image.render() before _draw — see
++		// `patches/@univerjs__engine-render@0.24.0.patch`.
++		// innerShdw / reflection / blur on images are also TODOs (same
++		// reasons as on the shape side — see ShapeAdaptor comments).
++		const imgEffectLst = imageProperties && imageProperties.effectLst;
++		const imgOuterShdw = imgEffectLst && imgEffectLst.outerShdw;
++		const imgGlow = imgEffectLst && imgEffectLst.glow;
++		const EMU_PER_PX_IMG = 9525;
++		if (imgOuterShdw) {
++			const distEmu = typeof imgOuterShdw.dist === "number" ? imgOuterShdw.dist : 0;
++			const distPx = distEmu / EMU_PER_PX_IMG;
++			const dirRaw = typeof imgOuterShdw.dir === "number" ? imgOuterShdw.dir : 0;
++			const angleRad = (dirRaw / 60000) * Math.PI / 180;
++			const blurEmu = typeof imgOuterShdw.blurRad === "number" ? imgOuterShdw.blurRad : 0;
++			const blurPx = blurEmu / EMU_PER_PX_IMG / 2;
++			imageConfig.shadowEnabled = true;
++			imageConfig.shadowColor = (0, _univerjs_core.getColorStyle)(imgOuterShdw.color) || "rgba(0,0,0,1)";
++			imageConfig.shadowOffsetX = distPx * Math.cos(angleRad);
++			imageConfig.shadowOffsetY = distPx * Math.sin(angleRad);
++			imageConfig.shadowBlur = blurPx;
++			imageConfig.shadowOpacity = 0.4;
++		} else if (imgGlow) {
++			const radEmu = typeof imgGlow.rad === "number" ? imgGlow.rad : 0;
++			const radPx = radEmu / EMU_PER_PX_IMG * 1.5;
++			imageConfig.shadowEnabled = true;
++			imageConfig.shadowColor = (0, _univerjs_core.getColorStyle)(imgGlow.color) || "rgba(255,255,200,1)";
++			imageConfig.shadowOffsetX = 0;
++			imageConfig.shadowOffsetY = 0;
++			imageConfig.shadowBlur = radPx;
++			imageConfig.shadowOpacity = 0.6;
++		}
++		// Casual Slides patch — honour imageProperties.brightness /
++		// contrast / transparency (E5 + E4 unified path). The parser
++		// populates these as fractions (transparency is already 0..1
++		// fraction-removed per E4 wave 7h; brightness / contrast are
++		// upcoming sibling-agent work). Emit a CSS filter string via
++		// the engine-render Image `filter` prop (added by the
++		// engine-render patch). The Canvas filter semantics:
++		//   brightness(1)  = unchanged; 0 = black; 2 = double-bright
++		//   contrast(1)    = unchanged; 0 = grey; 2 = double-contrast
++		// PowerPoint stores brightness / contrast as signed -1..1
++		// offsets from neutral, so the parser is expected to land
++		// neutral=1 when both are zero. Defensive: skip filter when all
++		// three are at defaults so we don't pay the canvas-filter cost
++		// per redraw on every image. Engine-render's Image already has
++		// `opacity` for transparency; we keep that path too so legacy
++		// transparency-only images still render via globalAlpha (no
++		// canvas filter overhead) — the filter route is reserved for
++		// the brightness / contrast combo case.
++		const brightness = imageProperties && typeof imageProperties.brightness === "number" ? imageProperties.brightness : undefined;
++		const contrast = imageProperties && typeof imageProperties.contrast === "number" ? imageProperties.contrast : undefined;
++		const transparency = imageProperties && typeof imageProperties.transparency === "number" ? imageProperties.transparency : undefined;
++		const hasBrightness = brightness !== undefined && brightness !== 1;
++		const hasContrast = contrast !== undefined && contrast !== 1;
++		if (hasBrightness || hasContrast) {
++			const parts = [];
++			if (hasBrightness) parts.push("brightness(" + brightness + ")");
++			if (hasContrast) parts.push("contrast(" + contrast + ")");
++			imageConfig.filter = parts.join(" ");
++		}
++		if (transparency !== undefined && transparency > 0 && transparency <= 1) {
++			imageConfig.opacity = 1 - transparency;
++		}
 +		return new _univerjs_engine_render.Image(id, imageConfig);
  	}
  };
  var ImageAdaptorFactory = class {
-@@ -667,6 +716,195 @@ var ImageAdaptorFactory = class {
+@@ -667,6 +783,195 @@ var ImageAdaptorFactory = class {
  };
  CanvasObjectProviderRegistry.add(new ImageAdaptorFactory());
  
@@ -286,7 +353,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ada23646decdd9798c27c92d9f72aa20
  //#endregion
  //#region src/views/render/adaptors/rich-text-adaptor.ts
  let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
-@@ -699,7 +937,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -699,7 +1004,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  			forceRender: true
  		};
  		let isNotNull = false;
@@ -301,7 +368,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ada23646decdd9798c27c92d9f72aa20
  			config = {
  				...config,
  				text,
-@@ -715,12 +959,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -715,12 +1026,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  				cl
  			};
  			isNotNull = true;
@@ -314,7 +381,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ada23646decdd9798c27c92d9f72aa20
  		}
  		if (isNotNull === false) return;
  		return new _univerjs_engine_render.RichText(this._localeService, id, config);
-@@ -756,10 +994,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -756,10 +1061,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -432,7 +499,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ada23646decdd9798c27c92d9f72aa20
  		if (shapeType === "rect") return new _univerjs_engine_render.Rect(id, {
  			fill,
  			top,
-@@ -775,7 +1119,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -775,7 +1186,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipX,
  			flipY,
  			forceRender: true,
@@ -442,7 +509,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ada23646decdd9798c27c92d9f72aa20
  		});
  		if (shapeType === "roundRect") return new _univerjs_engine_render.Rect(id, {
  			fill,
-@@ -793,10 +1138,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -793,10 +1205,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipY,
  			forceRender: true,
  			radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -455,7 +522,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ada23646decdd9798c27c92d9f72aa20
  			return new _univerjs_engine_render.Circle(id, {
  				fill,
  				top,
-@@ -813,9 +1158,132 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -813,9 +1225,132 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -590,7 +657,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ada23646decdd9798c27c92d9f72aa20
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..07fb265390ee9b416492f6248020ec4bbc8265cd 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b927e330b 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
@@ -678,18 +745,85 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..07fb265390ee9b416492f6248020ec4b
  			url: (imageProperties === null || imageProperties === void 0 ? void 0 : imageProperties.contentUrl) || "",
  			top,
  			left,
-@@ -653,7 +700,9 @@ var ImageAdaptor = class extends ObjectAdaptor {
+@@ -653,7 +700,76 @@ var ImageAdaptor = class extends ObjectAdaptor {
  			flipX,
  			flipY,
  			forceRender: true
 -		});
 +		};
 +		if (srcRect) imageConfig.srcRect = srcRect;
++		// Casual Slides patch — honour imageProperties.effectLst (E6).
++		// Mirrors ShapeAdaptor's shadow / glow handling: outerShdw maps
++		// to canvas shadow*; glow re-uses the shadow channel with zero
++		// offset + larger blur as a halo. The engine-render Image patch
++		// applies these in Image.render() before _draw — see
++		// `patches/@univerjs__engine-render@0.24.0.patch`.
++		// innerShdw / reflection / blur on images are also TODOs (same
++		// reasons as on the shape side — see ShapeAdaptor comments).
++		const imgEffectLst = imageProperties && imageProperties.effectLst;
++		const imgOuterShdw = imgEffectLst && imgEffectLst.outerShdw;
++		const imgGlow = imgEffectLst && imgEffectLst.glow;
++		const EMU_PER_PX_IMG = 9525;
++		if (imgOuterShdw) {
++			const distEmu = typeof imgOuterShdw.dist === "number" ? imgOuterShdw.dist : 0;
++			const distPx = distEmu / EMU_PER_PX_IMG;
++			const dirRaw = typeof imgOuterShdw.dir === "number" ? imgOuterShdw.dir : 0;
++			const angleRad = (dirRaw / 60000) * Math.PI / 180;
++			const blurEmu = typeof imgOuterShdw.blurRad === "number" ? imgOuterShdw.blurRad : 0;
++			const blurPx = blurEmu / EMU_PER_PX_IMG / 2;
++			imageConfig.shadowEnabled = true;
++			imageConfig.shadowColor = getColorStyle(imgOuterShdw.color) || "rgba(0,0,0,1)";
++			imageConfig.shadowOffsetX = distPx * Math.cos(angleRad);
++			imageConfig.shadowOffsetY = distPx * Math.sin(angleRad);
++			imageConfig.shadowBlur = blurPx;
++			imageConfig.shadowOpacity = 0.4;
++		} else if (imgGlow) {
++			const radEmu = typeof imgGlow.rad === "number" ? imgGlow.rad : 0;
++			const radPx = radEmu / EMU_PER_PX_IMG * 1.5;
++			imageConfig.shadowEnabled = true;
++			imageConfig.shadowColor = getColorStyle(imgGlow.color) || "rgba(255,255,200,1)";
++			imageConfig.shadowOffsetX = 0;
++			imageConfig.shadowOffsetY = 0;
++			imageConfig.shadowBlur = radPx;
++			imageConfig.shadowOpacity = 0.6;
++		}
++		// Casual Slides patch — honour imageProperties.brightness /
++		// contrast / transparency (E5 + E4 unified path). The parser
++		// populates these as fractions (transparency is already 0..1
++		// fraction-removed per E4 wave 7h; brightness / contrast are
++		// upcoming sibling-agent work). Emit a CSS filter string via
++		// the engine-render Image `filter` prop (added by the
++		// engine-render patch). The Canvas filter semantics:
++		//   brightness(1)  = unchanged; 0 = black; 2 = double-bright
++		//   contrast(1)    = unchanged; 0 = grey; 2 = double-contrast
++		// PowerPoint stores brightness / contrast as signed -1..1
++		// offsets from neutral, so the parser is expected to land
++		// neutral=1 when both are zero. Defensive: skip filter when all
++		// three are at defaults so we don't pay the canvas-filter cost
++		// per redraw on every image. Engine-render's Image already has
++		// `opacity` for transparency; we keep that path too so legacy
++		// transparency-only images still render via globalAlpha (no
++		// canvas filter overhead) — the filter route is reserved for
++		// the brightness / contrast combo case.
++		const brightness = imageProperties && typeof imageProperties.brightness === "number" ? imageProperties.brightness : undefined;
++		const contrast = imageProperties && typeof imageProperties.contrast === "number" ? imageProperties.contrast : undefined;
++		const transparency = imageProperties && typeof imageProperties.transparency === "number" ? imageProperties.transparency : undefined;
++		const hasBrightness = brightness !== undefined && brightness !== 1;
++		const hasContrast = contrast !== undefined && contrast !== 1;
++		if (hasBrightness || hasContrast) {
++			const parts = [];
++			if (hasBrightness) parts.push("brightness(" + brightness + ")");
++			if (hasContrast) parts.push("contrast(" + contrast + ")");
++			imageConfig.filter = parts.join(" ");
++		}
++		if (transparency !== undefined && transparency > 0 && transparency <= 1) {
++			imageConfig.opacity = 1 - transparency;
++		}
 +		return new Image(id, imageConfig);
  	}
  };
  var ImageAdaptorFactory = class {
-@@ -666,6 +715,212 @@ var ImageAdaptorFactory = class {
+@@ -666,6 +782,212 @@ var ImageAdaptorFactory = class {
  };
  CanvasObjectProviderRegistry.add(new ImageAdaptorFactory());
  
@@ -902,7 +1036,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..07fb265390ee9b416492f6248020ec4b
  //#endregion
  //#region src/views/render/adaptors/rich-text-adaptor.ts
  let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
-@@ -698,7 +953,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -698,7 +1020,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  			forceRender: true
  		};
  		let isNotNull = false;
@@ -917,7 +1051,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..07fb265390ee9b416492f6248020ec4b
  			config = {
  				...config,
  				text,
-@@ -714,12 +975,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -714,12 +1042,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  				cl
  			};
  			isNotNull = true;
@@ -930,7 +1064,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..07fb265390ee9b416492f6248020ec4b
  		}
  		if (isNotNull === false) return;
  		return new RichText(this._localeService, id, config);
-@@ -755,10 +1010,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -755,10 +1077,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -1048,7 +1182,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..07fb265390ee9b416492f6248020ec4b
  		if (shapeType === "rect") return new Rect(id, {
  			fill,
  			top,
-@@ -774,7 +1135,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -774,7 +1202,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipX,
  			flipY,
  			forceRender: true,
@@ -1058,7 +1192,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..07fb265390ee9b416492f6248020ec4b
  		});
  		if (shapeType === "roundRect") return new Rect(id, {
  			fill,
-@@ -792,10 +1154,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -792,10 +1221,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipY,
  			forceRender: true,
  			radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -1071,7 +1205,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..07fb265390ee9b416492f6248020ec4b
  			return new Circle(id, {
  				fill,
  				top,
-@@ -812,9 +1174,136 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -812,9 +1241,136 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
