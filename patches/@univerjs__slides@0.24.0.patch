@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..eb8423056ef499ff0aaace1adc479edcbdd294a6 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ada23646decdd9798c27c92d9f72aa201d772785 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -314,7 +314,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..eb8423056ef499ff0aaace1adc479edc
  		}
  		if (isNotNull === false) return;
  		return new _univerjs_engine_render.RichText(this._localeService, id, config);
-@@ -756,9 +994,81 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -756,10 +994,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -359,7 +359,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..eb8423056ef499ff0aaace1adc479edc
 +			} else if (cap === "flat") {
 +				strokeStyle.strokeLineCap = "butt";
 +			}
-+		}
+ 		}
 +		// Casual Slides patch — outerShdw (drop shadow) via the canvas
 +		// shadow* shape props. effectLst.outerShdw carries `color,
 +		// blurRad, dist, dir` where dist is in EMU and dir is in
@@ -375,11 +375,12 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..eb8423056ef499ff0aaace1adc479edc
 +		// not parsed end-to-end yet.
 +		// blurRad is intentionally simplified — canvas shadowBlur is
 +		// browser-tuned and high blur values can quintuple paint cost
-+		// on every redraw. Glow / reflection / innerShdw are not
-+		// addressed here.
++		// on every redraw.
 +		const EMU_PER_PX = 9525;
 +		const shadowStyle = {};
-+		const outerShdw = shapeProperties && shapeProperties.effectLst && shapeProperties.effectLst.outerShdw;
++		const effectLst = shapeProperties && shapeProperties.effectLst;
++		const outerShdw = effectLst && effectLst.outerShdw;
++		const glow = effectLst && effectLst.glow;
 +		if (outerShdw) {
 +			const distEmu = typeof outerShdw.dist === "number" ? outerShdw.dist : 0;
 +			const distPx = distEmu / EMU_PER_PX;
@@ -394,10 +395,44 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..eb8423056ef499ff0aaace1adc479edc
 +			shadowStyle.shadowBlur = blurPx;
 +			shadowStyle.shadowOpacity = 0.4;
 +			shadowStyle.shadowForStrokeEnabled = true;
- 		}
++		} else if (glow) {
++			// Casual Slides patch — glow (D19 effectLst.glow). Canvas only
++			// gives us one shadow per draw call, so we reuse the shadow*
++			// props: zero offset + larger blur fakes a halo. glow.rad is
++			// the glow radius in EMU; we scale 1.5x relative to the
++			// outerShdw blur scale because glow needs to extend further
++			// out to look like a true halo (the shadow is centred on the
++			// shape boundary in both cases). Opacity tunable; 0.6 reads
++			// as "glow" without bleeding too much into surrounding text.
++			const radEmu = typeof glow.rad === "number" ? glow.rad : 0;
++			const radPx = radEmu / EMU_PER_PX * 1.5;
++			shadowStyle.shadowEnabled = true;
++			shadowStyle.shadowColor = (0, _univerjs_core.getColorStyle)(glow.color) || "rgba(255,255,200,1)";
++			shadowStyle.shadowOffsetX = 0;
++			shadowStyle.shadowOffsetY = 0;
++			shadowStyle.shadowBlur = radPx;
++			shadowStyle.shadowOpacity = 0.6;
++			shadowStyle.shadowForStrokeEnabled = true;
++		}
++		// Casual Slides patch — innerShdw / reflection / blur TODOs.
++		// innerShdw: parsed identically to outerShdw but the shadow goes
++		//   inside the shape's outline. Canvas has no native inner-shadow
++		//   API on a stroked path — would need a clip + offset trick (draw
++		//   shape; clip to shape; draw shadow at offset; unclip). Skipped
++		//   for minimum-viable; the shadow drops silently. TODO.
++		// reflection: produces a mirrored faded copy below the shape.
++		//   Needs a second flipped Path/Rect with a vertical-gradient
++		//   alpha mask. Hard to do at the adaptor layer (no offscreen
++		//   canvas access); needs engine-render widening. Skipped. TODO.
++		// blur: ctx.filter = 'blur(<rad>px)' on the *whole shape* would
++		//   work, but engine-render's Shape (Rect/Circle/Path) doesn't
++		//   plumb a `filter` prop through to the draw call — only Image
++		//   does (per the engine-render shadow-+-filter patch). Shape
++		//   would need the same widening. Skipped. TODO.
  		if (shapeType === "rect") return new _univerjs_engine_render.Rect(id, {
  			fill,
-@@ -775,7 +1085,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 			top,
+@@ -775,7 +1119,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipX,
  			flipY,
  			forceRender: true,
@@ -407,7 +442,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..eb8423056ef499ff0aaace1adc479edc
  		});
  		if (shapeType === "roundRect") return new _univerjs_engine_render.Rect(id, {
  			fill,
-@@ -793,10 +1104,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -793,10 +1138,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipY,
  			forceRender: true,
  			radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -420,7 +455,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..eb8423056ef499ff0aaace1adc479edc
  			return new _univerjs_engine_render.Circle(id, {
  				fill,
  				top,
-@@ -813,9 +1124,132 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -813,9 +1158,132 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -555,7 +590,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..eb8423056ef499ff0aaace1adc479edc
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..a34b112d3d1c7b9e833fbb4960eae38d2a7a5436 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..07fb265390ee9b416492f6248020ec4bbc8265cd 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
@@ -895,7 +930,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..a34b112d3d1c7b9e833fbb4960eae38d
  		}
  		if (isNotNull === false) return;
  		return new RichText(this._localeService, id, config);
-@@ -755,9 +1010,81 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -755,10 +1010,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -940,7 +975,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..a34b112d3d1c7b9e833fbb4960eae38d
 +			} else if (cap === "flat") {
 +				strokeStyle.strokeLineCap = "butt";
 +			}
-+		}
+ 		}
 +		// Casual Slides patch — outerShdw (drop shadow) via the canvas
 +		// shadow* shape props. effectLst.outerShdw carries `color,
 +		// blurRad, dist, dir` where dist is in EMU and dir is in
@@ -956,11 +991,12 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..a34b112d3d1c7b9e833fbb4960eae38d
 +		// not parsed end-to-end yet.
 +		// blurRad is intentionally simplified — canvas shadowBlur is
 +		// browser-tuned and high blur values can quintuple paint cost
-+		// on every redraw. Glow / reflection / innerShdw are not
-+		// addressed here.
++		// on every redraw.
 +		const EMU_PER_PX = 9525;
 +		const shadowStyle = {};
-+		const outerShdw = shapeProperties && shapeProperties.effectLst && shapeProperties.effectLst.outerShdw;
++		const effectLst = shapeProperties && shapeProperties.effectLst;
++		const outerShdw = effectLst && effectLst.outerShdw;
++		const glow = effectLst && effectLst.glow;
 +		if (outerShdw) {
 +			const distEmu = typeof outerShdw.dist === "number" ? outerShdw.dist : 0;
 +			const distPx = distEmu / EMU_PER_PX;
@@ -975,10 +1011,44 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..a34b112d3d1c7b9e833fbb4960eae38d
 +			shadowStyle.shadowBlur = blurPx;
 +			shadowStyle.shadowOpacity = 0.4;
 +			shadowStyle.shadowForStrokeEnabled = true;
- 		}
++		} else if (glow) {
++			// Casual Slides patch — glow (D19 effectLst.glow). Canvas only
++			// gives us one shadow per draw call, so we reuse the shadow*
++			// props: zero offset + larger blur fakes a halo. glow.rad is
++			// the glow radius in EMU; we scale 1.5x relative to the
++			// outerShdw blur scale because glow needs to extend further
++			// out to look like a true halo (the shadow is centred on the
++			// shape boundary in both cases). Opacity tunable; 0.6 reads
++			// as "glow" without bleeding too much into surrounding text.
++			const radEmu = typeof glow.rad === "number" ? glow.rad : 0;
++			const radPx = radEmu / EMU_PER_PX * 1.5;
++			shadowStyle.shadowEnabled = true;
++			shadowStyle.shadowColor = getColorStyle(glow.color) || "rgba(255,255,200,1)";
++			shadowStyle.shadowOffsetX = 0;
++			shadowStyle.shadowOffsetY = 0;
++			shadowStyle.shadowBlur = radPx;
++			shadowStyle.shadowOpacity = 0.6;
++			shadowStyle.shadowForStrokeEnabled = true;
++		}
++		// Casual Slides patch — innerShdw / reflection / blur TODOs.
++		// innerShdw: parsed identically to outerShdw but the shadow goes
++		//   inside the shape's outline. Canvas has no native inner-shadow
++		//   API on a stroked path — would need a clip + offset trick (draw
++		//   shape; clip to shape; draw shadow at offset; unclip). Skipped
++		//   for minimum-viable; the shadow drops silently. TODO.
++		// reflection: produces a mirrored faded copy below the shape.
++		//   Needs a second flipped Path/Rect with a vertical-gradient
++		//   alpha mask. Hard to do at the adaptor layer (no offscreen
++		//   canvas access); needs engine-render widening. Skipped. TODO.
++		// blur: ctx.filter = 'blur(<rad>px)' on the *whole shape* would
++		//   work, but engine-render's Shape (Rect/Circle/Path) doesn't
++		//   plumb a `filter` prop through to the draw call — only Image
++		//   does (per the engine-render shadow-+-filter patch). Shape
++		//   would need the same widening. Skipped. TODO.
  		if (shapeType === "rect") return new Rect(id, {
  			fill,
-@@ -774,7 +1101,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 			top,
+@@ -774,7 +1135,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipX,
  			flipY,
  			forceRender: true,
@@ -988,7 +1058,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..a34b112d3d1c7b9e833fbb4960eae38d
  		});
  		if (shapeType === "roundRect") return new Rect(id, {
  			fill,
-@@ -792,10 +1120,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -792,10 +1154,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipY,
  			forceRender: true,
  			radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -1001,7 +1071,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..a34b112d3d1c7b9e833fbb4960eae38d
  			return new Circle(id, {
  				fill,
  				top,
-@@ -812,9 +1140,136 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -812,9 +1174,136 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
