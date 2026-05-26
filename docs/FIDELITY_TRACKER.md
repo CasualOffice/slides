@@ -184,7 +184,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
 | K1 | Title / author / company metadata | ✅ | Low | Low | Wave 8c — `extractCoreProps` reads `docProps/core.xml` for `<dc:title>`; when present and non-empty, it becomes `snapshot.title`. Filename remains the fallback. `dc:creator` / `dc:description` / `dc:subject` are also harvested into `coreProps` for future UI surfacing. |
-| K2 | Custom properties | ❌ | Low | Low | — |
+| K2 | Custom properties | ✅ | Low | Low | Wave 8d — `docProps/custom.xml` captured into `CASUAL_SLIDES_PPTX_RAW.customProps` (only emitted when present). `restorePassthrough` re-injects the bytes on export so author-defined props survive the round-trip. Opaque passthrough — no parsing. |
 | K3 | Default text style (`<p:defaultTextStyle>`) | ❌ | Med | Med | — |
 | K4 | Headers / footers | ❌ | Low | Med | — |
 | K5 | Comments (`<p:cm>`) | ✅ | Med | Med | Wave 7n — every `ppt/comments/*.xml` part (+ rels) captured into `CASUAL_SLIDES_PPTX_RAW.comments` and re-injected on export. Native UI for comments still TODO (P3 feature work). |

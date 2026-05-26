@@ -2408,6 +2408,12 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
   const coreXml = await zip.file('docProps/core.xml')?.async('string');
   const coreProps = coreXml ? extractCoreProps(coreXml) : {};
 
+  // K2 — `docProps/custom.xml` is the schema-defined slot for author-
+  // attached custom metadata (`<Properties><property name="…">…</property>`).
+  // We don't parse it — just capture the XML bytes for the passthrough
+  // round-trip so author-defined fields survive an open/save cycle.
+  const customPropsXml = await zip.file('docProps/custom.xml')?.async('string');
+
   const sldIdLst = findChild(presentation, 'p:sldIdLst');
   const sldIds = toArray(findChild(sldIdLst, 'p:sldId'));
 
@@ -2566,6 +2572,7 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     readAll(rawRels),
   ]);
 
+  const hasCustomProps = customPropsXml !== undefined && customPropsXml.length > 0;
   const hasPassthrough =
     Object.keys(rawLayouts).length > 0 ||
     Object.keys(rawMasters).length > 0 ||
@@ -2574,7 +2581,8 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     Object.keys(rawComments).length > 0 ||
     Object.keys(rawDiagrams).length > 0 ||
     Object.keys(rawInk).length > 0 ||
-    Object.keys(rawCharts).length > 0;
+    Object.keys(rawCharts).length > 0 ||
+    hasCustomProps;
 
   // K1 — prefer the deck-authored title from docProps/core.xml; fall
   // back to filename when absent so legacy decks still round-trip.
@@ -2600,6 +2608,12 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
                 ink: rawInk,
                 charts: rawCharts,
                 rels: rawRels,
+                // K2 — opaque passthrough of docProps/custom.xml. Only
+                // emitted when the source deck carried one so most
+                // pptxs (which omit custom.xml entirely) stay lean.
+                ...(hasCustomProps
+                  ? { customProps: { 'docProps/custom.xml': customPropsXml! } }
+                  : {}),
               }),
             },
           ],

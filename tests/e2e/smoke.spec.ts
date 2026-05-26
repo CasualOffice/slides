@@ -3202,6 +3202,90 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(r.title, 'snapshot.title from dc:title').toBe('Q3 Roadmap Review');
   });
 
+  test('pptx import wave 8d — custom props passthrough (K2)', async ({ page }) => {
+    // Hand-roll a deck with docProps/custom.xml. After import, the
+    // resources passthrough carries the bytes; after re-export, the
+    // produced zip still contains the original docProps/custom.xml.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const result = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const emptyRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+      // K2 — author-defined custom properties.
+      const custom =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">` +
+        `<property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="ReviewedBy"><vt:lpwstr>Alex Reviewer</vt:lpwstr></property>` +
+        `</Properties>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', emptyRels);
+      zip.file('docProps/custom.xml', custom);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+          export(snapshot: unknown): Promise<{ blob: Blob; fileName: string }>;
+        };
+      };
+      const client = (window as unknown as W).__casualSlides_getPptxClient();
+      const snapshot = await client.import(buf, 'wave8d-custom.pptx');
+
+      // Round-trip — restorePassthrough re-injects the bytes.
+      const { blob } = await client.export(snapshot);
+      const reZip = await JSZip.loadAsync(await blob.arrayBuffer());
+      return {
+        snapshot,
+        exportedCustom: (await reZip.file('docProps/custom.xml')?.async('string')) ?? null,
+      };
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = result.snapshot;
+    const resources: Array<{ name: string; data: string }> | undefined = r.resources;
+    expect(resources, 'resources slot populated').toBeTruthy();
+    const passthrough = resources!.find((e) => e.name === 'CASUAL_SLIDES_PPTX_RAW');
+    expect(passthrough, 'CASUAL_SLIDES_PPTX_RAW resource exists').toBeTruthy();
+    const raw = JSON.parse(passthrough!.data);
+    expect(raw.customProps, 'customProps bucket populated').toBeTruthy();
+    expect(raw.customProps['docProps/custom.xml'], 'docProps/custom.xml bytes captured').toContain('ReviewedBy');
+
+    // Export — bytes survive into the produced zip.
+    expect(result.exportedCustom, 'docProps/custom.xml restored on export').toContain('ReviewedBy');
+    expect(result.exportedCustom, 'value survives').toContain('Alex Reviewer');
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.
