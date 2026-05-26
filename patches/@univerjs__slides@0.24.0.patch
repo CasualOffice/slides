@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..f74b1cc547ee35f51a80d8b691a8311413dd6403 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..30be3a87abdc7db449f657644a6c81c020e5b8c6 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -181,16 +181,113 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..f74b1cc547ee35f51a80d8b691a83114
  			return new _univerjs_engine_render.Circle(id, {
  				fill,
  				top,
-@@ -816,6 +919,29 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -816,6 +919,126 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				...strokeStyle
  			});
  		}
-+		// Casual Slides patch — fallback for unknown prstGeom values
-+		// (triangle, line, arrow, hexagon, the 100+ other OOXML presets).
-+		// Drawing them as a filled bounding-rect with their outline keeps
-+		// the element visible at the right position instead of dropping
-+		// it entirely. Visual approximation only; precise path rendering
-+		// per prstGeom is a follow-up wave.
++		// Casual Slides patch — per-prstGeom Path rendering for the most
++		// common non-rect shapes. Falls back to Rect for anything not
++		// listed. Coordinates are in object-local space (0..w / 0..h).
++		const w = width || 0;
++		const h = height || 0;
++		const pathData = (() => {
++			switch (shapeType) {
++				case "line":
++				case "straightConnector1":
++					return `M 0 ${h / 2} L ${w} ${h / 2}`;
++				case "triangle":
++					return `M ${w / 2} 0 L ${w} ${h} L 0 ${h} Z`;
++				case "rtTriangle":
++					return `M 0 0 L ${w} ${h} L 0 ${h} Z`;
++				case "diamond":
++					return `M ${w / 2} 0 L ${w} ${h / 2} L ${w / 2} ${h} L 0 ${h / 2} Z`;
++				case "parallelogram":
++					return `M ${w * 0.2} 0 L ${w} 0 L ${w * 0.8} ${h} L 0 ${h} Z`;
++				case "trapezoid":
++					return `M ${w * 0.25} 0 L ${w * 0.75} 0 L ${w} ${h} L 0 ${h} Z`;
++				case "pentagon": {
++					const cx = w / 2, cy = h / 2;
++					const rx = w / 2, ry = h / 2;
++					const pts = [];
++					for (let i = 0; i < 5; i++) {
++						const ang = -Math.PI / 2 + (2 * Math.PI * i) / 5;
++						pts.push(`${cx + rx * Math.cos(ang)} ${cy + ry * Math.sin(ang)}`);
++					}
++					return `M ${pts[0]} L ${pts.slice(1).join(" L ")} Z`;
++				}
++				case "hexagon": {
++					const cx = w / 2, cy = h / 2;
++					const rx = w / 2, ry = h / 2;
++					const pts = [];
++					for (let i = 0; i < 6; i++) {
++						const ang = (2 * Math.PI * i) / 6;
++						pts.push(`${cx + rx * Math.cos(ang)} ${cy + ry * Math.sin(ang)}`);
++					}
++					return `M ${pts[0]} L ${pts.slice(1).join(" L ")} Z`;
++				}
++				case "octagon": {
++					const cx = w / 2, cy = h / 2;
++					const rx = w / 2, ry = h / 2;
++					const pts = [];
++					for (let i = 0; i < 8; i++) {
++						const ang = -Math.PI / 8 + (2 * Math.PI * i) / 8;
++						pts.push(`${cx + rx * Math.cos(ang)} ${cy + ry * Math.sin(ang)}`);
++					}
++					return `M ${pts[0]} L ${pts.slice(1).join(" L ")} Z`;
++				}
++				case "rightArrow":
++					return `M 0 ${h * 0.3} L ${w * 0.7} ${h * 0.3} L ${w * 0.7} 0 L ${w} ${h / 2} L ${w * 0.7} ${h} L ${w * 0.7} ${h * 0.7} L 0 ${h * 0.7} Z`;
++				case "leftArrow":
++					return `M ${w} ${h * 0.3} L ${w * 0.3} ${h * 0.3} L ${w * 0.3} 0 L 0 ${h / 2} L ${w * 0.3} ${h} L ${w * 0.3} ${h * 0.7} L ${w} ${h * 0.7} Z`;
++				case "upArrow":
++					return `M ${w * 0.3} ${h} L ${w * 0.3} ${h * 0.3} L 0 ${h * 0.3} L ${w / 2} 0 L ${w} ${h * 0.3} L ${w * 0.7} ${h * 0.3} L ${w * 0.7} ${h} Z`;
++				case "downArrow":
++					return `M ${w * 0.3} 0 L ${w * 0.3} ${h * 0.7} L 0 ${h * 0.7} L ${w / 2} ${h} L ${w} ${h * 0.7} L ${w * 0.7} ${h * 0.7} L ${w * 0.7} 0 Z`;
++				case "chevron":
++					return `M 0 0 L ${w * 0.7} 0 L ${w} ${h / 2} L ${w * 0.7} ${h} L 0 ${h} L ${w * 0.3} ${h / 2} Z`;
++				case "plus":
++				case "mathPlus":
++					return `M ${w * 0.33} 0 L ${w * 0.67} 0 L ${w * 0.67} ${h * 0.33} L ${w} ${h * 0.33} L ${w} ${h * 0.67} L ${w * 0.67} ${h * 0.67} L ${w * 0.67} ${h} L ${w * 0.33} ${h} L ${w * 0.33} ${h * 0.67} L 0 ${h * 0.67} L 0 ${h * 0.33} L ${w * 0.33} ${h * 0.33} Z`;
++				case "star5":
++				case "star": {
++					const cx = w / 2, cy = h / 2;
++					const ro = Math.min(w, h) / 2;
++					const ri = ro * 0.4;
++					const pts = [];
++					for (let i = 0; i < 10; i++) {
++						const r = i % 2 === 0 ? ro : ri;
++						const ang = -Math.PI / 2 + (Math.PI * i) / 5;
++						pts.push(`${cx + r * Math.cos(ang)} ${cy + r * Math.sin(ang)}`);
++					}
++					return `M ${pts[0]} L ${pts.slice(1).join(" L ")} Z`;
++				}
++				default:
++					return null;
++			}
++		})();
++		if (pathData) {
++			return new _univerjs_engine_render.Path(id, {
++				data: pathData,
++				fill,
++				top,
++				left,
++				width,
++				height,
++				zIndex,
++				angle,
++				scaleX,
++				scaleY,
++				skewX,
++				skewY,
++				flipX,
++				flipY,
++				forceRender: true,
++				...strokeStyle
++			});
++		}
++		// Fallback for everything else — at least keep the element visible
++		// as a bounding rect with the right fill + outline. Better than
++		// disappearing entirely.
 +		return new _univerjs_engine_render.Rect(id, {
 +			fill,
 +			top,
@@ -212,9 +309,17 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..f74b1cc547ee35f51a80d8b691a83114
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..1c15ec4bc2eae76f64509c57e7fafe9562e70954 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..8f362836c059e96319973a587492489f1d611214 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
+@@ -1,6 +1,6 @@
+ import { DocumentDataModel, IConfigService, IContextService, IUniverInstanceService, Inject, Injector, LocaleService, Plugin, Registry, Styles, UnitModel, UniverInstanceType, Worksheet, generateRandomId, getColorStyle, merge, sortRules } from "@univerjs/core";
+ import { BehaviorSubject } from "rxjs";
+-import { Circle, DocumentSkeleton, DocumentViewModel, Documents, IRenderingEngine, Image, Liquid, PageLayoutType, Rect, RichText, Scene, SceneViewer, ScrollBar, Slide, Spreadsheet, SpreadsheetColumnHeader, SpreadsheetRowHeader, SpreadsheetSkeleton, Viewport, getColor } from "@univerjs/engine-render";
++import { Circle, DocumentSkeleton, DocumentViewModel, Documents, IRenderingEngine, Image, Liquid, PageLayoutType, Path, Rect, RichText, Scene, SceneViewer, ScrollBar, Slide, Spreadsheet, SpreadsheetColumnHeader, SpreadsheetRowHeader, SpreadsheetSkeleton, Viewport, getColor } from "@univerjs/engine-render";
+ 
+ //#region src/basics/const/default-slide.ts
+ /**
 @@ -44,6 +44,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
  	PageElementType[PageElementType["SPREADSHEET"] = 3] = "SPREADSHEET";
  	PageElementType[PageElementType["DOCUMENT"] = 4] = "DOCUMENT";
@@ -394,16 +499,117 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..1c15ec4bc2eae76f64509c57e7fafe95
  			return new Circle(id, {
  				fill,
  				top,
-@@ -815,6 +918,29 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -815,6 +918,130 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				...strokeStyle
  			});
  		}
-+		// Casual Slides patch — fallback for unknown prstGeom values
-+		// (triangle, line, arrow, hexagon, the 100+ other OOXML presets).
-+		// Drawing them as a filled bounding-rect with their outline keeps
-+		// the element visible at the right position instead of dropping
-+		// it entirely. Visual approximation only; precise path rendering
-+		// per prstGeom is a follow-up wave.
++		// Casual Slides patch — per-prstGeom Path rendering for the most
++		// common non-rect shapes. Falls back to Rect for anything not
++		// listed. Coordinates are in object-local space (0..w / 0..h).
++		const w = width || 0;
++		const h = height || 0;
++		const pathData = (() => {
++			switch (shapeType) {
++				case "line":
++				case "straightConnector1":
++					// Horizontal line at vertical centre; covers the common
++					// case of pptx lines stored with cy=0 (our F4 import
++					// fix already inflates the bbox to outline width).
++					return `M 0 ${h / 2} L ${w} ${h / 2}`;
++				case "triangle":
++					return `M ${w / 2} 0 L ${w} ${h} L 0 ${h} Z`;
++				case "rtTriangle":
++					return `M 0 0 L ${w} ${h} L 0 ${h} Z`;
++				case "diamond":
++					return `M ${w / 2} 0 L ${w} ${h / 2} L ${w / 2} ${h} L 0 ${h / 2} Z`;
++				case "parallelogram":
++					return `M ${w * 0.2} 0 L ${w} 0 L ${w * 0.8} ${h} L 0 ${h} Z`;
++				case "trapezoid":
++					return `M ${w * 0.25} 0 L ${w * 0.75} 0 L ${w} ${h} L 0 ${h} Z`;
++				case "pentagon": {
++					const cx = w / 2, cy = h / 2;
++					const rx = w / 2, ry = h / 2;
++					const pts = [];
++					for (let i = 0; i < 5; i++) {
++						const ang = -Math.PI / 2 + (2 * Math.PI * i) / 5;
++						pts.push(`${cx + rx * Math.cos(ang)} ${cy + ry * Math.sin(ang)}`);
++					}
++					return `M ${pts[0]} L ${pts.slice(1).join(" L ")} Z`;
++				}
++				case "hexagon": {
++					// Pointy-side hexagon (matches PowerPoint default).
++					const cx = w / 2, cy = h / 2;
++					const rx = w / 2, ry = h / 2;
++					const pts = [];
++					for (let i = 0; i < 6; i++) {
++						const ang = (2 * Math.PI * i) / 6;
++						pts.push(`${cx + rx * Math.cos(ang)} ${cy + ry * Math.sin(ang)}`);
++					}
++					return `M ${pts[0]} L ${pts.slice(1).join(" L ")} Z`;
++				}
++				case "octagon": {
++					const cx = w / 2, cy = h / 2;
++					const rx = w / 2, ry = h / 2;
++					const pts = [];
++					for (let i = 0; i < 8; i++) {
++						const ang = -Math.PI / 8 + (2 * Math.PI * i) / 8;
++						pts.push(`${cx + rx * Math.cos(ang)} ${cy + ry * Math.sin(ang)}`);
++					}
++					return `M ${pts[0]} L ${pts.slice(1).join(" L ")} Z`;
++				}
++				case "rightArrow":
++					return `M 0 ${h * 0.3} L ${w * 0.7} ${h * 0.3} L ${w * 0.7} 0 L ${w} ${h / 2} L ${w * 0.7} ${h} L ${w * 0.7} ${h * 0.7} L 0 ${h * 0.7} Z`;
++				case "leftArrow":
++					return `M ${w} ${h * 0.3} L ${w * 0.3} ${h * 0.3} L ${w * 0.3} 0 L 0 ${h / 2} L ${w * 0.3} ${h} L ${w * 0.3} ${h * 0.7} L ${w} ${h * 0.7} Z`;
++				case "upArrow":
++					return `M ${w * 0.3} ${h} L ${w * 0.3} ${h * 0.3} L 0 ${h * 0.3} L ${w / 2} 0 L ${w} ${h * 0.3} L ${w * 0.7} ${h * 0.3} L ${w * 0.7} ${h} Z`;
++				case "downArrow":
++					return `M ${w * 0.3} 0 L ${w * 0.3} ${h * 0.7} L 0 ${h * 0.7} L ${w / 2} ${h} L ${w} ${h * 0.7} L ${w * 0.7} ${h * 0.7} L ${w * 0.7} 0 Z`;
++				case "chevron":
++					return `M 0 0 L ${w * 0.7} 0 L ${w} ${h / 2} L ${w * 0.7} ${h} L 0 ${h} L ${w * 0.3} ${h / 2} Z`;
++				case "plus":
++				case "mathPlus":
++					return `M ${w * 0.33} 0 L ${w * 0.67} 0 L ${w * 0.67} ${h * 0.33} L ${w} ${h * 0.33} L ${w} ${h * 0.67} L ${w * 0.67} ${h * 0.67} L ${w * 0.67} ${h} L ${w * 0.33} ${h} L ${w * 0.33} ${h * 0.67} L 0 ${h * 0.67} L 0 ${h * 0.33} L ${w * 0.33} ${h * 0.33} Z`;
++				case "star5":
++				case "star": {
++					const cx = w / 2, cy = h / 2;
++					const ro = Math.min(w, h) / 2;
++					const ri = ro * 0.4;
++					const pts = [];
++					for (let i = 0; i < 10; i++) {
++						const r = i % 2 === 0 ? ro : ri;
++						const ang = -Math.PI / 2 + (Math.PI * i) / 5;
++						pts.push(`${cx + r * Math.cos(ang)} ${cy + r * Math.sin(ang)}`);
++					}
++					return `M ${pts[0]} L ${pts.slice(1).join(" L ")} Z`;
++				}
++				default:
++					return null;
++			}
++		})();
++		if (pathData) {
++			return new Path(id, {
++				data: pathData,
++				fill,
++				top,
++				left,
++				width,
++				height,
++				zIndex,
++				angle,
++				scaleX,
++				scaleY,
++				skewX,
++				skewY,
++				flipX,
++				flipY,
++				forceRender: true,
++				...strokeStyle
++			});
++		}
++		// Fallback for everything else — at least keep the element visible
++		// as a bounding rect with the right fill + outline. Better than
++		// disappearing entirely.
 +		return new Rect(id, {
 +			fill,
 +			top,
