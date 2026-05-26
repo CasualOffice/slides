@@ -3,7 +3,7 @@ import { XMLParser } from 'fast-xml-parser';
 import type { IPageElement, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
 import type { IBullet, IDocumentData, IDocumentStyle, IParagraph, ITextRun, IParagraphStyle } from '@univerjs/core';
-import { BaselineOffset, BorderStyleTypes, HorizontalAlign, PresetListType, VerticalAlign } from '@univerjs/core';
+import { BaselineOffset, BorderStyleTypes, HorizontalAlign, PresetListType, VerticalAlign, WrapStrategy } from '@univerjs/core';
 
 // pptx import — JSZip + fast-xml-parser → ISlideData.
 //
@@ -542,6 +542,18 @@ function parseBodyPr(bodyPr: unknown): Partial<IDocumentStyle> | null {
   }
   if (verticalAlign !== null) {
     out.renderConfig = { ...(out.renderConfig ?? {}), verticalAlign };
+  }
+
+  // C14 — text wrap. OOXML's `<a:bodyPr wrap="square|none">` controls
+  // whether long lines wrap within the frame (`square`, the default)
+  // or overflow horizontally (`none`). Map to Univer's WrapStrategy:
+  // `square` → WRAP, `none` → OVERFLOW. Absent attribute keeps the
+  // renderer default.
+  const wrap = node['@wrap'];
+  if (wrap === 'none') {
+    out.renderConfig = { ...(out.renderConfig ?? {}), wrapStrategy: WrapStrategy.OVERFLOW };
+  } else if (wrap === 'square') {
+    out.renderConfig = { ...(out.renderConfig ?? {}), wrapStrategy: WrapStrategy.WRAP };
   }
 
   return Object.keys(out).length > 0 ? out : null;
@@ -1529,6 +1541,17 @@ async function extractElementsFromSlideXml(
 // (J2) — the latter via the theme map. Gradient (`<a:gradFill>`),
 // picture (`<a:blipFill>`), and `<p:bgRef>` (theme background indexes)
 // are deferred to later waves (A3 / A4 / A5-ref).
+// A6 — `<p:sld show="0">` (or `show="false"`) marks the slide as hidden.
+// We pass through to `ISlideProperties.isSkipped` so renderers / present
+// modes can honour it. Absent attribute and `show="1"` / `"true"` both
+// mean visible (the OOXML default).
+function extractSlideHidden(slideXml: string): boolean {
+  const parsed = parser.parse(slideXml) as XmlNode;
+  const sld = findChild(parsed, 'p:sld') as XmlNode | undefined;
+  const show = sld?.['@show'];
+  return show === '0' || show === 0 || show === 'false';
+}
+
 function extractSlideBackground(slideXml: string, theme: ThemeMap | null): string | null {
   const parsed = parser.parse(slideXml) as XmlNode;
   const cSld = findChild(findChild(parsed, 'p:sld'), 'p:cSld');
@@ -1677,6 +1700,13 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     // keep the historical white default.
     const slideBg = extractSlideBackground(slideXml, theme);
 
+    // A6 — only emit slideProperties when the slide is actually hidden,
+    // so visible slides keep their lean page model. layoutObjectId /
+    // masterObjectId are required by ISlideProperties but we don't
+    // track them here yet (I3 reads them but doesn't surface the IDs
+    // back); set empty strings until the placeholder map exposes them.
+    const isHidden = extractSlideHidden(slideXml);
+
     pages[pageId] = {
       id: pageId,
       pageType: PageType.SLIDE,
@@ -1685,6 +1715,9 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
       description: '',
       pageBackgroundFill: { rgb: slideBg ?? 'rgb(255, 255, 255)' },
       pageElements: elementMap,
+      ...(isHidden
+        ? { slideProperties: { layoutObjectId: '', masterObjectId: '', isSkipped: true } }
+        : {}),
     };
     pageOrder.push(pageId);
   }

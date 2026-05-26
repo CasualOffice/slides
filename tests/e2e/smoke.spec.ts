@@ -1921,6 +1921,101 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(img.image?.imageProperties?.contentUrl, 'r:link → contentUrl passthrough').toBe('https://example.com/img.png');
   });
 
+  test('pptx import wave 7g — hidden slide + text wrap (A6 + C14)', async ({ page }) => {
+    // Two slides, two items:
+    //  • A6 — slide 1 has <p:sld show="0"> → slideProperties.isSkipped true.
+    //         Slide 2 omits @show → no slideProperties block.
+    //  • C14 — slide 2's text frame has <a:bodyPr wrap="none"/> → renderConfig.wrapStrategy
+    //          equals WrapStrategy.OVERFLOW (1).
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/><p:sldId id="257" r:id="rId2"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide2.xml"/>` +
+        `</Relationships>`;
+      const slide1 =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" show="0">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slide2 =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="text"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="3000000" cy="800000"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `</p:spPr>` +
+        `<p:txBody>` +
+        `<a:bodyPr wrap="none"/>` +
+        `<a:p><a:r><a:rPr lang="en-US"/><a:t>nowrap</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const emptyRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide1);
+      zip.file('ppt/slides/slide2.xml', slide2);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', emptyRels);
+      zip.file('ppt/slides/_rels/slide2.xml.rels', emptyRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave7g.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const pageOrder = r?.body?.pageOrder ?? [];
+    expect(pageOrder.length, 'two pages imported').toBe(2);
+    const page1 = r.body.pages[pageOrder[0]];
+    const page2 = r.body.pages[pageOrder[1]];
+
+    // A6 — slide 1 hidden, slide 2 visible.
+    expect(page1.slideProperties?.isSkipped, 'slide 1 marked hidden').toBe(true);
+    expect(page2.slideProperties, 'slide 2 has no slideProperties block').toBeUndefined();
+
+    // C14 — slide 2's text frame carries wrapStrategy = OVERFLOW (1).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const textEl = Object.values(page2.pageElements ?? {}).find((e: any) => e.richText) as any;
+    expect(textEl, 'text frame extracted').toBeTruthy();
+    const wrap = textEl.richText.rich?.documentStyle?.renderConfig?.wrapStrategy;
+    expect(wrap, 'wrap="none" → WrapStrategy.OVERFLOW').toBe(1);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

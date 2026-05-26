@@ -10,9 +10,11 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7f)
+## Snapshot — 2026-05-26 (post wave 7g)
 
-**41 / 87 items at ✅, 5 at ⚠️.** Wave 7f closes three small text + image fidelity gaps: B8 (`<a:rPr strike>` → `IStyleBase.st`), B9 (`<a:rPr baseline>` → `IStyleBase.va` via `BaselineOffset.SUPERSCRIPT` / `SUBSCRIPT`), and E2 (`<a:blip r:link>` → http(s) URL passed through to `imageProperties.contentUrl` directly).
+**43 / 87 items at ✅, 5 at ⚠️.** Wave 7g lands two more low-impact items: A6 (`<p:sld show="0">` → `ISlideProperties.isSkipped`) and C14 (`<a:bodyPr wrap="none|square">` → `WrapStrategy.OVERFLOW|WRAP` on `documentStyle.renderConfig`).
+
+Wave 7f (preceding): B8 (`<a:rPr strike>` → `IStyleBase.st`), B9 (`<a:rPr baseline>` → `IStyleBase.va` via `BaselineOffset.SUPERSCRIPT` / `SUBSCRIPT`), and E2 (`<a:blip r:link>` → http(s) URL passed through to `imageProperties.contentUrl` directly).
 
 Wave 7e (preceding): A4 — picture backgrounds. `extractSlideBackgroundImage` synthesises a backdrop IMAGE element at z-index 0 covering the whole slide (Univer's `ISlidePage.pageBackgroundFill` is an `IColorStyle` and can't carry an image). Stretch / tile / `<a:srcRect>` on bgPr deferred.
 
@@ -29,7 +31,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | A3 | Background — gradient (`<a:gradFill>`) | ⚠️ | High | Med | Wave 7 — degraded to first colour stop via `readGradFirstStop`. True multi-stop rendering would need to widen `IColorStyle` (fork patch). |
 | A4 | Background — picture (`<a:blipFill>`) | ✅ | High | Med | Wave 7e — `extractSlideBackgroundImage` synthesises an `IPageElement` of type IMAGE at z-index 0 covering the page size. `<a:stretch>` / `<a:tile>` / `<a:srcRect>` on bgPr deferred; first-pass renders edge-to-edge stretch. |
 | A5 | Background — theme reference (`<p:bgRef idx>`) | ⚠️ | High | Med | `<p:bgPr><a:solidFill><a:schemeClr>` resolves (wave 5); the indexed `<p:bgRef idx>` form (refers into theme.bgFillStyleLst) still TODO. |
-| A6 | Slide hidden flag (`<p:sld show="0">`) | ❌ | Low | Low | Rare. |
+| A6 | Slide hidden flag (`<p:sld show="0">`) | ✅ | Low | Low | Wave 7g — `extractSlideHidden` reads `<p:sld @show>`; when `"0"` / `"false"` the page emits `slideProperties: { isSkipped: true, … }`. Visible slides skip the `slideProperties` block entirely to keep the page model lean. `layoutObjectId` / `masterObjectId` set empty until I3 surfaces the resolved IDs. |
 | A7 | Slide transitions (`<p:transition>`) | ❌ | Low | Med | Skip for v0; deferred behind playback. |
 | A8 | Slide animations (`<p:timing>`) | ❌ | Med | High | Defer. |
 | A9 | Speaker notes (`<p:notesSlide>`) | ⚠️ | Med | Med | Stored in `page.description` round-trip via resources passthrough — not an actual notesSlide. |
@@ -75,7 +77,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | C11 | Text frame vertical anchor (`<a:bodyPr anchor>`) | ✅ | Med | Low | Wave 7b — `anchor=t/ctr/b` → `documentStyle.renderConfig.verticalAlign` (TOP / MIDDLE / BOTTOM). |
 | C12 | Text frame rotation (`<a:bodyPr rot>`) | ❌ | Low | Low | — |
 | C13 | Text frame autofit (`<a:normAutofit>`) | ❌ | Med | Med | — |
-| C14 | Text wrap (`<a:bodyPr wrap>`) | ❌ | Low | Low | — |
+| C14 | Text wrap (`<a:bodyPr wrap>`) | ✅ | Low | Low | Wave 7g — `parseBodyPr` maps `<a:bodyPr wrap="square">` to `WrapStrategy.WRAP` and `wrap="none"` to `WrapStrategy.OVERFLOW`, landing on `documentStyle.renderConfig.wrapStrategy`. Absent attribute keeps the renderer default. |
 
 ## D. Shape geometry / appearance
 
