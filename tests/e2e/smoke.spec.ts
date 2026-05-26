@@ -3754,6 +3754,98 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(bgHex, 'bgRef idx=1002 resolved to bgFillStyleLst[1]').toBe('3366CC');
   });
 
+  test('pptx import wave 9c — gradient stops harvested (A3 + D9)', async ({ page }) => {
+    // Shape carries <a:gradFill> with 3 stops + a 45° linear angle.
+    // After import the shape's shapeProperties.shapeBackgroundFill
+    // keeps the first-stop hex (existing degradation) AND a new
+    // gradientFill payload carries kind + angle + stops.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="rect-grad"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="3657600" cy="2743200"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+        `<a:gradFill flip="none" rotWithShape="1">` +
+        `<a:gsLst>` +
+        `<a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs>` +
+        `<a:gs pos="50000"><a:srgbClr val="00FF00"/></a:gs>` +
+        `<a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs>` +
+        `</a:gsLst>` +
+        `<a:lin ang="2700000" scaled="1"/>` +
+        `</a:gradFill>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave9c-grad.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shape = Object.values(firstPage.pageElements ?? {}).find((e: any) => e.shape?.shapeType === 'rect') as any;
+    expect(shape, 'shape extracted').toBeTruthy();
+    // Degraded flat colour preserved (first stop = red).
+    const flat = (shape.shape?.shapeProperties?.shapeBackgroundFill?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(flat, 'first-stop fallback hex preserved').toBe('FF0000');
+    // Full gradient payload.
+    const grad = shape.shape?.shapeProperties?.gradientFill;
+    expect(grad, 'gradient payload emitted').toBeTruthy();
+    expect(grad.kind).toBe('linear');
+    // 2700000 / 60000 = 45°.
+    expect(grad.angle).toBeCloseTo(45, 0);
+    expect(grad.stops.length).toBe(3);
+    expect(grad.stops[0].pos).toBeCloseTo(0, 3);
+    expect((grad.stops[0].color ?? '').toUpperCase().replace('#', '')).toBe('FF0000');
+    expect(grad.stops[1].pos).toBeCloseTo(0.5, 3);
+    expect((grad.stops[1].color ?? '').toUpperCase().replace('#', '')).toBe('00FF00');
+    expect(grad.stops[2].pos).toBeCloseTo(1, 3);
+    expect((grad.stops[2].color ?? '').toUpperCase().replace('#', '')).toBe('0000FF');
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

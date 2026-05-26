@@ -410,6 +410,81 @@ function readGradFirstStop(parent: unknown, theme: ThemeMap | null): string | nu
   return null;
 }
 
+// A3 / D9 — harvest the full gradient stop list so the renderer can
+// actually paint the gradient (rather than rely on the first-stop
+// degradation). The model field is a structured payload that rides on
+// shapeProperties / pageBackgroundFill alongside the degraded hex.
+//
+// Stops are sorted by `@pos` (ascending) and each stop carries:
+//   • pos — normalised position (0..1)
+//   • color — resolved hex with applied lum/lumOff/tint/shade modifiers
+// The wrapper carries the gradient flavour:
+//   • kind — 'linear' | 'radial' | 'path'
+//   • angle — for linear, the OOXML `@ang` in degrees (60000ths → deg)
+//     after a 90° flip so it matches CSS conventions (0° = right).
+//
+// Returns null when no gradient is present or no stops resolve.
+export interface IGradientStop {
+  pos: number;
+  color: string;
+}
+export interface IGradientFill {
+  kind: 'linear' | 'radial' | 'path';
+  angle?: number;
+  stops: IGradientStop[];
+}
+function readGradientStops(parent: unknown, theme: ThemeMap | null): IGradientFill | null {
+  const grad = findChild(parent, 'a:gradFill');
+  if (!grad) return null;
+  const gsLst = findChild(grad, 'a:gsLst');
+  const rawStops = toArray(findChild(gsLst, 'a:gs'));
+  if (rawStops.length === 0) return null;
+  const sorted = rawStops.slice().sort((a, b) => {
+    const pa = parseInt(String((a as XmlNode)['@pos'] ?? '0'), 10);
+    const pb = parseInt(String((b as XmlNode)['@pos'] ?? '0'), 10);
+    return (Number.isFinite(pa) ? pa : 0) - (Number.isFinite(pb) ? pb : 0);
+  });
+  const stops: IGradientStop[] = [];
+  for (const stop of sorted) {
+    const posRaw = (stop as XmlNode)['@pos'];
+    const posVal = parseInt(String(posRaw ?? '0'), 10);
+    const pos = Number.isFinite(posVal) ? posVal / 100_000 : 0;
+    // Each `<a:gs>` has the colour directly as a child — reuse readColor
+    // to flow through srgb / scheme / prst / sys (without the gradient
+    // fallback path, which would recurse here).
+    let colour: string | null = null;
+    const srgb = findChild(stop, 'a:srgbClr') as XmlNode | undefined;
+    const srgbVal = srgb?.['@val'];
+    if (typeof srgbVal === 'string' && /^[0-9a-fA-F]{6}$/.test(srgbVal)) {
+      colour = applyColorModifiers(`#${srgbVal.toUpperCase()}`, srgb);
+    } else {
+      colour = resolveSchemeColor(stop, theme) ?? readPrstColor(stop) ?? readSysColor(stop);
+    }
+    if (colour) stops.push({ pos, color: colour });
+  }
+  if (stops.length === 0) return null;
+  // Discriminator — OOXML has <a:lin> (linear), <a:path> (radial / path).
+  let kind: IGradientFill['kind'] = 'linear';
+  let angle: number | undefined;
+  const lin = findChild(grad, 'a:lin') as XmlNode | undefined;
+  if (lin) {
+    kind = 'linear';
+    const angRaw = lin['@ang'];
+    if (angRaw !== undefined) {
+      const a = parseInt(String(angRaw), 10);
+      if (Number.isFinite(a)) angle = a / 60_000;
+    }
+  } else {
+    const path = findChild(grad, 'a:path') as XmlNode | undefined;
+    if (path) {
+      const pathKind = path['@path'];
+      // OOXML <a:path path="circle"> → radial; "rect" or "shape" → "path"
+      kind = pathKind === 'circle' ? 'radial' : 'path';
+    }
+  }
+  return { kind, ...(angle !== undefined ? { angle } : {}), stops };
+}
+
 // B12 — `<a:prstClr val="red"/>` uses the OOXML named-colour table. Only
 // the common ones make it into real-world decks; map them to hex and
 // skip the long tail. `<a:sysClr lastClr="HEX"/>` carries the value
@@ -1307,6 +1382,7 @@ function parseEffectList(spPr: unknown, theme: ThemeMap | null): IEffectListPayl
 function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   shapeType: string;
   fillRgb: string | null;
+  fillGradient: IGradientFill | null;
   outlineRgb: string | null;
   outlineWeightPx: number | null;
   outlineDash: BorderStyleTypes | null;
@@ -1328,6 +1404,10 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   const fillRgb = hasNoFill
     ? TRANSPARENT_FILL
     : readColor(spPr, theme) ?? parseSrgbColor(spPr);
+  // A3 / D9 — harvest the full gradient stops. Renderer-side work will
+  // pick this up; the flat fillRgb above stays as the first-stop
+  // degradation so older render paths keep their colour.
+  const fillGradient = hasNoFill ? null : readGradientStops(spPr, theme);
 
   let outlineRgb: string | null = null;
   let outlineWeightPx: number | null = null;
@@ -1366,7 +1446,7 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   // D18 + D19 — `<a:effectLst>` shadow / glow / reflection / blur.
   const effectLst = parseEffectList(spPr, theme);
 
-  return { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst };
+  return { shapeType, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst };
 }
 
 // Placeholder geometry inherited from the slide layout / master (I3).
@@ -2003,11 +2083,14 @@ async function processSpTree(
     }
 
     if (spPr) {
-      const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
+      const { shapeType, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
       const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shapeProperties: any = {};
       if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
+      // D9 — full gradient stops alongside the flat fillRgb (which keeps
+      // the first-stop degradation). Renderer agent picks this up.
+      if (fillGradient) shapeProperties.gradientFill = fillGradient;
       if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null || headEnd !== null || tailEnd !== null) {
         shapeProperties.outline = {
           outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
@@ -2060,11 +2143,12 @@ async function processSpTree(
 
     const zIndex = z.next;
     z.next += 1;
-    const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
+    const { shapeType, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
     const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shapeProperties: any = {};
     if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
+    if (fillGradient) shapeProperties.gradientFill = fillGradient;
     if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null || headEnd !== null || tailEnd !== null) {
       shapeProperties.outline = {
         outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
@@ -2566,6 +2650,76 @@ function extractBgFromXml(xml: string, theme: ThemeMap | null): string | null {
   return null;
 }
 
+// A3 — slide-background gradient harvest. Walks the same slide → layout
+// → master chain as resolveSlideBackground but returns the full
+// gradient stops when the bg uses `<a:gradFill>`. Renderer-side picks
+// this up; the existing hex-only resolveSlideBackground still answers
+// the IColorStyle slot with the degraded first-stop colour.
+function extractBgGradientFromXml(xml: string, theme: ThemeMap | null): IGradientFill | null {
+  const parsed = parser.parse(xml) as XmlNode;
+  const root =
+    (findChild(parsed, 'p:sld') as XmlNode | undefined) ??
+    (findChild(parsed, 'p:sldLayout') as XmlNode | undefined) ??
+    (findChild(parsed, 'p:sldMaster') as XmlNode | undefined);
+  if (!root) return null;
+  const cSld = findChild(root, 'p:cSld');
+  const bg = findChild(cSld, 'p:bg');
+  if (!bg) return null;
+  const bgPr = findChild(bg, 'p:bgPr');
+  if (bgPr) {
+    const grad = readGradientStops(bgPr, theme);
+    if (grad) return grad;
+  }
+  // bgRef → bgFillStyleLst entry can itself be a gradient.
+  const bgRef = findChild(bg, 'p:bgRef') as XmlNode | undefined;
+  if (bgRef && theme) {
+    const cache = themeFmtSchemeCache.get(theme);
+    if (cache) {
+      const idxRaw = bgRef['@idx'];
+      const idx = idxRaw !== undefined ? parseInt(String(idxRaw), 10) : NaN;
+      let entry: XmlNode | undefined;
+      if (Number.isFinite(idx)) {
+        if (idx >= 1001) entry = cache.bgFillStyleLst[idx - 1001];
+        else if (idx >= 1) entry = cache.fillStyleLst[idx - 1];
+      }
+      if (entry) {
+        const grad = readGradientStops(entry, theme);
+        if (grad) return grad;
+      }
+    }
+  }
+  return null;
+}
+
+async function resolveSlideBackgroundGradient(
+  slideXml: string,
+  slideRelsXml: string | null,
+  zip: JSZip,
+  theme: ThemeMap | null,
+): Promise<IGradientFill | null> {
+  const own = extractBgGradientFromXml(slideXml, theme);
+  if (own) return own;
+  if (!slideRelsXml) return null;
+  const layoutTarget = findRelTargetByType(slideRelsXml, '/slideLayout');
+  if (!layoutTarget) return null;
+  const layoutPath = resolveRelTarget(layoutTarget, 'ppt/slides/');
+  const layoutXml = await zip.file(layoutPath)?.async('string');
+  if (layoutXml) {
+    const lay = extractBgGradientFromXml(layoutXml, theme);
+    if (lay) return lay;
+  }
+  const layoutDir = layoutPath.slice(0, layoutPath.lastIndexOf('/') + 1);
+  const layoutName = layoutPath.split('/').pop() ?? '';
+  const layoutRelsXml = await zip.file(`${layoutDir}_rels/${layoutName}.rels`)?.async('string');
+  if (!layoutRelsXml) return null;
+  const masterTarget = findRelTargetByType(layoutRelsXml, '/slideMaster');
+  if (!masterTarget) return null;
+  const masterPath = resolveRelTarget(masterTarget, layoutDir);
+  const masterXml = await zip.file(masterPath)?.async('string');
+  if (!masterXml) return null;
+  return extractBgGradientFromXml(masterXml, theme);
+}
+
 // I6 — slide background inheritance. PowerPoint themes routinely put
 // `<p:bg>` on the slideMaster or slideLayout, not the slide. Without
 // inheritance, every themed deck imports as a stack of white slides.
@@ -2888,6 +3042,11 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     // as a stack of white slides. resolveSlideBackground tries slide →
     // layout → master and returns the first non-null fill.
     const slideBg = await resolveSlideBackground(slideXml, slideRelsXml, zip, theme);
+    // A3 — full gradient stops for `<a:gradFill>` backgrounds. The
+    // existing `slideBg` carries the degraded first-stop colour for the
+    // IColorStyle slot; the gradient payload rides on a separate field
+    // so the renderer can paint the real gradient when ready.
+    const slideBgGradient = await resolveSlideBackgroundGradient(slideXml, slideRelsXml, zip, theme);
 
     // A6 — only emit slideProperties when the slide is actually hidden,
     // so visible slides keep their lean page model. layoutObjectId /
@@ -2902,7 +3061,11 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
       zIndex: pageOrdinal,
       title: `Slide ${pageOrdinal}`,
       description: '',
-      pageBackgroundFill: { rgb: slideBg ?? 'rgb(255, 255, 255)' },
+      pageBackgroundFill: {
+        rgb: slideBg ?? 'rgb(255, 255, 255)',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...(slideBgGradient ? ({ gradientFill: slideBgGradient } as any) : {}),
+      },
       pageElements: elementMap,
       ...(isHidden
         ? { slideProperties: { layoutObjectId: '', masterObjectId: '', isSkipped: true } }
