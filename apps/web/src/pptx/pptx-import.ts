@@ -356,6 +356,12 @@ function readSysColor(solid: unknown): string | null {
 // Combined "read any colour" — srgbClr first, schemeClr as fallback,
 // then a degraded gradient first-stop. Caller passes the parent node
 // that contains `<a:solidFill>` / `<a:gradFill>` / equivalent.
+//
+// Some OOXML carriers (e.g. `<a:highlight>`, `<a:gs>` gradient stops)
+// embed an `EG_ColorChoice` directly — no `<a:solidFill>` wrapper. After
+// the wrapped attempts fail we re-run the same colour-choice probes on
+// the parent itself so B13 (and any future direct-child caller) reuses
+// this helper without re-deriving the colour-choice cascade.
 function readColor(parent: unknown, theme: ThemeMap | null): string | null {
   const solid = findChild(parent, 'a:solidFill');
   if (solid) {
@@ -374,6 +380,19 @@ function readColor(parent: unknown, theme: ThemeMap | null): string | null {
     const sys = readSysColor(solid);
     if (sys) return sys;
   }
+  // Direct EG_ColorChoice on the parent itself (no solidFill wrapper).
+  // Used by `<a:highlight>` (B13) and structurally identical carriers.
+  const directSrgb = findChild(parent, 'a:srgbClr') as XmlNode | undefined;
+  const directSrgbVal = directSrgb?.['@val'];
+  if (typeof directSrgbVal === 'string' && /^[0-9a-fA-F]{6}$/.test(directSrgbVal)) {
+    return applyColorModifiers(`#${directSrgbVal.toUpperCase()}`, directSrgb);
+  }
+  const directSchemed = resolveSchemeColor(parent, theme);
+  if (directSchemed) return directSchemed;
+  const directPrst = readPrstColor(parent);
+  if (directPrst) return directPrst;
+  const directSys = readSysColor(parent);
+  if (directSys) return directSys;
   // Degraded gradient → first-stop solid. Better than dropping the fill.
   return readGradFirstStop(parent, theme);
 }
@@ -450,6 +469,15 @@ function parseRunProps(rPr: unknown, theme: ThemeMap | null = null): Partial<ISl
   // via the theme color scheme (J2).
   const colour = readColor(node, theme);
   if (colour) out.cl = { rgb: colour };
+
+  // B13 — `<a:rPr><a:highlight><a:srgbClr|a:schemeClr|a:prstClr/></a:highlight>`.
+  // Univer's IStyleBase has `bg` for background colour; highlight maps
+  // naturally onto it without needing a new field.
+  const highlight = findChild(node, 'a:highlight');
+  if (highlight) {
+    const hlColour = readColor(highlight, theme);
+    if (hlColour) (out as Partial<ISlideRichTextProps> & { bg?: { rgb: string } }).bg = { rgb: hlColour };
+  }
 
   // B14 — `<a:rPr spc="N">` is letter spacing in hundredths of a point.
   // Univer's `IStyleBase.spc` (added via fork patch) is plain pt. We pass

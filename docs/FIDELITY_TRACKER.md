@@ -10,9 +10,11 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7k)
+## Snapshot — 2026-05-26 (post wave 7l)
 
-**54 / 87 items at ✅, 5 at ⚠️.** Wave 7k unlocks five items via three fork patches landed in this same wave: B14 (`<a:rPr spc>` → `IStyleBase.spc` — added to core), D16 (`<a:ln cap>` → `IOutline.cap` — added to core), and I1 + I2 + J1 (raw layout/master/theme XML stashed under `ISlideData.resources[CASUAL_SLIDES_PPTX_RAW]` — `resources` slot added to slides). The three fork edits are byte-identical between the fork branch `slide/element-mutations` and the `pnpm patch` artifacts in `patches/@univerjs__core@0.24.0.patch` (new) and `patches/@univerjs__slides@0.24.0.patch` (extended on top of the rev-tracking patch).
+**55 / 87 items at ✅, 5 at ⚠️.** Wave 7l lands B13 — `<a:rPr><a:highlight>` (any colour-choice child resolves via `readColor`) → `IStyleBase.bg`. Reuses the existing background-colour slot — no fork patch needed.
+
+Wave 7k (preceding): B14 (`<a:rPr spc>` → `IStyleBase.spc` — added to core), D16 (`<a:ln cap>` → `IOutline.cap` — added to core), and I1 + I2 + J1 (raw layout/master/theme XML stashed under `ISlideData.resources[CASUAL_SLIDES_PPTX_RAW]` — `resources` slot added to slides). The three fork edits are byte-identical between the fork branch `slide/element-mutations` and the `pnpm patch` artifacts in `patches/@univerjs__core@0.24.0.patch` (new) and `patches/@univerjs__slides@0.24.0.patch` (extended on top of the rev-tracking patch).
 
 Wave 7j (preceding): C12 (`<a:bodyPr rot>` → `renderConfig.centerAngle`) and C13 (`<a:normAutofit fontScale>` → multiplies `fs` at import; lossy on round-trip).
 
@@ -62,7 +64,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | B10 | Font color — srgbClr | ✅ | High | — | First run only. |
 | B11 | Font color — schemeClr (theme) | ✅ | High | Med | Wave 5 — `readColor` resolves `<a:solidFill><a:schemeClr val=…>` against the parsed `<a:clrScheme>`. lumMod / lumOff / tint / shade modifiers still drop. |
 | B12 | Font color — prstClr / sysClr | ✅ | Low | Low | Wave 7h — `readColor` adds a `PRST_COLOR_MAP` lookup (30 common OOXML named colours: `red`, `black`, `dkBlue` …) and reads `<a:sysClr @lastClr>` as the resolved hex passthrough. Colour modifiers (lumMod / lumOff / tint / shade) flow through the same `applyColorModifiers` path as srgb/scheme. |
-| B13 | Highlight color (`<a:rPr highlight>`) | ❌ | Low | Low | — |
+| B13 | Highlight color (`<a:rPr highlight>`) | ✅ | Low | Low | Wave 7l — `<a:rPr><a:highlight>` (any colour-choice child resolves via `readColor`) → `IStyleBase.bg`. Reuses the existing background-colour slot — no fork patch needed. |
 | B14 | Letter spacing (`<a:rPr spc>`) | ✅ | Low | Low | Wave 7k — `<a:rPr @spc>` (hundredths of a point) → `IStyleBase.spc` in pt. `IStyleBase.spc` added by `patches/@univerjs__core@0.24.0.patch` (mirrored from `univer-revamp` on `slide/element-mutations`). Negative values widen-tighten symmetrically. |
 | B15 | Text outline (`<a:rPr><a:ln>`) | ❌ | Low | Med | — |
 | B16 | **Multi-run paragraphs** (mixed bold / color / size mid-line) | ✅ | High | Med | Wave 6 — `extractRichDoc` emits one `ITextRun` per `<a:r>` with its own style; placed into `richText.rich` as a full `IDocumentData`. Flat `richText.text` / `fs` / `bl` etc. are still populated for export and renderer-fallback paths. |
