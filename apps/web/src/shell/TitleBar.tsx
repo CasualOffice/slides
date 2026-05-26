@@ -22,6 +22,7 @@ export interface TitleBarProps {
   onSave: () => void;
   onOpenProperties: () => void;
   onOpenRecent: () => void;
+  onOpenAbout: () => void;
   saving?: boolean;
   opening?: boolean;
   status?: string | null;
@@ -91,6 +92,7 @@ export function TitleBar({
   onSave,
   onOpenProperties,
   onOpenRecent,
+  onOpenAbout,
   saving,
   opening,
   status,
@@ -129,8 +131,12 @@ export function TitleBar({
       if (menuId === 'file' && itemId === 'save') onSave();
       if (menuId === 'file' && itemId === 'properties') onOpenProperties();
       if (menuId === 'file' && itemId === 'recent') onOpenRecent();
+      if (menuId === 'help' && itemId === 'about') onOpenAbout();
+      if (menuId === 'help' && itemId === 'repo') {
+        window.open('https://github.com/schnsrw/slides', '_blank', 'noopener,noreferrer');
+      }
     },
-    [onOpen, onSave, onOpenProperties, onOpenRecent],
+    [onOpen, onSave, onOpenProperties, onOpenRecent, onOpenAbout],
   );
 
   return (

@@ -14,6 +14,7 @@ import { NotesPanel } from './shell/NotesPanel';
 import { ThemePicker } from './shell/ThemePicker';
 import { PropertiesDialog } from './shell/PropertiesDialog';
 import { RecentFilesDialog } from './shell/RecentFilesDialog';
+import { AboutDialog } from './shell/AboutDialog';
 import { SlideContextMenu } from './shell/SlideContextMenu';
 import { dispatchSlideCommand } from './univer/commands';
 import { useCollabBridge } from './collab/CollabProvider';
@@ -79,6 +80,7 @@ export function App() {
   const [themesOpen, setThemesOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Expose to the Toolbar (which lives outside App's prop tree).
@@ -260,6 +262,7 @@ export function App() {
         onSave={handleSavePptx}
         onOpenProperties={() => setPropertiesOpen(true)}
         onOpenRecent={() => setRecentOpen(true)}
+        onOpenAbout={() => setAboutOpen(true)}
         saving={saving}
         opening={opening}
         status={status}
@@ -301,6 +304,7 @@ export function App() {
           void handleOpenRecent(bytes, name);
         }}
       />
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <SlideContextMenu />
     </>
   );

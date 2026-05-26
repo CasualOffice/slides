@@ -2958,6 +2958,36 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(outlineHex, 'outline srgbClr round-trips').toBe('0044CC');
   });
 
+  test('Help → About shows version + license + dependencies', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(
+      () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(300);
+
+    // Open Help menu → About via the data-menu-item hook so we don't
+    // accidentally match the dialog's own button labels.
+    await page.getByRole('button', { name: 'Help' }).click();
+    await page.locator('button[data-menu="help"][data-menu-item="about"]').click();
+
+    const dialog = page.locator('[data-testid="about-dialog"]');
+    await expect(dialog).toBeVisible();
+
+    // Spot-check content: product name, license, repo URL, at least
+    // one dependency attribution.
+    await expect(dialog).toContainText('Casual Slides');
+    await expect(dialog).toContainText('Apache-2.0');
+    await expect(dialog).toContainText('github.com/schnsrw/slides');
+    await expect(dialog).toContainText('Univer OSS');
+    await expect(dialog).toContainText('PptxGenJS');
+
+    // Esc closes.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+  });
+
   test('File → Properties shows deck metadata', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(

@@ -31,17 +31,17 @@ Each sprint balances feature + fidelity work — we are an editor as well as a p
 | 5 | Selection-aware text formatting  | -     | planned  | Feature. Bold/Italic/Underline buttons active when a text frame is selected. Needs UX design (floating context bar vs sticky toolbar). |
 | 6 | Pptx import fidelity — wave 1    | main  | ✅ landed | Fidelity. Re-imported decks were "text only, no properties, images vanished". Wave 1 lands (a) first-run text props (size / bold / italic / underline / color from `<a:rPr>` + `<a:solidFill><a:srgbClr>`), (b) image extraction — `<p:pic><a:blip r:embed>` resolves via per-slide rels file to `ppt/media/*` bytes, returned as `data:image/<ext>;base64,…`, and (c) shape geometry — non-text `<p:sp>` parses `<a:prstGeom prst>` for shape type, `<a:solidFill><a:srgbClr>` for fill, and `<a:ln>` for outline (previously every non-text shape became a white rect). Element IDs now per-page-unique (`s${n}-el-${z}`). |
 | 7 | Recent files (IndexedDB)         | main  | ✅ landed | Feature. File → "Recent files" modal lists up to 10 recently-opened decks (sorted newest-first) and re-opens via the same import path. Bytes stored in IDB so the round-trip survives a page reload; de-dup by name+size refreshes openedAt instead of stacking duplicates. Caveat surfaced during build: JSZip transfers the input ArrayBuffer to a worker, detaching it — we snapshot a copy before handing off to the importer so the IDB persist gets durable bytes. |
-| 8 | About dialog                     | -     | planned  | Feature. Help → About — version, repo, license. |
+| 8 | About dialog                     | main  | ✅ landed | Feature. Help → About → modal with product blurb, license (Apache-2.0), repo + live URLs, plus an attribution list for every OSS dependency we ship (Univer, PptxGenJS, JSZip, fast-xml-parser, React, Material Symbols). Esc + click-outside close. |
 | 9 | Slide layouts                    | -     | planned  | Feature. "New Slide" dropdown with 6 layout templates. |
 
 ## Sprint 3 — fidelity + depth
 
 | # | Feature                          | Owner | Status   | Notes |
 |---|----------------------------------|-------|----------|-------|
-| 10 | Master / layout passthrough     | -     | planned  | Fidelity. Round-trip via `resources["CASUAL_SLIDES_PPTX_RAW"]`. |
-| 11 | Theme colors / fonts round-trip | -     | planned  | Fidelity. Map `<a:clrScheme>` and `<a:fontScheme>` from `ppt/theme/theme1.xml`. |
+| 10 | Master / layout passthrough     | main  | ✅ landed | Fidelity. Delivered as part of wave 7k — `ppt/slideLayouts/*.xml` + `ppt/slideMasters/*.xml` (+ rels) captured into `ISlideData.resources["CASUAL_SLIDES_PPTX_RAW"]` and re-injected on export. Tracked in `FIDELITY_TRACKER.md` (I1 + I2). |
+| 11 | Theme colors / fonts round-trip | main  | ✅ landed | Fidelity. Delivered across waves 5 (J2 schemeClr resolution) + 7k (J1 theme XML passthrough). `<a:clrScheme>` parsed into a colour map and applied throughout; full `<a:theme>` XML preserved verbatim for export. `<a:fontScheme>` reads pending (J3 — defer until a deck surfaces it). |
 | 12 | Find and replace                | -     | planned  | Feature. Modal + iterate all text elements. |
-| 13 | Comments                        | -     | planned  | Feature. Anchor comments to slides via `resources` slot. |
+| 13 | Comments                        | -     | planned  | Feature. Anchor comments to slides via `resources` slot. K5 passthrough already lands the bytes (wave 7n); needs UI surface. |
 
 ## Sprint 4 — co-editing (after single-user parity)
 
