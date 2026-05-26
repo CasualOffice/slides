@@ -12,7 +12,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 
 ## Snapshot — 2026-05-27 (post wave 8b-8f + renderer pipeline)
 
-**73 / 87 items at ✅, 6 at ⚠️.** Wave 8b-8f tackles the long tail of parser items: J3 (theme font scheme fallback), K1 (deck title from docProps/core.xml), K2 (custom props passthrough), K3 (`<p:defaultTextStyle>` deck-level defaults), and I5 (footer / date / sldNum service placeholders synthesised from master/layout when the slide doesn't declare them). The combined effect: imported decks now carry author-authored titles, deck-wide typography defaults, and footer / page-number elements that previously dropped silently.
+**74 / 87 items at ✅, 6 at ⚠️, 7 at ❌.** Wave 8b-8f tackles the long tail of parser items: J3 (theme font scheme fallback), K1 (deck title from docProps/core.xml), K2 (custom props passthrough), K3 (`<p:defaultTextStyle>` deck-level defaults), and I5 (footer / date / sldNum service placeholders synthesised from master/layout when the slide doesn't declare them). The combined effect: imported decks now carry author-authored titles, deck-wide typography defaults, and footer / page-number elements that previously dropped silently.
 
 **Renderer pipeline (parallel session, same date)** — pnpm patches to `@univerjs/slides@0.24.0` `lib/{es,cjs}/index.js` so the canvas actually honours fields the parser was already emitting. Until these landed, many ✅ items in the tracker rendered as if they were ❌:
 
@@ -58,7 +58,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | A2 | Background — solid fill (`<p:bg><p:bgPr><a:solidFill><a:srgbClr\|a:schemeClr>`) | ✅ | High | Low | Wave 2 reads `<a:srgbClr>`; wave 5 added `<a:schemeClr>` via the theme map. Gradient / picture / `<p:bgRef>` index still TODO (A3 / A4 / A5-idx). |
 | A3 | Background — gradient (`<a:gradFill>`) | ⚠️ | High | Med | Wave 7 — degraded to first colour stop via `readGradFirstStop`. True multi-stop rendering would need to widen `IColorStyle` (fork patch). |
 | A4 | Background — picture (`<a:blipFill>`) | ✅ | High | Med | Wave 7e — `extractSlideBackgroundImage` synthesises an `IPageElement` of type IMAGE at z-index 0 covering the page size. `<a:stretch>` / `<a:tile>` / `<a:srcRect>` on bgPr deferred; first-pass renders edge-to-edge stretch. |
-| A5 | Background — theme reference (`<p:bgRef idx>`) | ⚠️ | High | Med | `<p:bgPr><a:solidFill><a:schemeClr>` resolves (wave 5); the indexed `<p:bgRef idx>` form (refers into theme.bgFillStyleLst) still TODO. |
+| A5 | Background — theme reference (`<p:bgRef idx>`) | ⚠️ | High | Med | Wave 5 resolved `<p:bgPr><a:solidFill><a:schemeClr>`. Commit `86f6b98` added inline-colour resolution for `<p:bgRef>` carrying a direct `<a:schemeClr>` / `<a:srgbClr>` child. The remaining gap is the full `<a:bgFillStyleLst>` index lookup (idx 1001+ refers to the Nth entry of the theme's `<a:fmtScheme><a:bgFillStyleLst>` array). |
 | A6 | Slide hidden flag (`<p:sld show="0">`) | ✅ | Low | Low | Wave 7g — `extractSlideHidden` reads `<p:sld @show>`; when `"0"` / `"false"` the page emits `slideProperties: { isSkipped: true, … }`. Visible slides skip the `slideProperties` block entirely to keep the page model lean. `layoutObjectId` / `masterObjectId` set empty until I3 surfaces the resolved IDs. |
 | A7 | Slide transitions (`<p:transition>`) | ❌ | Low | Med | Skip for v0; deferred behind playback. |
 | A8 | Slide animations (`<p:timing>`) | ❌ | Med | High | Defer. |
@@ -180,7 +180,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | I3 | **Placeholder geometry inheritance** (xfrm from layout / master) | ✅ | **Critical** | Med | Wave 4 — `buildPlaceholderMap` walks slide → layout → master and assembles a `(type\|idx)` → xfrm map. Layout overrides master; matches OOXML's inheritance order. |
 | I4 | Placeholder default text style inheritance | ✅ | High | Med | Wave 4b — `<a:lstStyle><a:lvl1pPr><a:defRPr>` parsed from layout / master and applied when the slide's run lacks `<a:rPr>`. Level-2+ paragraphs still inherit `lvl1pPr`; multi-level bullets land with wave 6. |
 | I5 | Date / page-number / footer placeholders | ✅ | Med | Med | Wave 8f — `extractServicePlaceholders` walks the layout/master `<p:spTree>` for `<p:ph type="ftr\|dt\|sldNum">` with non-empty text and harvests geometry + run-style + text body. After processSpTree, the import loop synthesises a TEXT element for every service placeholder type the slide doesn't already declare. Slide number `<a:fld type="slidenum">` text passes through verbatim — live substitution per slide is renderer work (P4). `<p:hf>` per-slide toggles not yet honoured. |
-| I6 | Layout background fill (when slide inherits) | ❌ | High | Med | — |
+| I6 | Layout background fill (when slide inherits) | ✅ | High | Med | Commit `86f6b98` — `resolveSlideBackground` walks slide → layout → master and returns the first non-null `<p:bg>`. Same chain covers I6 (layout bg) and the master-level fallback. Direct `<p:bgPr>` solidFill / schemeClr / gradient + `<p:bgRef>` inline-colour all resolved; full bgFillStyleLst index lookup deferred to A5-idx wave. |
 
 ## J. Theme
 
