@@ -10,9 +10,11 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7d)
+## Snapshot — 2026-05-26 (post wave 7e)
 
-**37 / 87 items at ✅, 5 at ⚠️.** Wave 7d closes three loose ends without any fork patch: D12 (`<a:noFill/>` distinguished from absent fill via a transparent sentinel — round-trips because the export side skips PptxGenJS's `fill` opt when it sees the sentinel), F4 (line-like prsts inflate their zero-dimension bbox to the stroke width so horizontal/vertical lines actually render), and B4 (font-family fallback chain `<a:latin>` → `<a:ea>` → `<a:cs>` for CJK / complex-script decks). With this, the only bounded items left are fork-patch territory (true gradients, shape shadow/glow effects, tables, charts) or vanishingly rare in business decks (custGeom, ink, SmartArt). The fidelity climb on import is effectively done for non-Univer-blocked content.
+**38 / 87 items at ✅, 5 at ⚠️.** Wave 7e lands A4 — picture backgrounds. Univer's `ISlidePage.pageBackgroundFill` is an `IColorStyle` and can't carry an image, so `extractSlideBackgroundImage` synthesises a backdrop IMAGE element at z-index 0 covering the whole slide (the regular element extractor starts at z=1, so the bg always sits beneath authored content). Stretch / tile / `<a:srcRect>` on bgPr deferred — first pass renders edge-to-edge stretch.
+
+Wave 7d (preceding): D12 (`<a:noFill/>` distinguished from absent fill via a transparent sentinel — round-trips because the export side skips PptxGenJS's `fill` opt when it sees the sentinel), F4 (line-like prsts inflate their zero-dimension bbox to the stroke width so horizontal/vertical lines actually render), and B4 (font-family fallback chain `<a:latin>` → `<a:ea>` → `<a:cs>` for CJK / complex-script decks).
 
 Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and E3 (`<a:srcRect l/t/r/b>` → `image.cropProperties`).
 
@@ -23,7 +25,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | A1 | Slide dimensions (`<p:sldSz>`) | ✅ | High | Low | Round-trips via `pageSize`. |
 | A2 | Background — solid fill (`<p:bg><p:bgPr><a:solidFill><a:srgbClr\|a:schemeClr>`) | ✅ | High | Low | Wave 2 reads `<a:srgbClr>`; wave 5 added `<a:schemeClr>` via the theme map. Gradient / picture / `<p:bgRef>` index still TODO (A3 / A4 / A5-idx). |
 | A3 | Background — gradient (`<a:gradFill>`) | ⚠️ | High | Med | Wave 7 — degraded to first colour stop via `readGradFirstStop`. True multi-stop rendering would need to widen `IColorStyle` (fork patch). |
-| A4 | Background — picture (`<a:blipFill>`) | ❌ | High | Med | Photo backgrounds. |
+| A4 | Background — picture (`<a:blipFill>`) | ✅ | High | Med | Wave 7e — `extractSlideBackgroundImage` synthesises an `IPageElement` of type IMAGE at z-index 0 covering the page size. `<a:stretch>` / `<a:tile>` / `<a:srcRect>` on bgPr deferred; first-pass renders edge-to-edge stretch. |
 | A5 | Background — theme reference (`<p:bgRef idx>`) | ⚠️ | High | Med | `<p:bgPr><a:solidFill><a:schemeClr>` resolves (wave 5); the indexed `<p:bgRef idx>` form (refers into theme.bgFillStyleLst) still TODO. |
 | A6 | Slide hidden flag (`<p:sld show="0">`) | ❌ | Low | Low | Rare. |
 | A7 | Slide transitions (`<p:transition>`) | ❌ | Low | Med | Skip for v0; deferred behind playback. |

@@ -1494,6 +1494,68 @@ function extractSlideBackground(slideXml: string, theme: ThemeMap | null): strin
   return readColor(bgPr, theme) ?? parseSrgbColor(bgPr);
 }
 
+// A4 — picture background. Univer's `ISlidePage.pageBackgroundFill` is
+// an `IColorStyle` and can't carry an image, so we synthesise a backdrop
+// IMAGE element at z-index 0 covering the whole slide. The other element
+// extractors start their ZCounter at 1, so a z=0 IMAGE always sits below
+// the authored content. Stretch / tile / `<a:srcRect>` on bgPr deferred;
+// first pass renders edge-to-edge stretch which matches the most common
+// authoring intent.
+async function extractSlideBackgroundImage(
+  slideXml: string,
+  reg: ImageRegistry,
+  pageOrdinal: number,
+  pageSize: { width: number; height: number },
+): Promise<IPageElement | null> {
+  const parsed = parser.parse(slideXml) as XmlNode;
+  const cSld = findChild(findChild(parsed, 'p:sld'), 'p:cSld');
+  const bg = findChild(cSld, 'p:bg');
+  if (!bg) return null;
+  const bgPr = findChild(bg, 'p:bgPr');
+  if (!bgPr) return null;
+  const blipFill = findChild(bgPr, 'a:blipFill');
+  if (!blipFill) return null;
+  const blip = findChild(blipFill, 'a:blip') as XmlNode | undefined;
+  const rEmbed = blip?.['@r:embed'] as string | undefined;
+  if (!rEmbed) return null;
+  const relTarget = reg.imageRelMap.get(rEmbed);
+  if (!relTarget) return null;
+  const slidesRoot = 'ppt/slides/';
+  const zipPath = relTarget.startsWith('/')
+    ? relTarget.slice(1)
+    : (relTarget.startsWith('..')
+      ? `ppt/${relTarget.replace(/^\.\.\//, '')}`
+      : `${slidesRoot}${relTarget}`);
+
+  let dataUri = reg.cache.get(zipPath) ?? null;
+  if (!dataUri) {
+    dataUri = await readImageAsDataUri(reg.zip, zipPath);
+    if (!dataUri) return null;
+    reg.cache.set(zipPath, dataUri);
+  }
+
+  return {
+    id: `s${pageOrdinal}-bg`,
+    zIndex: 0,
+    left: 0,
+    top: 0,
+    width: pageSize.width,
+    height: pageSize.height,
+    angle: 0,
+    flipX: false,
+    flipY: false,
+    title: '',
+    description: '',
+    type: PageElementType.IMAGE,
+    image: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      imageProperties: {
+        contentUrl: dataUri,
+      } as any,
+    },
+  };
+}
+
 export async function importPptxToSlides(file: ArrayBuffer, fileName: string): Promise<ISlideData> {
   const zip = await JSZip.loadAsync(file);
 
@@ -1557,6 +1619,13 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     const elements = await extractElementsFromSlideXml(slideXml, reg, pageOrdinal);
     const elementMap: Record<string, IPageElement> = {};
     for (const el of elements) elementMap[el.id] = el;
+
+    // A4 — picture background. Synthesised as an IMAGE element at
+    // z-index 0 so it sits beneath the authored content (extractor
+    // starts at z=1). Only fires when `<p:bgPr><a:blipFill>` is
+    // present; solid-fill backgrounds keep going through A2 below.
+    const bgImage = await extractSlideBackgroundImage(slideXml, reg, pageOrdinal, pageSize);
+    if (bgImage) elementMap[bgImage.id] = bgImage;
 
     // A2 — slide background. Theme- and layout-inherited backgrounds
     // are still TODO (A5 / I6); when this slide has no `<p:bg>` we
