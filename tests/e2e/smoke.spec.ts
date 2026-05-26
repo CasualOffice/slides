@@ -3286,6 +3286,94 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(result.exportedCustom, 'value survives').toContain('Alex Reviewer');
   });
 
+  test('pptx import wave 8e — deck-level default text style (K3)', async ({ page }) => {
+    // Hand-roll a deck where the only text frame is a non-placeholder
+    // shape with a bare `<a:r>` (no rPr, no layout / master inheritance).
+    // Before K3, runs landed without any style. With K3, the deck-level
+    // `<p:defaultTextStyle><p:lvl1pPr><a:defRPr sz="2200" b="1">...`
+    // supplies the lowest-priority defaults.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        // K3 — deck-level default text style: 22 pt bold, Verdana, red.
+        `<p:defaultTextStyle>` +
+        `<a:lvl1pPr>` +
+        `<a:defRPr sz="2200" b="1">` +
+        `<a:solidFill><a:srgbClr val="CC0033"/></a:solidFill>` +
+        `<a:latin typeface="Verdana"/>` +
+        `</a:defRPr>` +
+        `</a:lvl1pPr>` +
+        `</p:defaultTextStyle>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      // Slide: one shape with a text frame, run has NO rPr — so the only
+      // chance for style is the deck-default.
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="text"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="914400" y="914400"/><a:ext cx="3000000" cy="800000"/></a:xfrm><a:prstGeom prst="rect"/></p:spPr>` +
+        `<p:txBody><a:bodyPr/><a:lstStyle/>` +
+        // Bare run — no rPr at all. Only the deck-default can supply style.
+        `<a:p><a:r><a:t>deck default</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const emptyRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', emptyRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave8e.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    expect(firstPage, 'first page extracted').toBeTruthy();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const textEl = Object.values(firstPage.pageElements ?? {}).find((e: any) => e.richText?.text === 'deck default') as any;
+    expect(textEl, 'text element extracted').toBeTruthy();
+    // K3 — fs/bl/ff/cl all come from the deck-level defRPr.
+    expect(textEl.richText?.fs, 'deck default fs').toBe(22);
+    expect(textEl.richText?.bl, 'deck default bold').toBe(1);
+    expect(textEl.richText?.ff, 'deck default ff').toBe('Verdana');
+    const colorHex = (textEl.richText?.cl?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(colorHex, 'deck default color').toBe('CC0033');
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

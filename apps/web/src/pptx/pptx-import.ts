@@ -1531,6 +1531,8 @@ interface ImageRegistry {
   placeholderRects: Map<string, PlaceholderRect>;
   /** Theme color scheme from `ppt/theme/themeN.xml` (J2) */
   theme: ThemeMap | null;
+  /** Deck-level `<p:defaultTextStyle>` lvl1pPr/defRPr — lowest-priority text defaults (K3) */
+  deckDefaultRunProps?: Partial<ISlideRichTextProps>;
 }
 
 const MIME_FROM_EXT: Record<string, string> = {
@@ -1714,10 +1716,16 @@ async function processSpTree(
       const ph = findChild(nvPr, 'p:ph') as XmlNode | undefined;
       const phType = ph?.['@type'];
       const isTitle = phType === 'title' || phType === 'ctrTitle';
+      // K3 — fallback priority: deck-default < master/layout placeholder default.
+      // The placeholder default (already merged across layout > master in
+      // buildPlaceholderMap) wins field-by-field on top of the deck default.
+      const fallback = reg.deckDefaultRunProps || phInherited?.defaultRunProps
+        ? { ...(reg.deckDefaultRunProps ?? {}), ...(phInherited?.defaultRunProps ?? {}) }
+        : undefined;
       const { text, props, rich } = extractRichDoc(
         txBody,
         elId,
-        phInherited?.defaultRunProps,
+        fallback,
         reg.theme,
         reg.imageRelMap,
         fontScale,
@@ -2355,6 +2363,31 @@ async function extractSlideBackgroundImage(
   };
 }
 
+// K3 — `<p:presentation><p:defaultTextStyle>` carries per-level
+// (`<p:lvl1pPr>`, `<p:lvl2pPr>`, …) `<a:defRPr>` defaults that apply
+// when nothing else up the chain (run → paragraph → placeholder layout
+// → placeholder master) supplies an override. PowerPoint uses this for
+// "all-text on this deck defaults to Calibri 18 pt" style settings.
+//
+// We parse the `<p:lvl1pPr><a:defRPr>` only — matching the existing I4
+// behaviour where lvl1 is treated as the canonical placeholder default.
+// Deeper levels (lvl2pPr etc.) would matter when we surface a richer
+// per-level cascade; that's deferred.
+//
+// Returned as `Partial<ISlideRichTextProps>` so it slots in alongside
+// `phInherited?.defaultRunProps`. Layout/master placeholder defaults
+// still win on top (per OOXML order: deck-level < master < layout <
+// slide / run).
+function extractDeckDefaultRunProps(presentation: XmlNode | undefined, theme: ThemeMap | null): Partial<ISlideRichTextProps> | undefined {
+  const dts = findChild(presentation, 'p:defaultTextStyle') as XmlNode | undefined;
+  if (!dts) return undefined;
+  const lvl1pPr = findChild(dts, 'a:lvl1pPr') as XmlNode | undefined;
+  const defRPr = findChild(lvl1pPr, 'a:defRPr');
+  if (!defRPr) return undefined;
+  const parsed = parseRunProps(defRPr, theme);
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
 // K1 — read `docProps/core.xml` for `<dc:title>`. When present (and
 // non-empty), this becomes the deck's display title instead of the
 // filename. Other metadata (creator / description / subject) is
@@ -2413,6 +2446,16 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
   // We don't parse it — just capture the XML bytes for the passthrough
   // round-trip so author-defined fields survive an open/save cycle.
   const customPropsXml = await zip.file('docProps/custom.xml')?.async('string');
+
+  // K3 — `<p:presentation><p:defaultTextStyle>` lvl1pPr/defRPr → the
+  // lowest-priority text defaults. Layout/master placeholder defaults
+  // still win on top; this only kicks in when nothing else in the
+  // placeholder / run chain supplies an override (e.g. a free-floating
+  // text frame with a bare `<a:r>`). We pass `null` for theme here so
+  // any schemeClr references inside the defRPr fall through; this is
+  // rare in practice and matches the "no theme on docProps" defaults
+  // most decks emit.
+  const deckDefaultRunProps = extractDeckDefaultRunProps(presentation, null);
 
   const sldIdLst = findChild(presentation, 'p:sldIdLst');
   const sldIds = toArray(findChild(sldIdLst, 'p:sldId'));
@@ -2478,7 +2521,7 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     const theme = await resolveThemeForSlide(slideRelsXml, zip, themeCache);
     const placeholderRects = await buildPlaceholderMap(slideRelsXml, zip, theme);
 
-    const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip, placeholderRects, theme };
+    const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip, placeholderRects, theme, deckDefaultRunProps };
     const pageOrdinal = i + 1;
     const pageId = `page-${pageOrdinal}`;
     const elements = await extractElementsFromSlideXml(slideXml, reg, pageOrdinal);
