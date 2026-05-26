@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..03db3f256bb044ee82c78c11b418cb9af35a40e7 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..dcb07e982f7ee74cc3d562bdec2e65904534354a 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -31,7 +31,66 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..03db3f256bb044ee82c78c11b418cb9a
  	getSnapshot() {
  		return this._snapshot;
  	}
-@@ -667,6 +675,79 @@ var ImageAdaptorFactory = class {
+@@ -639,7 +647,46 @@ var ImageAdaptor = class extends ObjectAdaptor {
+ 	convert(pageElement) {
+ 		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY, title, description, image = {} } = pageElement;
+ 		const { imageProperties, placeholder, link } = image;
+-		return new _univerjs_engine_render.Image(id, {
++		// Casual Slides patch — honour cropProperties (parsed from
++		// `<a:srcRect>` in pptx-import E3). Univer stores crop as
++		// fractional offsets (0..1) of the *source* image: e.g.
++		// offsetLeft=0.25 means "the left 25 % of the source is
++		// cropped away; what's visible is the right 75 %". The
++		// element's width/height in `pageElement` is the *displayed*
++		// (post-crop) size, so the implied full source width is
++		// `width / (1 - offsetLeft - offsetRight)`.
++		//
++		// engine-render's `IImageProps.srcRect` (ISrcRect = { left,
++		// top, right, bottom }) takes *pixel* offsets that extend the
++		// source-image draw past the element's bounding box on each
++		// side, while the box itself clips — which effectively crops.
++		// So:
++		//   srcRect.left   = displayedW * offsetL / (1 - offsetL - offsetR)
++		//   srcRect.right  = displayedW * offsetR / (1 - offsetL - offsetR)
++		//   srcRect.top    = displayedH * offsetT / (1 - offsetT - offsetB)
++		//   srcRect.bottom = displayedH * offsetB / (1 - offsetT - offsetB)
++		// If L+R or T+B sum to >=1 we'd divide by zero / negative; in
++		// that case skip the crop so the image still renders (full
++		// frame) rather than disappearing.
++		const cropProps = imageProperties && imageProperties.cropProperties;
++		let srcRect;
++		if (cropProps) {
++			const ol = cropProps.offsetLeft || 0;
++			const or = cropProps.offsetRight || 0;
++			const ot = cropProps.offsetTop || 0;
++			const ob = cropProps.offsetBottom || 0;
++			const denomW = 1 - ol - or;
++			const denomH = 1 - ot - ob;
++			if (denomW > 0.001 && denomH > 0.001) {
++				srcRect = {
++					left: (width * ol) / denomW,
++					right: (width * or) / denomW,
++					top: (height * ot) / denomH,
++					bottom: (height * ob) / denomH
++				};
++			}
++		}
++		const imageConfig = {
+ 			url: (imageProperties === null || imageProperties === void 0 ? void 0 : imageProperties.contentUrl) || "",
+ 			top,
+ 			left,
+@@ -654,7 +701,9 @@ var ImageAdaptor = class extends ObjectAdaptor {
+ 			flipX,
+ 			flipY,
+ 			forceRender: true
+-		});
++		};
++		if (srcRect) imageConfig.srcRect = srcRect;
++		return new _univerjs_engine_render.Image(id, imageConfig);
+ 	}
+ };
+ var ImageAdaptorFactory = class {
+@@ -667,6 +716,79 @@ var ImageAdaptorFactory = class {
  };
  CanvasObjectProviderRegistry.add(new ImageAdaptorFactory());
  
@@ -111,7 +170,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..03db3f256bb044ee82c78c11b418cb9a
  //#endregion
  //#region src/views/render/adaptors/rich-text-adaptor.ts
  let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
-@@ -699,7 +780,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -699,7 +821,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  			forceRender: true
  		};
  		let isNotNull = false;
@@ -126,7 +185,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..03db3f256bb044ee82c78c11b418cb9a
  			config = {
  				...config,
  				text,
-@@ -715,12 +802,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -715,12 +843,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  				cl
  			};
  			isNotNull = true;
@@ -139,7 +198,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..03db3f256bb044ee82c78c11b418cb9a
  		}
  		if (isNotNull === false) return;
  		return new _univerjs_engine_render.RichText(this._localeService, id, config);
-@@ -756,9 +837,46 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -756,9 +878,46 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -187,7 +246,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..03db3f256bb044ee82c78c11b418cb9a
  		}
  		if (shapeType === "rect") return new _univerjs_engine_render.Rect(id, {
  			fill,
-@@ -796,7 +914,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -796,7 +955,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			...strokeStyle
  		});
  		if (shapeType === "ellipse") {
@@ -195,7 +254,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..03db3f256bb044ee82c78c11b418cb9a
  			return new _univerjs_engine_render.Circle(id, {
  				fill,
  				top,
-@@ -816,6 +933,126 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -816,6 +974,126 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				...strokeStyle
  			});
  		}
@@ -323,7 +382,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..03db3f256bb044ee82c78c11b418cb9a
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..ec58f62e7de7e3e9ca065cc35fb506a7374faf8d 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..8ef975d8349ccb45e9717f1e15173f6d546df47a 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
@@ -363,7 +422,66 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..ec58f62e7de7e3e9ca065cc35fb506a7
  	getSnapshot() {
  		return this._snapshot;
  	}
-@@ -666,6 +674,79 @@ var ImageAdaptorFactory = class {
+@@ -638,7 +646,46 @@ var ImageAdaptor = class extends ObjectAdaptor {
+ 	convert(pageElement) {
+ 		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY, title, description, image = {} } = pageElement;
+ 		const { imageProperties, placeholder, link } = image;
+-		return new Image(id, {
++		// Casual Slides patch — honour cropProperties (parsed from
++		// `<a:srcRect>` in pptx-import E3). Univer stores crop as
++		// fractional offsets (0..1) of the *source* image: e.g.
++		// offsetLeft=0.25 means "the left 25 % of the source is
++		// cropped away; what's visible is the right 75 %". The
++		// element's width/height in `pageElement` is the *displayed*
++		// (post-crop) size, so the implied full source width is
++		// `width / (1 - offsetLeft - offsetRight)`.
++		//
++		// engine-render's `IImageProps.srcRect` (ISrcRect = { left,
++		// top, right, bottom }) takes *pixel* offsets that extend the
++		// source-image draw past the element's bounding box on each
++		// side, while the box itself clips — which effectively crops.
++		// So:
++		//   srcRect.left   = displayedW * offsetL / (1 - offsetL - offsetR)
++		//   srcRect.right  = displayedW * offsetR / (1 - offsetL - offsetR)
++		//   srcRect.top    = displayedH * offsetT / (1 - offsetT - offsetB)
++		//   srcRect.bottom = displayedH * offsetB / (1 - offsetT - offsetB)
++		// If L+R or T+B sum to >=1 we'd divide by zero / negative; in
++		// that case skip the crop so the image still renders (full
++		// frame) rather than disappearing.
++		const cropProps = imageProperties && imageProperties.cropProperties;
++		let srcRect;
++		if (cropProps) {
++			const ol = cropProps.offsetLeft || 0;
++			const or = cropProps.offsetRight || 0;
++			const ot = cropProps.offsetTop || 0;
++			const ob = cropProps.offsetBottom || 0;
++			const denomW = 1 - ol - or;
++			const denomH = 1 - ot - ob;
++			if (denomW > 0.001 && denomH > 0.001) {
++				srcRect = {
++					left: (width * ol) / denomW,
++					right: (width * or) / denomW,
++					top: (height * ot) / denomH,
++					bottom: (height * ob) / denomH
++				};
++			}
++		}
++		const imageConfig = {
+ 			url: (imageProperties === null || imageProperties === void 0 ? void 0 : imageProperties.contentUrl) || "",
+ 			top,
+ 			left,
+@@ -653,7 +700,9 @@ var ImageAdaptor = class extends ObjectAdaptor {
+ 			flipX,
+ 			flipY,
+ 			forceRender: true
+-		});
++		};
++		if (srcRect) imageConfig.srcRect = srcRect;
++		return new Image(id, imageConfig);
+ 	}
+ };
+ var ImageAdaptorFactory = class {
+@@ -666,6 +715,79 @@ var ImageAdaptorFactory = class {
  };
  CanvasObjectProviderRegistry.add(new ImageAdaptorFactory());
  
@@ -443,7 +561,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..ec58f62e7de7e3e9ca065cc35fb506a7
  //#endregion
  //#region src/views/render/adaptors/rich-text-adaptor.ts
  let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
-@@ -698,7 +779,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -698,7 +820,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  			forceRender: true
  		};
  		let isNotNull = false;
@@ -458,7 +576,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..ec58f62e7de7e3e9ca065cc35fb506a7
  			config = {
  				...config,
  				text,
-@@ -714,12 +801,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -714,12 +842,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  				cl
  			};
  			isNotNull = true;
@@ -471,7 +589,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..ec58f62e7de7e3e9ca065cc35fb506a7
  		}
  		if (isNotNull === false) return;
  		return new RichText(this._localeService, id, config);
-@@ -755,9 +836,46 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -755,9 +877,46 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -519,7 +637,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..ec58f62e7de7e3e9ca065cc35fb506a7
  		}
  		if (shapeType === "rect") return new Rect(id, {
  			fill,
-@@ -795,7 +913,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -795,7 +954,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			...strokeStyle
  		});
  		if (shapeType === "ellipse") {
@@ -527,7 +645,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..ec58f62e7de7e3e9ca065cc35fb506a7
  			return new Circle(id, {
  				fill,
  				top,
-@@ -815,6 +932,130 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -815,6 +973,130 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				...strokeStyle
  			});
  		}
