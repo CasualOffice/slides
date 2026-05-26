@@ -1268,6 +1268,32 @@ function getPlaceholderKey(sp: unknown): string | null {
   return placeholderKey(ph);
 }
 
+// Layout/master placeholder lookup is tolerant to (type, idx) shape
+// mismatches between the slide and its layout. OOXML lets either side
+// drop @idx (titles typically) or @type (numbered body slots) and
+// still expects them to match. We index every layout/master placeholder
+// under up to three keys so any slide-side variant lands the same rect:
+//   `${type}|${idx}` — exact
+//   `${type}|`      — type-only (matches slide `<p:ph type=…>` with no idx)
+//   `|${idx}`       — idx-only (matches slide `<p:ph idx=…>` with no type)
+// Slide lookup keeps the simple `${type}|${idx}` shape; one of the
+// three layout-side indexes is the match.
+function indexUnderAllKeys(map: Map<string, PlaceholderRect>, ph: XmlNode | undefined, rect: PlaceholderRect): void {
+  if (!ph) return;
+  const type = ph['@type'];
+  const idx = ph['@idx'];
+  const t = type === undefined ? '' : String(type);
+  const i = idx === undefined ? '' : String(idx);
+  // Exact key
+  map.set(`${t}|${i}`, rect);
+  // Type-only key (matches slide `<p:ph type=…>` w/ no idx)
+  if (t) map.set(`${t}|`, rect);
+  // Idx-only key (matches slide `<p:ph idx=…>` w/ no type)
+  if (i) map.set(`|${i}`, rect);
+  // Bare placeholder default
+  if (!t && !i) map.set('|0', rect);
+}
+
 // Walk a <p:sldLayout> or <p:sldMaster> XML and collect every
 // placeholder's xfrm into a key → rect map. Used as the inheritance
 // source for slides that leave xfrm off their placeholders.
@@ -1281,8 +1307,10 @@ function extractPlaceholderRects(layoutOrMasterXml: string, theme: ThemeMap | nu
   const spTree = findChild(findChild(root, 'p:cSld'), 'p:spTree');
   for (const sp of toArray(findChild(spTree, 'p:sp'))) {
     if (!sp || typeof sp !== 'object') continue;
-    const key = getPlaceholderKey(sp);
-    if (!key) continue;
+    const nvSpPr = findChild(sp, 'p:nvSpPr');
+    const nvPr = findChild(nvSpPr, 'p:nvPr');
+    const ph = findChild(nvPr, 'p:ph') as XmlNode | undefined;
+    if (!ph) continue;
     const spPr = findChild(sp, 'p:spPr');
     const xfrm = findChild(spPr, 'a:xfrm');
     const off = xfrm ? (findChild(xfrm, 'a:off') as XmlNode | undefined) : undefined;
@@ -1306,7 +1334,7 @@ function extractPlaceholderRects(layoutOrMasterXml: string, theme: ThemeMap | nu
     // recording — a placeholder with neither carries no inheritance.
     if (!off || !ext) {
       if (defaultRunProps) {
-        map.set(key, {
+        indexUnderAllKeys(map, ph, {
           left: 0, top: 0, width: 0, height: 0,
           defaultRunProps,
         });
@@ -1314,7 +1342,7 @@ function extractPlaceholderRects(layoutOrMasterXml: string, theme: ThemeMap | nu
       continue;
     }
 
-    map.set(key, {
+    indexUnderAllKeys(map, ph, {
       left: emu2px(off['@x'] as string | undefined),
       top: emu2px(off['@y'] as string | undefined),
       width: emu2px(ext['@cx'] as string | undefined),
