@@ -4057,6 +4057,98 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(ip.effectLst.outerShdw.dist).toBe(38100);
   });
 
+  test('pptx import wave 9f — custGeom path → SVG pathData (D6)', async ({ page }) => {
+    // Slide carries a freeform <a:custGeom> path (triangle, normalised
+    // to fractional coords). After import the shape's
+    // shapeProperties.pathData should hold the SVG-equivalent string.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      // Coord space w=10000 h=10000. Triangle at (0,10000) → (5000,0) → (10000,10000), closed.
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="freeform"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="3657600" cy="2743200"/></a:xfrm>` +
+        `<a:custGeom>` +
+        `<a:avLst/>` +
+        `<a:gdLst/>` +
+        `<a:ahLst/>` +
+        `<a:cxnLst/>` +
+        `<a:rect l="0" t="0" r="10000" b="10000"/>` +
+        `<a:pathLst>` +
+        `<a:path w="10000" h="10000">` +
+        `<a:moveTo><a:pt x="0" y="10000"/></a:moveTo>` +
+        `<a:lnTo><a:pt x="5000" y="0"/></a:lnTo>` +
+        `<a:lnTo><a:pt x="10000" y="10000"/></a:lnTo>` +
+        `<a:close/>` +
+        `</a:path>` +
+        `</a:pathLst>` +
+        `</a:custGeom>` +
+        `<a:solidFill><a:srgbClr val="33AA66"/></a:solidFill>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave9f-custgeom.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shape = Object.values(firstPage.pageElements ?? {}).find((e: any) => e.type === 0) as any;
+    expect(shape, 'shape extracted').toBeTruthy();
+    expect(shape.shape?.shapeType, 'shapeType set to custGeom (no prstGeom)').toBe('custGeom');
+    const pd = shape.shape?.shapeProperties?.pathData;
+    expect(pd, 'pathData emitted').toBeTruthy();
+    expect(typeof pd).toBe('string');
+    // Expect normalised fractional coords (rounded to 4dp).
+    expect(pd).toContain('M0.0000,1.0000');
+    expect(pd).toContain('L0.5000,0.0000');
+    expect(pd).toContain('L1.0000,1.0000');
+    expect(pd.endsWith('Z')).toBe(true);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

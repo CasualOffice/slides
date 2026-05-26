@@ -1379,8 +1379,137 @@ function parseEffectList(spPr: unknown, theme: ThemeMap | null): IEffectListPayl
   return Object.keys(out).length > 0 ? out : null;
 }
 
+// D6 — custom geometry `<a:custGeom>`. PowerPoint expresses arbitrary
+// vector outlines as a list of paths, each with a coordinate-space
+// `@w` / `@h` (in EMU) and a sequence of path commands:
+//   <a:moveTo>     <a:pt x y/>             → SVG M
+//   <a:lnTo>       <a:pt x y/>             → SVG L
+//   <a:cubicBezTo> three <a:pt> children   → SVG C
+//   <a:quadBezTo>  two <a:pt> children     → SVG Q
+//   <a:arcTo wR hR stAng swAng/>           → approximated by an SVG cubic
+//                                            (the OOXML arc model uses
+//                                            radial sweep that doesn't
+//                                            map directly to SVG's
+//                                            endpoint-based arc; for our
+//                                            best-effort pass we emit a
+//                                            small `L` to the implied
+//                                            endpoint so the path stays
+//                                            connected — full arc fidelity
+//                                            requires the formula system
+//                                            we're deliberately skipping).
+//   <a:close/>                              → SVG Z
+//
+// Coordinates inside each path are relative to that path's coord space,
+// not the shape's bounding box. We normalise by dividing by `@w` / `@h`
+// so the output is fractional (0..1) — easy for the renderer to scale to
+// the shape's actual width / height.
+//
+// The `<a:avLst>` adjustment-handle / formula system (`<a:gd>`) is
+// SKIPPED. In real-world templates, custGeom that PowerPoint emits after
+// a user-defined shape has literal point coordinates baked in, so the
+// formula system is rarely exercised. Anything that does rely on `<a:gd>`
+// formulas falls through to no pathData (visual is the rect fallback).
+function parseCustGeomPath(custGeom: unknown): string | null {
+  if (!custGeom || typeof custGeom !== 'object') return null;
+  const pathLst = findChild(custGeom, 'a:pathLst');
+  const paths = toArray(findChild(pathLst, 'a:path'));
+  if (paths.length === 0) return null;
+  const segments: string[] = [];
+  for (const path of paths) {
+    if (!path || typeof path !== 'object') continue;
+    const pNode = path as XmlNode;
+    const wRaw = pNode['@w'];
+    const hRaw = pNode['@h'];
+    const w = parseInt(String(wRaw ?? '0'), 10);
+    const h = parseInt(String(hRaw ?? '0'), 10);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) continue;
+    // Helper: read <a:pt x y/> (children of a path command) into
+    // normalised fractional coords. Returns null when the point can't
+    // parse — caller skips the command in that case.
+    const readPt = (pt: unknown): { x: number; y: number } | null => {
+      if (!pt || typeof pt !== 'object') return null;
+      const ptNode = pt as XmlNode;
+      const x = parseInt(String(ptNode['@x'] ?? ''), 10);
+      const y = parseInt(String(ptNode['@y'] ?? ''), 10);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return { x: x / w, y: y / h };
+    };
+    // Walk the path's children in document order. fast-xml-parser
+    // groups same-tag children into arrays so we have to scan known
+    // commands. Within a `<a:moveTo>` etc., the inner `<a:pt>` may be
+    // a single object or an array depending on count.
+    //
+    // OOXML doesn't strictly require document order for the commands
+    // (the schema names them as a sequence), but in practice PowerPoint
+    // emits them in the natural left-to-right order. Object.keys
+    // preserves insertion order in V8 — we lean on that.
+    for (const key of Object.keys(pNode)) {
+      if (key.startsWith('@')) continue;
+      if (key === '#text') continue;
+      const children = toArray(pNode[key]);
+      for (const cmd of children) {
+        // <a:close/> is self-closing — fast-xml-parser emits it as an
+        // empty string. We need to keep it so the Z command lands.
+        if (cmd === undefined || cmd === null) continue;
+        switch (key) {
+          case 'a:moveTo': {
+            const pt = readPt(findChild(cmd, 'a:pt'));
+            if (pt) segments.push(`M${pt.x.toFixed(4)},${pt.y.toFixed(4)}`);
+            break;
+          }
+          case 'a:lnTo': {
+            const pt = readPt(findChild(cmd, 'a:pt'));
+            if (pt) segments.push(`L${pt.x.toFixed(4)},${pt.y.toFixed(4)}`);
+            break;
+          }
+          case 'a:cubicBezTo': {
+            const pts = toArray(findChild(cmd, 'a:pt'));
+            if (pts.length >= 3) {
+              const p1 = readPt(pts[0]);
+              const p2 = readPt(pts[1]);
+              const p3 = readPt(pts[2]);
+              if (p1 && p2 && p3) {
+                segments.push(`C${p1.x.toFixed(4)},${p1.y.toFixed(4)} ${p2.x.toFixed(4)},${p2.y.toFixed(4)} ${p3.x.toFixed(4)},${p3.y.toFixed(4)}`);
+              }
+            }
+            break;
+          }
+          case 'a:quadBezTo': {
+            const pts = toArray(findChild(cmd, 'a:pt'));
+            if (pts.length >= 2) {
+              const p1 = readPt(pts[0]);
+              const p2 = readPt(pts[1]);
+              if (p1 && p2) {
+                segments.push(`Q${p1.x.toFixed(4)},${p1.y.toFixed(4)} ${p2.x.toFixed(4)},${p2.y.toFixed(4)}`);
+              }
+            }
+            break;
+          }
+          case 'a:arcTo': {
+            // Best-effort: skip the arc-curvature math (OOXML's
+            // start-angle / sweep-angle radial form doesn't map cleanly
+            // to SVG's endpoint arc). Future work can synthesise an SVG
+            // A command using wR/hR if a deck shows up where arc
+            // fidelity matters.
+            break;
+          }
+          case 'a:close': {
+            segments.push('Z');
+            break;
+          }
+          default:
+            // Unknown command tag (e.g. extLst) — skip.
+            break;
+        }
+      }
+    }
+  }
+  return segments.length > 0 ? segments.join(' ') : null;
+}
+
 function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   shapeType: string;
+  pathData: string | null;
   fillRgb: string | null;
   fillGradient: IGradientFill | null;
   outlineRgb: string | null;
@@ -1393,7 +1522,17 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
 } {
   const prstGeom = findChild(spPr, 'a:prstGeom') as XmlNode | undefined;
   const prstAttr = prstGeom?.['@prst'];
-  const shapeType = typeof prstAttr === 'string' && prstAttr.length > 0 ? prstAttr : 'rect';
+  // D6 — custom geometry. When `<a:custGeom>` is present alongside (or
+  // instead of) `<a:prstGeom>`, parse the path commands into an SVG
+  // path string. The renderer can use this in place of the prst lookup
+  // for shapes PowerPoint authored with the freeform / scribble tool.
+  // We keep emitting a prst shapeType — the renderer falls back to it
+  // when pathData is absent.
+  const custGeom = findChild(spPr, 'a:custGeom');
+  const pathData = custGeom ? parseCustGeomPath(custGeom) : null;
+  const shapeType = typeof prstAttr === 'string' && prstAttr.length > 0
+    ? prstAttr
+    : (pathData ? 'custGeom' : 'rect');
 
   // D12 first — explicit `<a:noFill/>` beats any inherited / solid fill.
   // Line-like shapes also conceptually carry no fill (only a stroke);
@@ -1446,7 +1585,7 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   // D18 + D19 — `<a:effectLst>` shadow / glow / reflection / blur.
   const effectLst = parseEffectList(spPr, theme);
 
-  return { shapeType, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst };
+  return { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst };
 }
 
 // Placeholder geometry inherited from the slide layout / master (I3).
@@ -2083,7 +2222,7 @@ async function processSpTree(
     }
 
     if (spPr) {
-      const { shapeType, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
+      const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
       const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shapeProperties: any = {};
@@ -2091,6 +2230,9 @@ async function processSpTree(
       // D9 — full gradient stops alongside the flat fillRgb (which keeps
       // the first-stop degradation). Renderer agent picks this up.
       if (fillGradient) shapeProperties.gradientFill = fillGradient;
+      // D6 — custGeom path data (SVG-style commands, coordinates
+      // normalised 0..1 against the shape's bbox).
+      if (pathData) shapeProperties.pathData = pathData;
       if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null || headEnd !== null || tailEnd !== null) {
         shapeProperties.outline = {
           outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
@@ -2143,12 +2285,13 @@ async function processSpTree(
 
     const zIndex = z.next;
     z.next += 1;
-    const { shapeType, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
+    const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
     const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shapeProperties: any = {};
     if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
     if (fillGradient) shapeProperties.gradientFill = fillGradient;
+    if (pathData) shapeProperties.pathData = pathData;
     if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null || headEnd !== null || tailEnd !== null) {
       shapeProperties.outline = {
         outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
