@@ -1,8 +1,33 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index fafb8476bdd10d7a5224234dc0d7494756933de3..9e368dbdde29a5a2fed2840e5838d8f565bf4bc6 100644
+index fafb8476bdd10d7a5224234dc0d7494756933de3..9e4ffbaa6aec7ede64df04941b07e6607c4d1149 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
-@@ -24644,7 +24644,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
+@@ -19655,6 +19655,24 @@ var Image$1 = class extends Shape {
+ 		const centerY = realTop + realHeight / 2;
+ 		mainCtx.transform(m[0], m[1], m[2], m[3], centerX, centerY);
+ 		if (this.opacity !== 1) mainCtx.globalAlpha = this.opacity;
++		// Casual Slides patch — apply shadow / glow + CSS filter (blur,
++		// brightness, contrast) on the Image draw call. Image.render()
++		// upstream ignores the shadow* props inherited from Shape (the
++		// shape's _renderFill / _renderStroke path is where shadow gets
++		// committed to ctx, and Image overrides _draw instead). Same goes
++		// for `filter` — there's no upstream code path that pushes it
++		// through. We honour both here so the slides ImageAdaptor can
++		// pass them down without an out-of-band rendering pass. mainCtx
++		// is already inside save()/restore(), so we don't have to undo.
++		if (this.shadowEnabled) {
++			if (this.shadowColor) mainCtx.shadowColor = this.shadowColor;
++			if (typeof this.shadowBlur === "number") mainCtx.shadowBlur = this.shadowBlur;
++			if (typeof this.shadowOffsetX === "number") mainCtx.shadowOffsetX = this.shadowOffsetX;
++			if (typeof this.shadowOffsetY === "number") mainCtx.shadowOffsetY = this.shadowOffsetY;
++		}
++		if (this._props && this._props.filter) {
++			mainCtx.filter = this._props.filter;
++		}
+ 		this._draw(mainCtx, void 0, realWidth, realHeight);
+ 		mainCtx.restore();
+ 		this.makeDirty(false);
+@@ -24644,7 +24662,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
@@ -13,10 +38,35 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..9e368dbdde29a5a2fed2840e5838d8f5
  	}
  	_onKeyDown(evt) {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..74aaeb85903aebf53a922a2455d94c0c8740c7b9 100644
+index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..c24c074a3dd206d909f1010351aeb4a621f76661 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
-@@ -24615,7 +24615,8 @@ var InputManager = class InputManager extends Disposable {
+@@ -19626,6 +19626,24 @@ var Image$1 = class extends Shape {
+ 		const centerY = realTop + realHeight / 2;
+ 		mainCtx.transform(m[0], m[1], m[2], m[3], centerX, centerY);
+ 		if (this.opacity !== 1) mainCtx.globalAlpha = this.opacity;
++		// Casual Slides patch — apply shadow / glow + CSS filter (blur,
++		// brightness, contrast) on the Image draw call. Image.render()
++		// upstream ignores the shadow* props inherited from Shape (the
++		// shape's _renderFill / _renderStroke path is where shadow gets
++		// committed to ctx, and Image overrides _draw instead). Same goes
++		// for `filter` — there's no upstream code path that pushes it
++		// through. We honour both here so the slides ImageAdaptor can
++		// pass them down without an out-of-band rendering pass. mainCtx
++		// is already inside save()/restore(), so we don't have to undo.
++		if (this.shadowEnabled) {
++			if (this.shadowColor) mainCtx.shadowColor = this.shadowColor;
++			if (typeof this.shadowBlur === "number") mainCtx.shadowBlur = this.shadowBlur;
++			if (typeof this.shadowOffsetX === "number") mainCtx.shadowOffsetX = this.shadowOffsetX;
++			if (typeof this.shadowOffsetY === "number") mainCtx.shadowOffsetY = this.shadowOffsetY;
++		}
++		if (this._props && this._props.filter) {
++			mainCtx.filter = this._props.filter;
++		}
+ 		this._draw(mainCtx, void 0, realWidth, realHeight);
+ 		mainCtx.restore();
+ 		this.makeDirty(false);
+@@ -24615,7 +24633,8 @@ var InputManager = class InputManager extends Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
