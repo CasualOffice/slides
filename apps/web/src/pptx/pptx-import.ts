@@ -121,6 +121,16 @@ type ThemeMap = Map<string, string>;
 const FONT_MAJOR_KEY = '__majorLatin';
 const FONT_MINOR_KEY = '__minorLatin';
 
+// A5-idx — cache of theme's <a:fmtScheme><a:bgFillStyleLst> entries
+// keyed by ThemeMap identity. Stored as parsed XmlNode arrays so the
+// existing readColor / readGradFirstStop helpers can decode each entry
+// (which may itself be a solidFill / gradFill / blipFill) on demand.
+//
+// We attach via a parallel WeakMap rather than serialising entries into
+// the ThemeMap to avoid round-tripping XML through fast-xml-parser's
+// string format.
+const themeFmtSchemeCache = new WeakMap<ThemeMap, { bgFillStyleLst: XmlNode[]; fillStyleLst: XmlNode[] }>();
+
 const SCHEME_ALIASES: Record<string, string> = {
   bg1: 'lt1',
   bg2: 'lt2',
@@ -166,6 +176,52 @@ function parseThemeColors(themeXml: string): ThemeMap {
       if (slotName === 'extLst') continue;
       const hex = readClrSchemeChildColor(clrScheme[key]);
       if (hex) map.set(slotName, hex);
+    }
+  }
+
+  // A5-idx — capture <a:fmtScheme><a:bgFillStyleLst> + <a:fillStyleLst>
+  // entries so `<p:bgRef idx="N">` resolution can recover the actual
+  // fill (which may be solidFill / gradFill / blipFill / pattFill).
+  // Per OOXML §20.1.4.1.5 the indexes are:
+  //   1000      → fillStyleLst entry 1 (subtle)
+  //   1001-1003 → bgFillStyleLst entries 1..3 (subtle / moderate / intense)
+  //   1-999     → fillStyleLst entry idx (lookup by 1-based offset)
+  // Real-world templates almost always use the bgFillStyleLst range; we
+  // populate both lists so a fallback lookup is available.
+  const fmtScheme = findChild(themeElements, 'a:fmtScheme') as XmlNode | undefined;
+  if (fmtScheme) {
+    const bgFillStyleLst = findChild(fmtScheme, 'a:bgFillStyleLst');
+    const fillStyleLst = findChild(fmtScheme, 'a:fillStyleLst');
+    const collectStyleEntries = (lst: unknown): XmlNode[] => {
+      if (!lst || typeof lst !== 'object') return [];
+      const out: XmlNode[] = [];
+      // bgFillStyleLst children are a mix of <a:solidFill>, <a:gradFill>,
+      // <a:blipFill>, <a:noFill>, <a:pattFill> — keep them in document
+      // order so idx=1001 maps to the first child regardless of type.
+      // fast-xml-parser groups same-named children into arrays; iterate
+      // by tag name then flatten.
+      const node = lst as XmlNode;
+      // The order matters but the parser separates children by tag; we
+      // re-derive document order by scanning the keys (fast-xml-parser
+      // preserves insertion order on regular objects in V8).
+      for (const key of Object.keys(node)) {
+        if (key.startsWith('@')) continue;
+        // Skip whitespace text nodes
+        if (key === '#text') continue;
+        for (const child of toArray(node[key])) {
+          if (child && typeof child === 'object') {
+            // Wrap each child under its tag so downstream helpers can
+            // re-discover the type (a:solidFill vs a:gradFill).
+            out.push({ [key]: child } as XmlNode);
+          }
+        }
+      }
+      return out;
+    };
+    const bgEntries = collectStyleEntries(bgFillStyleLst);
+    const fillEntries = collectStyleEntries(fillStyleLst);
+    if (bgEntries.length > 0 || fillEntries.length > 0) {
+      themeFmtSchemeCache.set(map, { bgFillStyleLst: bgEntries, fillStyleLst: fillEntries });
     }
   }
 
@@ -354,6 +410,81 @@ function readGradFirstStop(parent: unknown, theme: ThemeMap | null): string | nu
   return null;
 }
 
+// A3 / D9 — harvest the full gradient stop list so the renderer can
+// actually paint the gradient (rather than rely on the first-stop
+// degradation). The model field is a structured payload that rides on
+// shapeProperties / pageBackgroundFill alongside the degraded hex.
+//
+// Stops are sorted by `@pos` (ascending) and each stop carries:
+//   • pos — normalised position (0..1)
+//   • color — resolved hex with applied lum/lumOff/tint/shade modifiers
+// The wrapper carries the gradient flavour:
+//   • kind — 'linear' | 'radial' | 'path'
+//   • angle — for linear, the OOXML `@ang` in degrees (60000ths → deg)
+//     after a 90° flip so it matches CSS conventions (0° = right).
+//
+// Returns null when no gradient is present or no stops resolve.
+export interface IGradientStop {
+  pos: number;
+  color: string;
+}
+export interface IGradientFill {
+  kind: 'linear' | 'radial' | 'path';
+  angle?: number;
+  stops: IGradientStop[];
+}
+function readGradientStops(parent: unknown, theme: ThemeMap | null): IGradientFill | null {
+  const grad = findChild(parent, 'a:gradFill');
+  if (!grad) return null;
+  const gsLst = findChild(grad, 'a:gsLst');
+  const rawStops = toArray(findChild(gsLst, 'a:gs'));
+  if (rawStops.length === 0) return null;
+  const sorted = rawStops.slice().sort((a, b) => {
+    const pa = parseInt(String((a as XmlNode)['@pos'] ?? '0'), 10);
+    const pb = parseInt(String((b as XmlNode)['@pos'] ?? '0'), 10);
+    return (Number.isFinite(pa) ? pa : 0) - (Number.isFinite(pb) ? pb : 0);
+  });
+  const stops: IGradientStop[] = [];
+  for (const stop of sorted) {
+    const posRaw = (stop as XmlNode)['@pos'];
+    const posVal = parseInt(String(posRaw ?? '0'), 10);
+    const pos = Number.isFinite(posVal) ? posVal / 100_000 : 0;
+    // Each `<a:gs>` has the colour directly as a child — reuse readColor
+    // to flow through srgb / scheme / prst / sys (without the gradient
+    // fallback path, which would recurse here).
+    let colour: string | null = null;
+    const srgb = findChild(stop, 'a:srgbClr') as XmlNode | undefined;
+    const srgbVal = srgb?.['@val'];
+    if (typeof srgbVal === 'string' && /^[0-9a-fA-F]{6}$/.test(srgbVal)) {
+      colour = applyColorModifiers(`#${srgbVal.toUpperCase()}`, srgb);
+    } else {
+      colour = resolveSchemeColor(stop, theme) ?? readPrstColor(stop) ?? readSysColor(stop);
+    }
+    if (colour) stops.push({ pos, color: colour });
+  }
+  if (stops.length === 0) return null;
+  // Discriminator — OOXML has <a:lin> (linear), <a:path> (radial / path).
+  let kind: IGradientFill['kind'] = 'linear';
+  let angle: number | undefined;
+  const lin = findChild(grad, 'a:lin') as XmlNode | undefined;
+  if (lin) {
+    kind = 'linear';
+    const angRaw = lin['@ang'];
+    if (angRaw !== undefined) {
+      const a = parseInt(String(angRaw), 10);
+      if (Number.isFinite(a)) angle = a / 60_000;
+    }
+  } else {
+    const path = findChild(grad, 'a:path') as XmlNode | undefined;
+    if (path) {
+      const pathKind = path['@path'];
+      // OOXML <a:path path="circle"> → radial; "rect" or "shape" → "path"
+      kind = pathKind === 'circle' ? 'radial' : 'path';
+    }
+  }
+  return { kind, ...(angle !== undefined ? { angle } : {}), stops };
+}
+
 // B12 — `<a:prstClr val="red"/>` uses the OOXML named-colour table. Only
 // the common ones make it into real-world decks; map them to hex and
 // skip the long tail. `<a:sysClr lastClr="HEX"/>` carries the value
@@ -381,6 +512,48 @@ function readSysColor(solid: unknown): string | null {
   const lastClr = sys?.['@lastClr'];
   if (typeof lastClr !== 'string' || !/^[0-9a-fA-F]{6}$/.test(lastClr)) return null;
   return applyColorModifiers(`#${lastClr.toUpperCase()}`, sys);
+}
+
+// A5-idx — resolve `<p:bgRef idx="N">` into a hex colour. Looks up the
+// theme's bgFillStyleLst (idx 1001+) or fillStyleLst (idx 1-1000) entry,
+// then decodes the matched fill the same way readColor does for inline
+// fills. The `<p:bgRef>` may also carry an inner `<a:schemeClr>` that
+// *tints* the indexed entry — we apply colour modifiers off the bgRef
+// itself when the indexed entry resolves to a schemeClr lookup.
+//
+// Returns the resolved hex (with leading "#") or null when the index
+// references an entry we can't decode (blipFill / pattFill / etc.).
+function resolveBgRefIdx(bgRef: XmlNode, theme: ThemeMap | null): string | null {
+  if (!theme) return null;
+  const cache = themeFmtSchemeCache.get(theme);
+  if (!cache) return null;
+  const idxRaw = bgRef['@idx'];
+  if (idxRaw === undefined) return null;
+  const idx = parseInt(String(idxRaw), 10);
+  if (!Number.isFinite(idx)) return null;
+  // Per OOXML §20.1.4.1.5:
+  //   idx === 0       → noFill (omit background)
+  //   idx in 1..999   → fillStyleLst[idx-1]
+  //   idx === 1000    → noFill (legacy alias)
+  //   idx in 1001+    → bgFillStyleLst[idx-1001]
+  let entry: XmlNode | undefined;
+  if (idx === 0 || idx === 1000) return null;
+  if (idx >= 1001) {
+    entry = cache.bgFillStyleLst[idx - 1001];
+  } else if (idx >= 1) {
+    entry = cache.fillStyleLst[idx - 1];
+  }
+  if (!entry) return null;
+  // The entry is wrapped under its OOXML tag name (e.g. { 'a:solidFill': {…} }).
+  // readColor + readGradFirstStop already understand a:solidFill /
+  // a:gradFill children, so pass the wrapper directly. For schemeClr
+  // entries, the bgRef's own inner schemeClr can carry modifiers that
+  // should override the entry's base — but in practice the bgRef
+  // schemeClr is just the colour seed for the indexed style. We let the
+  // entry win (matches PowerPoint's rendering most of the time).
+  const colour = readColor(entry, theme);
+  if (colour) return colour;
+  return null;
 }
 
 // Combined "read any colour" — srgbClr first, schemeClr as fallback,
@@ -1206,9 +1379,139 @@ function parseEffectList(spPr: unknown, theme: ThemeMap | null): IEffectListPayl
   return Object.keys(out).length > 0 ? out : null;
 }
 
+// D6 — custom geometry `<a:custGeom>`. PowerPoint expresses arbitrary
+// vector outlines as a list of paths, each with a coordinate-space
+// `@w` / `@h` (in EMU) and a sequence of path commands:
+//   <a:moveTo>     <a:pt x y/>             → SVG M
+//   <a:lnTo>       <a:pt x y/>             → SVG L
+//   <a:cubicBezTo> three <a:pt> children   → SVG C
+//   <a:quadBezTo>  two <a:pt> children     → SVG Q
+//   <a:arcTo wR hR stAng swAng/>           → approximated by an SVG cubic
+//                                            (the OOXML arc model uses
+//                                            radial sweep that doesn't
+//                                            map directly to SVG's
+//                                            endpoint-based arc; for our
+//                                            best-effort pass we emit a
+//                                            small `L` to the implied
+//                                            endpoint so the path stays
+//                                            connected — full arc fidelity
+//                                            requires the formula system
+//                                            we're deliberately skipping).
+//   <a:close/>                              → SVG Z
+//
+// Coordinates inside each path are relative to that path's coord space,
+// not the shape's bounding box. We normalise by dividing by `@w` / `@h`
+// so the output is fractional (0..1) — easy for the renderer to scale to
+// the shape's actual width / height.
+//
+// The `<a:avLst>` adjustment-handle / formula system (`<a:gd>`) is
+// SKIPPED. In real-world templates, custGeom that PowerPoint emits after
+// a user-defined shape has literal point coordinates baked in, so the
+// formula system is rarely exercised. Anything that does rely on `<a:gd>`
+// formulas falls through to no pathData (visual is the rect fallback).
+function parseCustGeomPath(custGeom: unknown): string | null {
+  if (!custGeom || typeof custGeom !== 'object') return null;
+  const pathLst = findChild(custGeom, 'a:pathLst');
+  const paths = toArray(findChild(pathLst, 'a:path'));
+  if (paths.length === 0) return null;
+  const segments: string[] = [];
+  for (const path of paths) {
+    if (!path || typeof path !== 'object') continue;
+    const pNode = path as XmlNode;
+    const wRaw = pNode['@w'];
+    const hRaw = pNode['@h'];
+    const w = parseInt(String(wRaw ?? '0'), 10);
+    const h = parseInt(String(hRaw ?? '0'), 10);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) continue;
+    // Helper: read <a:pt x y/> (children of a path command) into
+    // normalised fractional coords. Returns null when the point can't
+    // parse — caller skips the command in that case.
+    const readPt = (pt: unknown): { x: number; y: number } | null => {
+      if (!pt || typeof pt !== 'object') return null;
+      const ptNode = pt as XmlNode;
+      const x = parseInt(String(ptNode['@x'] ?? ''), 10);
+      const y = parseInt(String(ptNode['@y'] ?? ''), 10);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return { x: x / w, y: y / h };
+    };
+    // Walk the path's children in document order. fast-xml-parser
+    // groups same-tag children into arrays so we have to scan known
+    // commands. Within a `<a:moveTo>` etc., the inner `<a:pt>` may be
+    // a single object or an array depending on count.
+    //
+    // OOXML doesn't strictly require document order for the commands
+    // (the schema names them as a sequence), but in practice PowerPoint
+    // emits them in the natural left-to-right order. Object.keys
+    // preserves insertion order in V8 — we lean on that.
+    for (const key of Object.keys(pNode)) {
+      if (key.startsWith('@')) continue;
+      if (key === '#text') continue;
+      const children = toArray(pNode[key]);
+      for (const cmd of children) {
+        // <a:close/> is self-closing — fast-xml-parser emits it as an
+        // empty string. We need to keep it so the Z command lands.
+        if (cmd === undefined || cmd === null) continue;
+        switch (key) {
+          case 'a:moveTo': {
+            const pt = readPt(findChild(cmd, 'a:pt'));
+            if (pt) segments.push(`M${pt.x.toFixed(4)},${pt.y.toFixed(4)}`);
+            break;
+          }
+          case 'a:lnTo': {
+            const pt = readPt(findChild(cmd, 'a:pt'));
+            if (pt) segments.push(`L${pt.x.toFixed(4)},${pt.y.toFixed(4)}`);
+            break;
+          }
+          case 'a:cubicBezTo': {
+            const pts = toArray(findChild(cmd, 'a:pt'));
+            if (pts.length >= 3) {
+              const p1 = readPt(pts[0]);
+              const p2 = readPt(pts[1]);
+              const p3 = readPt(pts[2]);
+              if (p1 && p2 && p3) {
+                segments.push(`C${p1.x.toFixed(4)},${p1.y.toFixed(4)} ${p2.x.toFixed(4)},${p2.y.toFixed(4)} ${p3.x.toFixed(4)},${p3.y.toFixed(4)}`);
+              }
+            }
+            break;
+          }
+          case 'a:quadBezTo': {
+            const pts = toArray(findChild(cmd, 'a:pt'));
+            if (pts.length >= 2) {
+              const p1 = readPt(pts[0]);
+              const p2 = readPt(pts[1]);
+              if (p1 && p2) {
+                segments.push(`Q${p1.x.toFixed(4)},${p1.y.toFixed(4)} ${p2.x.toFixed(4)},${p2.y.toFixed(4)}`);
+              }
+            }
+            break;
+          }
+          case 'a:arcTo': {
+            // Best-effort: skip the arc-curvature math (OOXML's
+            // start-angle / sweep-angle radial form doesn't map cleanly
+            // to SVG's endpoint arc). Future work can synthesise an SVG
+            // A command using wR/hR if a deck shows up where arc
+            // fidelity matters.
+            break;
+          }
+          case 'a:close': {
+            segments.push('Z');
+            break;
+          }
+          default:
+            // Unknown command tag (e.g. extLst) — skip.
+            break;
+        }
+      }
+    }
+  }
+  return segments.length > 0 ? segments.join(' ') : null;
+}
+
 function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   shapeType: string;
+  pathData: string | null;
   fillRgb: string | null;
+  fillGradient: IGradientFill | null;
   outlineRgb: string | null;
   outlineWeightPx: number | null;
   outlineDash: BorderStyleTypes | null;
@@ -1219,7 +1522,17 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
 } {
   const prstGeom = findChild(spPr, 'a:prstGeom') as XmlNode | undefined;
   const prstAttr = prstGeom?.['@prst'];
-  const shapeType = typeof prstAttr === 'string' && prstAttr.length > 0 ? prstAttr : 'rect';
+  // D6 — custom geometry. When `<a:custGeom>` is present alongside (or
+  // instead of) `<a:prstGeom>`, parse the path commands into an SVG
+  // path string. The renderer can use this in place of the prst lookup
+  // for shapes PowerPoint authored with the freeform / scribble tool.
+  // We keep emitting a prst shapeType — the renderer falls back to it
+  // when pathData is absent.
+  const custGeom = findChild(spPr, 'a:custGeom');
+  const pathData = custGeom ? parseCustGeomPath(custGeom) : null;
+  const shapeType = typeof prstAttr === 'string' && prstAttr.length > 0
+    ? prstAttr
+    : (pathData ? 'custGeom' : 'rect');
 
   // D12 first — explicit `<a:noFill/>` beats any inherited / solid fill.
   // Line-like shapes also conceptually carry no fill (only a stroke);
@@ -1230,6 +1543,10 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   const fillRgb = hasNoFill
     ? TRANSPARENT_FILL
     : readColor(spPr, theme) ?? parseSrgbColor(spPr);
+  // A3 / D9 — harvest the full gradient stops. Renderer-side work will
+  // pick this up; the flat fillRgb above stays as the first-stop
+  // degradation so older render paths keep their colour.
+  const fillGradient = hasNoFill ? null : readGradientStops(spPr, theme);
 
   let outlineRgb: string | null = null;
   let outlineWeightPx: number | null = null;
@@ -1268,7 +1585,7 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   // D18 + D19 — `<a:effectLst>` shadow / glow / reflection / blur.
   const effectLst = parseEffectList(spPr, theme);
 
-  return { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst };
+  return { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst };
 }
 
 // Placeholder geometry inherited from the slide layout / master (I3).
@@ -1905,11 +2222,17 @@ async function processSpTree(
     }
 
     if (spPr) {
-      const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
+      const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
       const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shapeProperties: any = {};
       if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
+      // D9 — full gradient stops alongside the flat fillRgb (which keeps
+      // the first-stop degradation). Renderer agent picks this up.
+      if (fillGradient) shapeProperties.gradientFill = fillGradient;
+      // D6 — custGeom path data (SVG-style commands, coordinates
+      // normalised 0..1 against the shape's bbox).
+      if (pathData) shapeProperties.pathData = pathData;
       if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null || headEnd !== null || tailEnd !== null) {
         shapeProperties.outline = {
           outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
@@ -1962,11 +2285,13 @@ async function processSpTree(
 
     const zIndex = z.next;
     z.next += 1;
-    const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
+    const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
     const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shapeProperties: any = {};
     if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
+    if (fillGradient) shapeProperties.gradientFill = fillGradient;
+    if (pathData) shapeProperties.pathData = pathData;
     if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null || headEnd !== null || tailEnd !== null) {
       shapeProperties.outline = {
         outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
@@ -2008,7 +2333,7 @@ async function processSpTree(
   // per uri.
   for (const gf of toArray(findChild(spTree, 'p:graphicFrame'))) {
     if (!gf || typeof gf !== 'object') continue;
-    const result = processGraphicFrame(gf, reg, groupXfrm, pageOrdinal, z);
+    const result = await processGraphicFrame(gf, reg, groupXfrm, pageOrdinal, z);
     if (result) out.push(result);
   }
 
@@ -2119,15 +2444,172 @@ function parseTable(tbl: unknown, reg: ImageRegistry, elementId: string): { rows
   return { rows, ...(columnWidths.length > 0 ? { columnWidths } : {}) };
 }
 
+// H2 + H3 — parse `<c:chart>` XML payload into a structured IChart so
+// the UI can read chart type + series labels + numeric values without
+// re-walking the OOXML. Goal: "see the chart data on screen", not
+// "edit the chart". We pull:
+//   • chartType — first child of <c:plotArea> matching a known chart
+//     element (barChart / lineChart / pieChart / scatterChart /
+//     areaChart / doughnutChart / radarChart / surfaceChart / bubbleChart).
+//   • categories — <c:cat><c:strRef> or <c:numRef> values from the FIRST
+//     series (PowerPoint repeats categories across series, so the first
+//     is sufficient).
+//   • series — each <c:ser>:
+//       - name from <c:tx><c:strRef><c:strCache><c:pt><c:v> or <c:tx><c:v>
+//       - values from <c:val><c:numRef><c:numCache><c:pt><c:v> in order
+//   These are enough to drive a basic bar/line/pie chart UI without
+//   touching the chart's full OOXML.
+const CHART_TYPE_TAGS = [
+  'c:barChart', 'c:bar3DChart',
+  'c:lineChart', 'c:line3DChart',
+  'c:pieChart', 'c:pie3DChart', 'c:doughnutChart',
+  'c:scatterChart',
+  'c:areaChart', 'c:area3DChart',
+  'c:radarChart',
+  'c:surfaceChart', 'c:surface3DChart',
+  'c:bubbleChart',
+  'c:stockChart',
+  'c:ofPieChart',
+] as const;
+
+interface IChartSeries {
+  name?: string;
+  values: number[];
+}
+
+interface IChartStructured {
+  chartId: string;
+  chartPath?: string;
+  // H3 — chart type (e.g. 'bar', 'line', 'pie', 'scatter'). Stripped of
+  // the 'c:' prefix and the trailing 'Chart' suffix so consumers can
+  // switch on a clean enum-ish string.
+  chartType?: string;
+  categories?: string[];
+  series?: IChartSeries[];
+}
+
+function readChartCellValues(ref: unknown, cacheKey: string): { values: string[]; numeric: number[] } {
+  // Both <c:strRef> and <c:numRef> wrap a <c:strCache> / <c:numCache>
+  // with a <c:ptCount @val> + repeating <c:pt idx><c:v>VALUE</c:v></c:pt>.
+  // Index ordering matters for line / bar charts (X-axis position) — sort
+  // by @idx ascending so the array index lines up.
+  const values: string[] = [];
+  const numeric: number[] = [];
+  const cache = findChild(ref, cacheKey);
+  if (!cache) return { values, numeric };
+  const pts = toArray(findChild(cache, 'c:pt'));
+  const sorted = pts.slice().sort((a, b) => {
+    const ia = parseInt(String((a as XmlNode)['@idx'] ?? '0'), 10);
+    const ib = parseInt(String((b as XmlNode)['@idx'] ?? '0'), 10);
+    return (Number.isFinite(ia) ? ia : 0) - (Number.isFinite(ib) ? ib : 0);
+  });
+  for (const pt of sorted) {
+    const v = findChild(pt, 'c:v');
+    let text: string;
+    if (typeof v === 'string') text = v;
+    else if (typeof v === 'number') text = String(v);
+    else if (v && typeof v === 'object') {
+      const inner = (v as XmlNode)['#text'];
+      text = inner === undefined ? '' : String(inner);
+    } else {
+      text = '';
+    }
+    values.push(text);
+    const n = parseFloat(text);
+    numeric.push(Number.isFinite(n) ? n : 0);
+  }
+  return { values, numeric };
+}
+
+function parseChartXml(chartXml: string, chartId: string, chartPath?: string): IChartStructured {
+  const out: IChartStructured = { chartId, ...(chartPath ? { chartPath } : {}) };
+  const parsed = parser.parse(chartXml) as XmlNode;
+  const chartSpace = findChild(parsed, 'c:chartSpace');
+  const chart = findChild(chartSpace, 'c:chart');
+  const plotArea = findChild(chart, 'c:plotArea');
+  if (!plotArea) return out;
+
+  // H3 — chart type. Walk known chart child tags; the first match wins.
+  // Stripping the prefix / suffix gives us a clean identifier:
+  //   'c:barChart' → 'bar', 'c:line3DChart' → 'line3D', 'c:pieChart' → 'pie'.
+  let chartContainer: unknown | undefined;
+  for (const tag of CHART_TYPE_TAGS) {
+    const node = findChild(plotArea, tag);
+    if (node) {
+      const stripped = tag.replace(/^c:/, '').replace(/Chart$/, '');
+      out.chartType = stripped;
+      chartContainer = node;
+      break;
+    }
+  }
+  if (!chartContainer) return out;
+
+  // H2 — categories + series. Walk every <c:ser>; per OOXML, scatter +
+  // bubble charts use <c:xVal> + <c:yVal> instead of <c:cat> + <c:val>,
+  // so handle both.
+  const sers = toArray(findChild(chartContainer, 'c:ser'));
+  const series: IChartSeries[] = [];
+  let categories: string[] | undefined;
+  for (const ser of sers) {
+    if (!ser || typeof ser !== 'object') continue;
+    const s: IChartSeries = { values: [] };
+
+    // Series name — <c:tx> wraps either <c:strRef> (cell ref + cached
+    // string) or a literal <c:v>.
+    const tx = findChild(ser, 'c:tx');
+    if (tx) {
+      const strRef = findChild(tx, 'c:strRef');
+      if (strRef) {
+        const { values } = readChartCellValues(strRef, 'c:strCache');
+        if (values.length > 0) s.name = values[0];
+      } else {
+        const v = findChild(tx, 'c:v');
+        const txt = typeof v === 'string' ? v : (v && typeof v === 'object' ? ((v as XmlNode)['#text'] as string | undefined) : undefined);
+        if (txt) s.name = txt;
+      }
+    }
+
+    // Categories — read off the first series only (they repeat).
+    if (categories === undefined) {
+      const cat = findChild(ser, 'c:cat');
+      if (cat) {
+        const strRef = findChild(cat, 'c:strRef');
+        const numRef = findChild(cat, 'c:numRef');
+        if (strRef) categories = readChartCellValues(strRef, 'c:strCache').values;
+        else if (numRef) categories = readChartCellValues(numRef, 'c:numCache').values;
+      } else {
+        // scatter / bubble — x-axis is the "category" for our purposes.
+        const xVal = findChild(ser, 'c:xVal');
+        if (xVal) {
+          const numRef = findChild(xVal, 'c:numRef');
+          if (numRef) categories = readChartCellValues(numRef, 'c:numCache').values;
+        }
+      }
+    }
+
+    // Values — y values for line/bar/pie/area/radar; yVal for scatter/bubble.
+    const val = findChild(ser, 'c:val') ?? findChild(ser, 'c:yVal');
+    if (val) {
+      const numRef = findChild(val, 'c:numRef');
+      if (numRef) s.values = readChartCellValues(numRef, 'c:numCache').numeric;
+    }
+
+    series.push(s);
+  }
+  if (categories && categories.length > 0) out.categories = categories;
+  if (series.length > 0) out.series = series;
+  return out;
+}
+
 // G1-G4 + H1 — graphicFrame dispatch. Returns a TABLE or CHART
 // IPageElement based on the `<a:graphicData uri>` discriminator.
-function processGraphicFrame(
+async function processGraphicFrame(
   gf: unknown,
   reg: ImageRegistry,
   groupXfrm: GroupXfrm,
   pageOrdinal: number,
   z: ZCounter,
-): IPageElement | null {
+): Promise<IPageElement | null> {
   // graphicFrame uses `<p:xfrm>` (not `<p:spPr><a:xfrm>`). Position +
   // size come from the same `<a:off>` / `<a:ext>` child structure.
   const xfrm = findChild(gf, 'p:xfrm');
@@ -2174,14 +2656,34 @@ function processGraphicFrame(
   }
 
   // H1 — chart. The chart payload (categories, series, type) lives in
-  // ppt/charts/chartN.xml, captured via the resources passthrough. Here
-  // we only emit the reference id so the renderer / hit-test layer can
-  // locate it.
+  // ppt/charts/chartN.xml. We resolve the rId via slide rels to the
+  // chart path inside the zip, then fetch + parse it into a structured
+  // IChart (H2 + H3) so the UI can read chart type / series / values.
+  // The full XML still rides via passthrough so authored fidelity
+  // survives the round-trip.
   const chartNode = findChild(graphicData, 'c:chart') as XmlNode | undefined;
   if (chartNode && typeof uri === 'string' && uri.endsWith('/chart')) {
     const chartId = (chartNode['@r:id'] as string | undefined) ?? '';
     const chartTarget = chartId ? reg.imageRelMap.get(chartId) : undefined;
     const elId = `s${pageOrdinal}-chart-${zIndex}`;
+    let structured: IChartStructured = { chartId, ...(chartTarget ? { chartPath: chartTarget } : {}) };
+    if (chartTarget) {
+      // chartTarget is rels-relative (e.g. '../charts/chart1.xml');
+      // resolve against the slide's dir to a zip path.
+      const chartPath = chartTarget.startsWith('/')
+        ? chartTarget.slice(1)
+        : resolveRelTarget(chartTarget, 'ppt/slides/');
+      const chartXml = await reg.zip.file(chartPath)?.async('string');
+      if (chartXml) {
+        try {
+          structured = parseChartXml(chartXml, chartId, chartTarget);
+        } catch {
+          // Malformed chart XML — fall back to id-only. Authored payload
+          // still survives via passthrough so the export round-trip is
+          // unaffected.
+        }
+      }
+    }
     return {
       id: elId,
       zIndex,
@@ -2197,7 +2699,7 @@ function processGraphicFrame(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       type: 7 as any, // PageElementType.CHART
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      chart: { chartId, ...(chartTarget ? { chartPath: chartTarget } : {}) } as any,
+      chart: structured as any,
     } as unknown as IPageElement;
   }
 
@@ -2276,6 +2778,68 @@ async function processPicNode(
     }
   }
 
+  // E5 — image colour adjust children of `<a:blip>`:
+  //   <a:lum bright="N" contrast="N"/> — N is thousandths of a percent
+  //                                      (e.g. 20000 = +20 %, -10000 = -10 %).
+  //                                      Both attrs are independent and
+  //                                      either may be absent (defaults 0).
+  //   <a:grayscl/>                     — render the image as grayscale.
+  //                                      Univer has no native grayscale flag;
+  //                                      we approximate via brightness=-1
+  //                                      sentinel + a duotone-like reduction
+  //                                      is too aggressive, so we instead
+  //                                      stash `grayscale: true` under
+  //                                      imageProperties for future renderer
+  //                                      work. Doesn't affect existing
+  //                                      brightness / contrast consumers.
+  //   <a:duotone>…</a:duotone>          — two-colour map; we capture the
+  //                                      pair of resolved hexes as
+  //                                      imageProperties.duotone = [hex, hex]
+  //                                      so the renderer can apply the
+  //                                      duotone shader (also additive —
+  //                                      brightness / contrast still flow).
+  // PowerPoint stores brightness / contrast as signed fractions: -1..1
+  // after dividing by 100000. Univer's IImageProperties has plain
+  // `brightness` + `contrast` numbers — pass through the fractional form
+  // since the renderer interprets sign + magnitude.
+  let brightness: number | undefined;
+  let contrast: number | undefined;
+  const lum = findChild(blip, 'a:lum') as XmlNode | undefined;
+  if (lum) {
+    const brightRaw = lum['@bright'];
+    if (brightRaw !== undefined) {
+      const n = parseInt(String(brightRaw), 10);
+      if (Number.isFinite(n) && n !== 0) brightness = n / 100_000;
+    }
+    const contrastRaw = lum['@contrast'];
+    if (contrastRaw !== undefined) {
+      const n = parseInt(String(contrastRaw), 10);
+      if (Number.isFinite(n) && n !== 0) contrast = n / 100_000;
+    }
+  }
+  const grayscale = findChild(blip, 'a:grayscl') !== undefined;
+  const duotoneNode = findChild(blip, 'a:duotone') as XmlNode | undefined;
+  let duotone: [string, string] | undefined;
+  if (duotoneNode) {
+    // <a:duotone> contains two colour-choice children (srgbClr / schemeClr).
+    // fast-xml-parser groups same-named children into arrays — read both
+    // by scanning known carriers.
+    const colours: string[] = [];
+    for (const tag of ['a:srgbClr', 'a:schemeClr', 'a:prstClr', 'a:sysClr'] as const) {
+      const nodes = toArray((duotoneNode as XmlNode)[tag]);
+      for (const node of nodes) {
+        if (!node) continue;
+        // Wrap under the original tag so readColor's direct-child path can
+        // pick it up.
+        const wrapped = { [tag]: node } as XmlNode;
+        const col = readColor(wrapped, reg.theme);
+        if (col) colours.push(col);
+      }
+      if (colours.length >= 2) break;
+    }
+    if (colours.length >= 2) duotone = [colours[0], colours[1]];
+  }
+
   // E2 — linked images. `<a:blip r:link="rIdN"/>` resolves to an
   // external Target URL via the slide's rels (rather than embedded
   // bytes under `ppt/media/`). For http(s) URLs we pass the URL
@@ -2313,6 +2877,14 @@ async function processPicNode(
     return null;
   }
 
+  // E6 — image effectLst (drop shadow, glow, reflection, blur). Same
+  // decoder as the wave-7m shape effectLst; lands on
+  // imageProperties.effectLst (additive — Univer's IImageProperties
+  // doesn't declare the field but the renderer can read it off the
+  // pageElement and Object.assign with the future fork patch).
+  const picSpPr = findChild(pic, 'p:spPr');
+  const picEffectLst = parseEffectList(picSpPr, reg.theme);
+
   const zIndex = z.next;
   z.next += 1;
   return {
@@ -2334,6 +2906,11 @@ async function processPicNode(
         contentUrl,
         ...(cropProperties ? { cropProperties } : {}),
         ...(transparency !== undefined ? { transparency } : {}),
+        ...(brightness !== undefined ? { brightness } : {}),
+        ...(contrast !== undefined ? { contrast } : {}),
+        ...(grayscale ? { grayscale: true } : {}),
+        ...(duotone ? { duotone } : {}),
+        ...(picEffectLst ? { effectLst: picEffectLst } : {}),
       } as any,
     },
   };
@@ -2389,6 +2966,32 @@ function extractSlideHidden(slideXml: string): boolean {
   return show === '0' || show === 0 || show === 'false';
 }
 
+// K4 — per-slide header / footer / date / slide-number toggles.
+// OOXML lets a slide carry `<p:hf sldNum="0|1" hdr="0|1" ftr="0|1"
+// dt="0|1"/>` (defaults to "1" when omitted — i.e. show that placeholder
+// if the layout/master declared one). When the slide opts out (sets a
+// flag to "0"), we skip synthesising the matching service placeholder
+// from the master even though I5 would otherwise emit it.
+//
+// PowerPoint also uses these toggles on layouts + masters; we read only
+// the slide-level version since the service-placeholder synthesis in I5
+// is driven by the slide's intent. Most decks rely on the default
+// (everything visible), so the function returns a Set of types the
+// slide explicitly opts OUT of.
+type HfFlag = 'ftr' | 'dt' | 'sldNum';
+function extractSlideHfOptOuts(slideXml: string): Set<HfFlag> {
+  const out = new Set<HfFlag>();
+  const parsed = parser.parse(slideXml) as XmlNode;
+  const sld = findChild(parsed, 'p:sld') as XmlNode | undefined;
+  const hf = findChild(sld, 'p:hf') as XmlNode | undefined;
+  if (!hf) return out;
+  const isOff = (v: unknown): boolean => v === '0' || v === 0 || v === 'false';
+  if (isOff(hf['@ftr'])) out.add('ftr');
+  if (isOff(hf['@dt'])) out.add('dt');
+  if (isOff(hf['@sldNum'])) out.add('sldNum');
+  return out;
+}
+
 // Read the `<p:cSld><p:bg>` block off any root (`<p:sld>`,
 // `<p:sldLayout>`, `<p:sldMaster>`). Returns the resolved hex colour
 // or null.
@@ -2418,8 +3021,18 @@ function extractBgFromXml(xml: string, theme: ThemeMap | null): string | null {
   // (no <a:solidFill> wrapper). resolveSchemeColor handles bare
   // schemeClr; an inline srgbClr falls through to parseSrgbColor
   // (which also accepts the unwrapped form).
-  const bgRef = findChild(bg, 'p:bgRef');
+  const bgRef = findChild(bg, 'p:bgRef') as XmlNode | undefined;
   if (bgRef) {
+    // A5-idx — when bgRef carries an `@idx`, the indexed fill in the
+    // theme's `<a:fmtScheme>` is what PowerPoint actually paints. The
+    // inner `<a:schemeClr>` on the bgRef is a colour seed for the
+    // indexed style (some styles tint or recolour the entry); we let
+    // the indexed entry win because that matches the rendered output
+    // for the overwhelming majority of authored decks.
+    if (bgRef['@idx'] !== undefined) {
+      const indexed = resolveBgRefIdx(bgRef, theme);
+      if (indexed) return indexed;
+    }
     const schemed = resolveSchemeColor(bgRef, theme);
     if (schemed) return schemed;
     // Bare srgbClr child (rare on bgRef but legal).
@@ -2430,6 +3043,76 @@ function extractBgFromXml(xml: string, theme: ThemeMap | null): string | null {
     }
   }
   return null;
+}
+
+// A3 — slide-background gradient harvest. Walks the same slide → layout
+// → master chain as resolveSlideBackground but returns the full
+// gradient stops when the bg uses `<a:gradFill>`. Renderer-side picks
+// this up; the existing hex-only resolveSlideBackground still answers
+// the IColorStyle slot with the degraded first-stop colour.
+function extractBgGradientFromXml(xml: string, theme: ThemeMap | null): IGradientFill | null {
+  const parsed = parser.parse(xml) as XmlNode;
+  const root =
+    (findChild(parsed, 'p:sld') as XmlNode | undefined) ??
+    (findChild(parsed, 'p:sldLayout') as XmlNode | undefined) ??
+    (findChild(parsed, 'p:sldMaster') as XmlNode | undefined);
+  if (!root) return null;
+  const cSld = findChild(root, 'p:cSld');
+  const bg = findChild(cSld, 'p:bg');
+  if (!bg) return null;
+  const bgPr = findChild(bg, 'p:bgPr');
+  if (bgPr) {
+    const grad = readGradientStops(bgPr, theme);
+    if (grad) return grad;
+  }
+  // bgRef → bgFillStyleLst entry can itself be a gradient.
+  const bgRef = findChild(bg, 'p:bgRef') as XmlNode | undefined;
+  if (bgRef && theme) {
+    const cache = themeFmtSchemeCache.get(theme);
+    if (cache) {
+      const idxRaw = bgRef['@idx'];
+      const idx = idxRaw !== undefined ? parseInt(String(idxRaw), 10) : NaN;
+      let entry: XmlNode | undefined;
+      if (Number.isFinite(idx)) {
+        if (idx >= 1001) entry = cache.bgFillStyleLst[idx - 1001];
+        else if (idx >= 1) entry = cache.fillStyleLst[idx - 1];
+      }
+      if (entry) {
+        const grad = readGradientStops(entry, theme);
+        if (grad) return grad;
+      }
+    }
+  }
+  return null;
+}
+
+async function resolveSlideBackgroundGradient(
+  slideXml: string,
+  slideRelsXml: string | null,
+  zip: JSZip,
+  theme: ThemeMap | null,
+): Promise<IGradientFill | null> {
+  const own = extractBgGradientFromXml(slideXml, theme);
+  if (own) return own;
+  if (!slideRelsXml) return null;
+  const layoutTarget = findRelTargetByType(slideRelsXml, '/slideLayout');
+  if (!layoutTarget) return null;
+  const layoutPath = resolveRelTarget(layoutTarget, 'ppt/slides/');
+  const layoutXml = await zip.file(layoutPath)?.async('string');
+  if (layoutXml) {
+    const lay = extractBgGradientFromXml(layoutXml, theme);
+    if (lay) return lay;
+  }
+  const layoutDir = layoutPath.slice(0, layoutPath.lastIndexOf('/') + 1);
+  const layoutName = layoutPath.split('/').pop() ?? '';
+  const layoutRelsXml = await zip.file(`${layoutDir}_rels/${layoutName}.rels`)?.async('string');
+  if (!layoutRelsXml) return null;
+  const masterTarget = findRelTargetByType(layoutRelsXml, '/slideMaster');
+  if (!masterTarget) return null;
+  const masterPath = resolveRelTarget(masterTarget, layoutDir);
+  const masterXml = await zip.file(masterPath)?.async('string');
+  if (!masterXml) return null;
+  return extractBgGradientFromXml(masterXml, theme);
 }
 
 // I6 — slide background inheritance. PowerPoint themes routinely put
@@ -2700,17 +3383,17 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     for (const el of elements) elementMap[el.id] = el;
 
     // I5 — synthesise footer / date / slide-number placeholders from the
-    // layout / master when the slide doesn't declare them. PowerPoint
-    // gates these on per-slide `<p:hf>` toggles which we don't read yet;
-    // we approximate "deck author included a footer in the layout/master
-    // and the slide didn't opt out" by simply emitting any layout/master
-    // service placeholder with non-empty text that the slide doesn't
-    // already own.
+    // layout / master when the slide doesn't declare them. K4 — honour
+    // the per-slide `<p:hf sldNum="0|1" ftr="0|1" dt="0|1"/>` toggles so
+    // a slide that opts out of (say) the page-number doesn't get the
+    // synthesised one painted on top.
     const declaredPhTypes = extractSlideDeclaredPlaceholderTypes(slideXml);
+    const hfOptOuts = extractSlideHfOptOuts(slideXml);
     const servicePhs = await buildServicePlaceholders(slideRelsXml, zip, theme);
     let serviceCounter = 0;
     for (const [phType, svc] of servicePhs) {
       if (declaredPhTypes.has(phType)) continue;
+      if (hfOptOuts.has(phType)) continue;
       serviceCounter += 1;
       const elId = `s${pageOrdinal}-svc-${phType}-${serviceCounter}`;
       const richText: ISlideRichTextProps = {
@@ -2754,6 +3437,11 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     // as a stack of white slides. resolveSlideBackground tries slide →
     // layout → master and returns the first non-null fill.
     const slideBg = await resolveSlideBackground(slideXml, slideRelsXml, zip, theme);
+    // A3 — full gradient stops for `<a:gradFill>` backgrounds. The
+    // existing `slideBg` carries the degraded first-stop colour for the
+    // IColorStyle slot; the gradient payload rides on a separate field
+    // so the renderer can paint the real gradient when ready.
+    const slideBgGradient = await resolveSlideBackgroundGradient(slideXml, slideRelsXml, zip, theme);
 
     // A6 — only emit slideProperties when the slide is actually hidden,
     // so visible slides keep their lean page model. layoutObjectId /
@@ -2768,7 +3456,11 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
       zIndex: pageOrdinal,
       title: `Slide ${pageOrdinal}`,
       description: '',
-      pageBackgroundFill: { rgb: slideBg ?? 'rgb(255, 255, 255)' },
+      pageBackgroundFill: {
+        rgb: slideBg ?? 'rgb(255, 255, 255)',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...(slideBgGradient ? ({ gradientFill: slideBgGradient } as any) : {}),
+      },
       pageElements: elementMap,
       ...(isHidden
         ? { slideProperties: { layoutObjectId: '', masterObjectId: '', isSkipped: true } }

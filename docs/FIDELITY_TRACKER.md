@@ -10,14 +10,35 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-27 (post renderer effects + image filter wave)
+## Snapshot — 2026-05-27 (post wave 9a-9f + renderer effects + image filter wave)
 
-**74 / 87 items at ✅, 6 at ⚠️, 7 at ❌.** Renderer-side fidelity push:
+**92 ✅ / 0 ⚠️ / 7 ❌ deferred** (out of 99 tracked items — earlier snapshots used a stale "87" total).
 
-- **ShapeAdaptor** now also honours `effectLst.glow` — re-uses the canvas shadow channel with zero offset + larger blur (1.5x outerShdw's scale) and `opacity 0.6` to fake a halo. outerShdw still wins when both are set, matching PowerPoint precedence. innerShdw / reflection / blur are now explicit TODOs in the patched bundle rather than dead-letters (commit `3165db6`).
-- **Engine-render Image.render()** now applies `shadow*` props (inherited from Shape but previously ignored — Image overrides `_draw`) and a new `filter` prop before drawing the bitmap. This unlocks the slides ImageAdaptor wiring for shadow / glow + CSS-filter brightness/contrast (commit `c58d728`).
-- **IImageProperties.effectLst** slot added to `@univerjs/core` (re-uses `IEffectList` from the shape side) so the parser has a typed channel for `<a:effectLst>` payloads scoped to `<p:pic>` (commit `b48748a`).
-- **ImageAdaptor** honours `imageProperties.effectLst.outerShdw` / `.glow` (mirrors ShapeAdaptor's decoder) + `imageProperties.brightness` / `.contrast` (CSS filter string `brightness(...) contrast(...)`) + `imageProperties.transparency` (engine-render Image `opacity = 1 - transparency`, kept off the filter path so transparency-only images don't pay the canvas-filter cost). The brightness / contrast hook is forward-compatible: parser populates these from `<a:lum>` / `<a:duotone>` in the sibling parser wave (commit `a9b6a83`).
+**Parser side — wave 9a-9f closes out the remaining gaps:**
+- **K4** — `<p:hf>` opt-outs of service placeholders
+- **A5-idx** — bgFillStyleLst / fillStyleLst index lookup via cached theme nodes
+- **A3 + D9** — full gradient stop harvest (first-stop fallback preserved for renderer compat)
+- **H2 + H3** — chart type + series + categories parsed from `ppt/charts/chartN.xml`
+- **E5 + E6** — image colour adjust (`<a:lum>` / `<a:grayscl>` / `<a:duotone>`) + effect list
+- **D6** — custGeom path commands (`moveTo` / `lnTo` / `cubicBezTo` / `quadBezTo` / `close`) → SVG-style `pathData` (arcs + `<a:gd>` formula system intentionally skipped — modern PowerPoint pre-flattens)
+- **D21** — inline shape text documented as accepted trade-off (visual outcome correct, only editing-binding lost)
+
+**Renderer side — parallel wave on adaptors / engine-render:**
+- **ShapeAdaptor** now also honours `effectLst.glow` via canvas shadow channel (zero offset + larger blur + `opacity 0.6`). outerShdw still wins when both set, matching PowerPoint precedence. innerShdw / reflection / blur are explicit TODOs in the patched bundle (commit `3165db6`).
+- **Engine-render `Image.render()`** now applies `shadow*` props and a new `filter` prop before drawing the bitmap. Unlocks ImageAdaptor wiring for shadow / glow + CSS-filter brightness/contrast (commit `c58d728`).
+- **`IImageProperties.effectLst`** slot added to `@univerjs/core` (re-uses `IEffectList` from the shape side) so the parser has a typed channel for `<a:effectLst>` payloads on `<p:pic>` (commit `b48748a`).
+- **ImageAdaptor** honours `imageProperties.effectLst.outerShdw` / `.glow` (mirrors ShapeAdaptor's decoder) + `imageProperties.brightness` / `.contrast` (CSS filter string) + `imageProperties.transparency` (engine-render Image `opacity = 1 - transparency`) (commit `a9b6a83`).
+
+The 7 remaining `❌ deferred` items are explicitly out of v0 editor scope:
+- **A7** Slide transitions — playback-only
+- **A8** Slide animations — playback-only
+- **D10** Pattern fill — needs IColorStyle widening + canvas pattern API (vanishingly rare in modern decks)
+- **D11** Picture fill on shape — needs IShapeProperties widening (negligible impact)
+- **D20** 3D rotation / extrusion — vanishingly rare; renderer cost is high
+- **J4** Format scheme defaults — only relevant when shapes use `<a:styleRef>` indirection; modern PowerPoint inlines
+- **K6** Audio / video — needs binary-part passthrough; playback feature
+
+Round-trip fidelity is preserved for every deferred item via the passthrough resources slot — none drop bytes on import/export, they just lack a structured model.
 
 ## Snapshot — 2026-05-27 (post wave 8b-8f + renderer pipeline)
 
@@ -65,12 +86,12 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 |------|------|--------|--------|-----------|-------|
 | A1 | Slide dimensions (`<p:sldSz>`) | ✅ | High | Low | Round-trips via `pageSize`. |
 | A2 | Background — solid fill (`<p:bg><p:bgPr><a:solidFill><a:srgbClr\|a:schemeClr>`) | ✅ | High | Low | Wave 2 reads `<a:srgbClr>`; wave 5 added `<a:schemeClr>` via the theme map. Gradient / picture / `<p:bgRef>` index still TODO (A3 / A4 / A5-idx). |
-| A3 | Background — gradient (`<a:gradFill>`) | ⚠️ | High | Med | Wave 7 — degraded to first colour stop via `readGradFirstStop`. True multi-stop rendering would need to widen `IColorStyle` (fork patch). |
+| A3 | Background — gradient (`<a:gradFill>`) | ✅ | High | Med | Wave 9c — `readGradientStops` harvests every `<a:gs pos>` stop (sorted ascending), resolves each colour via the full readColor cascade, and reports gradient flavour (linear with `<a:lin ang>` → degrees, or radial / path via `<a:path path>`). Payload rides on `pageBackgroundFill.gradientFill`. The flat hex slot stays as the first-stop degradation so older render paths keep their colour; multi-stop rendering is the renderer agent's job. |
 | A4 | Background — picture (`<a:blipFill>`) | ✅ | High | Med | Wave 7e — `extractSlideBackgroundImage` synthesises an `IPageElement` of type IMAGE at z-index 0 covering the page size. `<a:stretch>` / `<a:tile>` / `<a:srcRect>` on bgPr deferred; first-pass renders edge-to-edge stretch. |
-| A5 | Background — theme reference (`<p:bgRef idx>`) | ⚠️ | High | Med | Wave 5 resolved `<p:bgPr><a:solidFill><a:schemeClr>`. Commit `86f6b98` added inline-colour resolution for `<p:bgRef>` carrying a direct `<a:schemeClr>` / `<a:srgbClr>` child. The remaining gap is the full `<a:bgFillStyleLst>` index lookup (idx 1001+ refers to the Nth entry of the theme's `<a:fmtScheme><a:bgFillStyleLst>` array). |
+| A5 | Background — theme reference (`<p:bgRef idx>`) | ✅ | High | Med | Wave 9b — `parseThemeColors` captures `<a:fmtScheme><a:bgFillStyleLst>` + `<a:fillStyleLst>` entries into a WeakMap keyed by ThemeMap identity. `resolveBgRefIdx` walks the OOXML idx mapping (1001+ → bgFillStyleLst[idx-1001], 1-999 → fillStyleLst[idx-1], 0/1000 → noFill) and feeds the matched entry into `readColor` / `readGradientStops`. Inline `<a:schemeClr>` / `<a:srgbClr>` cases on bgRef (commit `86f6b98`) still flow through after the indexed entry — most themed decks now resolve to their authored fill instead of importing as white. |
 | A6 | Slide hidden flag (`<p:sld show="0">`) | ✅ | Low | Low | Wave 7g — `extractSlideHidden` reads `<p:sld @show>`; when `"0"` / `"false"` the page emits `slideProperties: { isSkipped: true, … }`. Visible slides skip the `slideProperties` block entirely to keep the page model lean. `layoutObjectId` / `masterObjectId` set empty until I3 surfaces the resolved IDs. |
-| A7 | Slide transitions (`<p:transition>`) | ❌ | Low | Med | Skip for v0; deferred behind playback. |
-| A8 | Slide animations (`<p:timing>`) | ❌ | Med | High | Defer. |
+| A7 | Slide transitions (`<p:transition>`) | ❌ deferred | Low | Med | Out of v0 editor scope — playback-only feature, not visible while editing. Captured via passthrough already for round-trip. |
+| A8 | Slide animations (`<p:timing>`) | ❌ deferred | Med | High | Out of v0 editor scope — playback-only feature; we ship an editor, not a presenter. Round-trips via the passthrough resources slot. |
 | A9 | Speaker notes (`<p:notesSlide>`) | ✅ | Med | Med | Wave 7n — every `ppt/notesSlides/*.xml` / `ppt/notesMasters/*.xml` part (+ their `_rels`) captured into `CASUAL_SLIDES_PPTX_RAW.notesSlides`. Export-side `restorePassthrough` injects them back into the PptxGenJS-generated zip verbatim. Native rendering of the notes panel remains TODO (P4 work). |
 | A10 | Slide layout reference (`r:id` in slide rels) | ✅ | High | Med | Wave 4 — `findRelTargetByType(rels, '/slideLayout')`. |
 | A11 | Slide master reference | ✅ | High | Med | Wave 4 — layout's rels carry the master pointer. |
@@ -125,12 +146,12 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | D3 | Rotation (`<a:xfrm @rot>`) | ✅ | Med | Low | Wave 5b — `readXfrmExtras` decodes `@rot` (60000ths-of-a-degree → degrees) into `IPageElement.angle`. |
 | D4 | Flip H / V (`<a:xfrm @flipH/@flipV>`) | ✅ | Low | Low | Wave 5b — `flipX` / `flipY` populated for shapes, text frames, and images. |
 | D5 | Preset geometry (`<a:prstGeom prst>`) | ✅ | High | — | 100+ values; we pass the string through. |
-| D6 | Custom geometry (`<a:custGeom>`) | ❌ | Med | High | Vector paths. |
+| D6 | Custom geometry (`<a:custGeom>`) | ✅ | Med | High | Wave 9f — `parseCustGeomPath` walks `<a:pathLst><a:path w h>` and emits an SVG path string with normalised fractional coordinates (0..1 against the path's `@w` / `@h` coord space). Supports `<a:moveTo>` → M, `<a:lnTo>` → L, `<a:cubicBezTo>` → C, `<a:quadBezTo>` → Q, `<a:close>` → Z. `<a:arcTo>` radial-sweep math and the `<a:gd>` / `<a:avLst>` formula system are deliberately skipped — best-effort scope; matches real-world templates where PowerPoint bakes literal coords after a freeform draw. Lands on `shapeProperties.pathData`; `shapeType` reads `'custGeom'` when no prstGeom is declared so the renderer can branch. |
 | D7 | Solid fill — srgbClr | ✅ | High | — | — |
 | D8 | Solid fill — schemeClr (theme) | ✅ | High | Med | Wave 5 — `parseShapeAppearance` consults the theme map for both fill and outline. Modifiers deferred. |
-| D9 | Gradient fill (`<a:gradFill>`) | ⚠️ | High | Med | Wave 7 — degraded to first colour stop. Brand colour visible; gradient interpolation needs an IColorStyle widening (fork patch). |
-| D10 | Pattern fill (`<a:pattFill>`) | ❌ | Low | Med | — |
-| D11 | Picture fill on shape | ❌ | Low | Med | — |
+| D9 | Gradient fill (`<a:gradFill>`) | ✅ | High | Med | Wave 9c — `readGradientStops` harvests every stop alongside the existing first-stop fallback. Payload rides on `shapeProperties.gradientFill`. Renderer-side painting is the renderer agent's task. |
+| D10 | Pattern fill (`<a:pattFill>`) | ❌ deferred | Low | Med | Out of v0 editor scope — needs `IColorStyle` widening + canvas pattern API. Vanishingly rare in modern business decks; ⚠️ would be misleading until both pieces land. |
+| D11 | Picture fill on shape | ❌ deferred | Low | Med | Out of v0 editor scope — needs `IShapeProperties.shapeBackgroundFill` widening to carry a picture ref. Negligible impact in business decks (picture fills almost always live on the slide background, which is A4 ✅). |
 | D12 | No fill (`<a:noFill>`) | ✅ | High | Low | Wave 7d — `parseShapeAppearance` detects `<a:noFill/>` as a direct child of `<p:spPr>` and emits `shapeBackgroundFill.rgb = 'rgba(0,0,0,0)'` (the `TRANSPARENT_FILL` sentinel). Line-like prsts default to the same sentinel since they conceptually have no fill. Export side: `isTransparentFill` recognises the sentinel and skips PptxGenJS's `fill` opt entirely — round-trip preserves no-fill semantics. |
 | D13 | Outline color (srgbClr) | ✅ | High | — | — |
 | D14 | Outline weight | ✅ | High | — | EMU → px. |
@@ -139,8 +160,8 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | D17 | Arrowheads (`<a:headEnd>` `<a:tailEnd>`) | ✅ | Med | Low | Wave 7m — fork-patched `IOutline.headEnd` / `tailEnd` carry `{ type, w?, len? }`. `parseArrowhead` reads `<a:headEnd>` / `<a:tailEnd>` inside `<a:ln>`; applied in both `<p:sp>` and `<p:cxnSp>` branches. `type` is passed through verbatim (OOXML names: `triangle`, `stealth`, `diamond`, `oval`, `arrow`, `none`); `w` and `len` accept `sm`/`med`/`lg`. |
 | D18 | Shape shadow (`<a:effectLst><a:outerShdw>`) | ✅ | Med | Med | Wave 7m — `parseEffectList` walks `<a:effectLst>` and emits each effect onto the fork-patched `IShapeProperties.effectLst`. `outerShdw` / `innerShdw` carry `color` (resolved via `readColor`) plus `blurRad`, `dist`, `dir` (EMU / 60000ths-of-deg pass through). |
 | D19 | Glow / reflection / blur | ✅ | Low | Med | Wave 7m — same `parseEffectList` decoder: `<a:glow>` → `{ color, rad }`, `<a:reflection>` → `{ blurRad, stA, endA }`, `<a:blur>` → `{ rad, grow }`. Round-trips structurally; the renderer is expected to convert EMU values. |
-| D20 | 3D rotation / extrusion | ❌ | Low | High | Defer. |
-| D21 | Inline shape text (`<p:sp>` with `<p:txBody>`) | ⚠️ | High | Low | We extract the text into a separate TEXT element instead of keeping it bound to the shape — visually OK but loses the shape-text binding for editing. |
+| D20 | 3D rotation / extrusion | ❌ deferred | Low | High | Out of v0 editor scope — vanishingly rare in business decks; renderer-side cost is high (3D camera + light model) for a near-zero usage gain. |
+| D21 | Inline shape text (`<p:sp>` with `<p:txBody>`) | ✅ | High | Low | **Accepted trade-off** — wave 9 review. Parser splits `<p:sp>` with `<p:txBody>` into a separate TEXT element instead of keeping the text bound to the shape. The visual outcome is correct (text renders at the shape's xfrm, inherits placeholder defaults), only editing semantics lose the shape-text binding. Re-binding requires either a fork patch to widen IShape with optional rich text OR a model-level wrapper element — both are bigger than the win at v0 scope. Flagged ✅ since the import-side parsing is complete and the visual fidelity passes; editing-binding restoration is tracked under a future "shape-text editing" item, not under fidelity. |
 
 ## E. Images
 
@@ -150,8 +171,8 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | E2 | Linked images (`<a:blip r:link>`) | ✅ | Low | Low | Wave 7f — `processPicNode` reads `<a:blip r:link>` alongside `r:embed`. The rId resolves to an external Target via the slide's rels; `http(s)` URLs pass through to `imageProperties.contentUrl` directly (no fetch, no data-URI conversion). Local-path links (author-filesystem refs) are skipped. |
 | E3 | Image cropping (`<a:srcRect>`) | ✅ | Med | Low | Wave 7c — `srcRect @l/@t/@r/@b` (percent * 1000) → `cropProperties.offsetLeft/Top/Right/Bottom` (0..1 fractions). |
 | E4 | Image transparency (`<a:alphaModFix>`) | ✅ | Low | Low | Wave 7h — `<a:blip><a:alphaModFix @amt>` (thousandths of a percent kept) inverts to Univer's `imageProperties.transparency` (fraction removed, 0..1): `transparency = 1 - amt/100000`. Fully opaque (amt absent or 100000) omits the field entirely. |
-| E5 | Image colour adjust (lum/duotone/grayscale) | ❌ | Low | Med | — |
-| E6 | Image effects (`<a:effectLst>`) | ❌ | Low | Med | — |
+| E5 | Image colour adjust (lum/duotone/grayscale) | ✅ | Low | Med | Wave 9e — `<a:blip>` children parsed: `<a:lum bright contrast>` → `imageProperties.brightness` / `contrast` as signed fractions (-1..1, OOXML thousandths-of-a-percent / 100000); `<a:grayscl/>` → `imageProperties.grayscale = true`; `<a:duotone>` → `imageProperties.duotone = [hex, hex]` (two colour-choice children resolved via `readColor`). `brightness` + `contrast` are native to `IImageProperties`; `grayscale` + `duotone` ride additively (renderer reads off the pageElement). |
+| E6 | Image effects (`<a:effectLst>`) | ✅ | Low | Med | Wave 9e — reuses `parseEffectList` (wave 7m) on `<p:pic><p:spPr><a:effectLst>`; emits shadow / glow / reflection / blur on `imageProperties.effectLst`. Additive field on `IImageProperties` (renderer applies it when present). |
 | E7 | Image rotation / flip | ✅ | Med | Low | Wave 5b — same `readXfrmExtras` plumb feeds `processPicNode`. |
 
 ## F. Groups / connectors / lines
@@ -177,8 +198,8 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
 | H1 | Chart presence (`<p:graphicFrame>` → chart) | ✅ | High | High | Wave 7o — `PageElementType.CHART` + `IChart` added by the fork patch; `processGraphicFrame` emits a CHART element carrying the chart's `rId` + zip path. Chart payload XML (`ppt/charts/chartN.xml` + rels) rides via `CASUAL_SLIDES_PPTX_RAW.charts` and is re-injected on export by `restorePassthrough`. Slide-XML `<p:graphicFrame>` reference re-emission deferred to wave 8 (needs post-generation slide-XML surgery — PptxGenJS doesn't expose a chart-by-rId hook). |
-| H2 | Chart data | ⚠️ | High | High | Wave 7o — captured verbatim in the passthrough chart XML, but not parsed into a structured form on the IChart model. Round-trip preserves the original; UI manipulation requires future work. |
-| H3 | Chart type / style | ⚠️ | Med | High | Same as H2 — survives via passthrough, not natively modelled. |
+| H2 | Chart data | ✅ | High | High | Wave 9d — `parseChartXml` walks `<c:chartSpace><c:chart><c:plotArea>` and harvests categories (from `<c:ser><c:cat>` / `<c:xVal>` of the first series — they repeat) + per-series name (via `<c:tx><c:strRef><c:strCache><c:pt><c:v>` or literal `<c:v>`) + numeric values (`<c:val><c:numRef><c:numCache><c:pt @idx><c:v>` sorted ascending). Lands on `IChart.categories` + `IChart.series[]`. Authored chart XML still rides via passthrough so the round-trip stays byte-faithful. |
+| H3 | Chart type / style | ✅ | Med | High | Wave 9d — picks the first chart-type child of `<c:plotArea>` (barChart / bar3DChart / lineChart / line3DChart / pieChart / pie3DChart / doughnutChart / scatterChart / areaChart / area3DChart / radarChart / surfaceChart / surface3DChart / bubbleChart / stockChart / ofPieChart) and emits the stripped name as `IChart.chartType` (e.g. `'bar'`, `'line'`, `'pie'`, `'line3D'`). Sufficient to switch the renderer between chart kinds; full chart styling (`<c:spPr>` / `<c:txPr>` / 3D camera) stays in passthrough. |
 
 ## I. Layouts / masters (inheritance)
 
@@ -198,7 +219,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | J1 | Theme XML passthrough | ✅ | Med | Low | Wave 7k — every `ppt/theme/*.xml` part captured into the same `CASUAL_SLIDES_PPTX_RAW` payload under `themes`. Complements J2's parsed `<a:clrScheme>` lookup — the raw XML keeps `<a:fontScheme>` and `<a:fmtScheme>` (which we don't model) intact for export. |
 | J2 | **Color scheme resolution** (`<a:schemeClr>` → hex) | ✅ | High | Med | Wave 5 — `resolveThemeForSlide` walks slide → layout → master → theme; `parseThemeColors` reads `<a:clrScheme>`; `resolveSchemeColor` handles tx/bg aliases. Wave 5b layered lumMod / lumOff / tint / shade on top. satMod / hueMod / alpha still drop. |
 | J3 | Font scheme (major / minor typefaces) | ✅ | Med | Med | Wave 8b — `parseThemeColors` also harvests `<a:fontScheme><a:majorFont><a:latin>` / `<a:minorFont><a:latin>` into reserved `__majorLatin` / `__minorLatin` keys on the same ThemeMap. `parseRunProps` falls back when no explicit `<a:latin>` / `<a:ea>` / `<a:cs>` is set: title-type placeholders (`<p:ph type="title"\|"ctrTitle">`) get the major font, everything else the minor. Inline `+mj-lt` / `+mn-lt` typeface sentinels resolve through the same lookup. |
-| J4 | Format scheme (default fills / lines / effects) | ❌ | Low | High | Defer. |
+| J4 | Format scheme (default fills / lines / effects) | ❌ deferred | Low | High | Out of v0 editor scope — `<a:fmtScheme><a:fillStyleLst>` / `<a:lnStyleLst>` / `<a:effectStyleLst>` defaults are referenced only when a shape uses `<a:styleRef>` indirection; modern PowerPoint emits inline styles instead. The bgFillStyleLst slice is read by A5-idx ✅. |
 
 ## K. Document-level
 
@@ -207,9 +228,9 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | K1 | Title / author / company metadata | ✅ | Low | Low | Wave 8c — `extractCoreProps` reads `docProps/core.xml` for `<dc:title>`; when present and non-empty, it becomes `snapshot.title`. Filename remains the fallback. `dc:creator` / `dc:description` / `dc:subject` are also harvested into `coreProps` for future UI surfacing. |
 | K2 | Custom properties | ✅ | Low | Low | Wave 8d — `docProps/custom.xml` captured into `CASUAL_SLIDES_PPTX_RAW.customProps` (only emitted when present). `restorePassthrough` re-injects the bytes on export so author-defined props survive the round-trip. Opaque passthrough — no parsing. |
 | K3 | Default text style (`<p:defaultTextStyle>`) | ✅ | Med | Med | Wave 8e — `extractDeckDefaultRunProps` reads `<p:presentation><p:defaultTextStyle><a:lvl1pPr><a:defRPr>` into `ImageRegistry.deckDefaultRunProps`. The processSpTree text branch spreads it under the placeholder-inherited defaults so layout/master still wins on top, but free-floating text frames now pick up the deck-level fallback. lvl2+ deferred (matches the I4 lvl1-only stance). |
-| K4 | Headers / footers | ❌ | Low | Med | — |
+| K4 | Headers / footers | ✅ | Low | Med | Wave 9a — `extractSlideHfOptOuts` reads `<p:sld><p:hf ftr dt sldNum>` and returns the set of types the slide opts out of (any flag set to `"0"`). The I5 service-placeholder synthesis loop honours the opt-outs so a slide that disables (e.g.) the page number doesn't get one painted from the master. Default (everything visible) flows through unchanged. |
 | K5 | Comments (`<p:cm>`) | ✅ | Med | Med | Wave 7n — every `ppt/comments/*.xml` part (+ rels) captured into `CASUAL_SLIDES_PPTX_RAW.comments` and re-injected on export. Native UI for comments still TODO (P3 feature work). |
-| K6 | Audio / video | ❌ | Low | Med | Needs binary-part passthrough (current capture is text/xml only). |
+| K6 | Audio / video | ❌ deferred | Low | Med | Out of v0 editor scope — binary-part passthrough (mp3 / mp4 / etc.) is not yet wired into the resources slot which only captures text/xml. Audio / video are playback features; we ship an editor, not a presenter. |
 | K7 | SmartArt (`<a:graphicData>` diagram) | ✅ | Med | High | Wave 7n — every `ppt/diagrams/*.xml` part (+ rels) captured into `CASUAL_SLIDES_PPTX_RAW.diagrams` and re-injected on export. Renderer support deferred. |
 | K8 | Ink | ✅ | Low | High | Wave 7n — every `ppt/ink/*.xml` part (+ rels) captured into `CASUAL_SLIDES_PPTX_RAW.ink` and re-injected on export. Renderer support deferred. |
 

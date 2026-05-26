@@ -3501,6 +3501,654 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(sldNum.left, 'sldNum left inherited from master').toBeCloseTo(768, 0);
   });
 
+  test('pptx import wave 9a — slide <p:hf> opts out service placeholders (K4)', async ({ page }) => {
+    // Master declares both ftr and sldNum service placeholders. Slide
+    // sets `<p:hf sldNum="0"/>`, opting out of the page number. After
+    // import, the footer survives but the slide-number is skipped.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      // Slide opts out of slide-number via <p:hf sldNum="0"/>; ftr stays
+      // implicit (default = visible).
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `<p:hf sldNum="0"/>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>` +
+        `</Relationships>`;
+      const layout =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sldLayout>`;
+      const layoutRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>` +
+        `</Relationships>`;
+      const master =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        // ftr
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="ftr"/><p:cNvSpPr/><p:nvPr><p:ph type="ftr" sz="quarter" idx="11"/></p:nvPr></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="457200" y="5943600"/><a:ext cx="2743200" cy="274320"/></a:xfrm></p:spPr>` +
+        `<p:txBody><a:bodyPr/><a:lstStyle/>` +
+        `<a:p><a:r><a:rPr lang="en-US"/><a:t>FooterText</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        // sldNum — slide opts out, should NOT appear in the result.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="3" name="sldNum"/><p:cNvSpPr/><p:nvPr><p:ph type="sldNum" sz="quarter" idx="12"/></p:nvPr></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="7315200" y="5943600"/><a:ext cx="914400" cy="274320"/></a:xfrm></p:spPr>` +
+        `<p:txBody><a:bodyPr/><a:lstStyle/>` +
+        `<a:p><a:r><a:rPr lang="en-US"/><a:t>PageNum</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sldMaster>`;
+      const masterRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/slideLayouts/slideLayout1.xml', layout);
+      zip.file('ppt/slideLayouts/_rels/slideLayout1.xml.rels', layoutRels);
+      zip.file('ppt/slideMasters/slideMaster1.xml', master);
+      zip.file('ppt/slideMasters/_rels/slideMaster1.xml.rels', masterRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave9a-hf-optout.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    expect(firstPage, 'first page extracted').toBeTruthy();
+    const elements = Object.values(firstPage.pageElements ?? {});
+    // Only the footer should have been synthesised (sldNum opted out).
+    expect(elements.length, 'only footer synthesised (sldNum opted out)').toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ftr = elements.find((e: any) => e.richText?.text?.includes('FooterText')) as any;
+    expect(ftr, 'footer survives <p:hf> default').toBeTruthy();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sldNum = elements.find((e: any) => e.id?.includes('svc-sldNum'));
+    expect(sldNum, 'sldNum suppressed by <p:hf sldNum="0">').toBeFalsy();
+  });
+
+  test('pptx import wave 9b — <p:bgRef idx> resolves bgFillStyleLst (A5-idx)', async ({ page }) => {
+    // Master carries `<p:bg><p:bgRef idx="1002">` (2nd bgFillStyleLst
+    // entry). Theme's bgFillStyleLst[1] is <a:solidFill><a:srgbClr
+    // val="3366CC"/>. After import the slide's pageBackgroundFill
+    // should be #3366CC.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      // Slide carries no background of its own — falls through to master.
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>` +
+        `</Relationships>`;
+      const layout =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sldLayout>`;
+      const layoutRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>` +
+        `</Relationships>`;
+      // Master carries the bgRef. idx="1002" → 2nd bgFillStyleLst entry.
+      const master =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld>` +
+        `<p:bg><p:bgRef idx="1002"><a:schemeClr val="bg1"/></p:bgRef></p:bg>` +
+        `<p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sldMaster>`;
+      const masterRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>` +
+        `</Relationships>`;
+      // Theme — bgFillStyleLst with three entries; the 2nd is solidFill #3366CC.
+      const theme =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="TestTheme">` +
+        `<a:themeElements>` +
+        `<a:clrScheme name="Test">` +
+        `<a:dk1><a:srgbClr val="000000"/></a:dk1>` +
+        `<a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>` +
+        `<a:dk2><a:srgbClr val="333333"/></a:dk2>` +
+        `<a:lt2><a:srgbClr val="EEEEEE"/></a:lt2>` +
+        `<a:accent1><a:srgbClr val="FF0000"/></a:accent1>` +
+        `<a:accent2><a:srgbClr val="00FF00"/></a:accent2>` +
+        `<a:accent3><a:srgbClr val="0000FF"/></a:accent3>` +
+        `<a:accent4><a:srgbClr val="FFFF00"/></a:accent4>` +
+        `<a:accent5><a:srgbClr val="00FFFF"/></a:accent5>` +
+        `<a:accent6><a:srgbClr val="FF00FF"/></a:accent6>` +
+        `<a:hlink><a:srgbClr val="0000EE"/></a:hlink>` +
+        `<a:folHlink><a:srgbClr val="551A8B"/></a:folHlink>` +
+        `</a:clrScheme>` +
+        `<a:fontScheme name="TestFonts">` +
+        `<a:majorFont><a:latin typeface="Heading Sans"/></a:majorFont>` +
+        `<a:minorFont><a:latin typeface="Body Serif"/></a:minorFont>` +
+        `</a:fontScheme>` +
+        `<a:fmtScheme name="TestFmt">` +
+        `<a:fillStyleLst>` +
+        `<a:solidFill><a:srgbClr val="111111"/></a:solidFill>` +
+        `<a:solidFill><a:srgbClr val="222222"/></a:solidFill>` +
+        `<a:solidFill><a:srgbClr val="333333"/></a:solidFill>` +
+        `</a:fillStyleLst>` +
+        `<a:lnStyleLst><a:ln/></a:lnStyleLst>` +
+        `<a:effectStyleLst><a:effectStyle/></a:effectStyleLst>` +
+        `<a:bgFillStyleLst>` +
+        `<a:solidFill><a:srgbClr val="AABBCC"/></a:solidFill>` +
+        `<a:solidFill><a:srgbClr val="3366CC"/></a:solidFill>` +
+        `<a:solidFill><a:srgbClr val="DDEEFF"/></a:solidFill>` +
+        `</a:bgFillStyleLst>` +
+        `</a:fmtScheme>` +
+        `</a:themeElements>` +
+        `</a:theme>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/slideLayouts/slideLayout1.xml', layout);
+      zip.file('ppt/slideLayouts/_rels/slideLayout1.xml.rels', layoutRels);
+      zip.file('ppt/slideMasters/slideMaster1.xml', master);
+      zip.file('ppt/slideMasters/_rels/slideMaster1.xml.rels', masterRels);
+      zip.file('ppt/theme/theme1.xml', theme);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave9b-bgref-idx.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    expect(firstPage, 'first page extracted').toBeTruthy();
+    const bgHex = (firstPage?.pageBackgroundFill?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(bgHex, 'bgRef idx=1002 resolved to bgFillStyleLst[1]').toBe('3366CC');
+  });
+
+  test('pptx import wave 9c — gradient stops harvested (A3 + D9)', async ({ page }) => {
+    // Shape carries <a:gradFill> with 3 stops + a 45° linear angle.
+    // After import the shape's shapeProperties.shapeBackgroundFill
+    // keeps the first-stop hex (existing degradation) AND a new
+    // gradientFill payload carries kind + angle + stops.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="rect-grad"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="3657600" cy="2743200"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+        `<a:gradFill flip="none" rotWithShape="1">` +
+        `<a:gsLst>` +
+        `<a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs>` +
+        `<a:gs pos="50000"><a:srgbClr val="00FF00"/></a:gs>` +
+        `<a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs>` +
+        `</a:gsLst>` +
+        `<a:lin ang="2700000" scaled="1"/>` +
+        `</a:gradFill>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave9c-grad.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shape = Object.values(firstPage.pageElements ?? {}).find((e: any) => e.shape?.shapeType === 'rect') as any;
+    expect(shape, 'shape extracted').toBeTruthy();
+    // Degraded flat colour preserved (first stop = red).
+    const flat = (shape.shape?.shapeProperties?.shapeBackgroundFill?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(flat, 'first-stop fallback hex preserved').toBe('FF0000');
+    // Full gradient payload.
+    const grad = shape.shape?.shapeProperties?.gradientFill;
+    expect(grad, 'gradient payload emitted').toBeTruthy();
+    expect(grad.kind).toBe('linear');
+    // 2700000 / 60000 = 45°.
+    expect(grad.angle).toBeCloseTo(45, 0);
+    expect(grad.stops.length).toBe(3);
+    expect(grad.stops[0].pos).toBeCloseTo(0, 3);
+    expect((grad.stops[0].color ?? '').toUpperCase().replace('#', '')).toBe('FF0000');
+    expect(grad.stops[1].pos).toBeCloseTo(0.5, 3);
+    expect((grad.stops[1].color ?? '').toUpperCase().replace('#', '')).toBe('00FF00');
+    expect(grad.stops[2].pos).toBeCloseTo(1, 3);
+    expect((grad.stops[2].color ?? '').toUpperCase().replace('#', '')).toBe('0000FF');
+  });
+
+  test('pptx import wave 9d — chart data + type parsed (H2 + H3)', async ({ page }) => {
+    // Slide carries a graphicFrame referencing chart1.xml. The chart
+    // is a <c:barChart> with categories [A, B, C] and series Sales
+    // [10, 20, 30]. After import, the CHART element's `chart` payload
+    // carries chartType='bar' + categories + series.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:graphicFrame>` +
+        `<p:nvGraphicFramePr><p:cNvPr id="2" name="chart-1"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>` +
+        `<p:xfrm><a:off x="914400" y="914400"/><a:ext cx="3657600" cy="2743200"/></p:xfrm>` +
+        `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">` +
+        `<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId2"/>` +
+        `</a:graphicData></a:graphic>` +
+        `</p:graphicFrame>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/>` +
+        `</Relationships>`;
+      const chartXml =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+        `<c:chart>` +
+        `<c:plotArea>` +
+        `<c:layout/>` +
+        `<c:barChart>` +
+        `<c:barDir val="col"/>` +
+        `<c:grouping val="clustered"/>` +
+        `<c:ser>` +
+        `<c:idx val="0"/><c:order val="0"/>` +
+        `<c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Sales</c:v></c:pt></c:strCache></c:strRef></c:tx>` +
+        `<c:cat><c:strRef><c:f>Sheet1!$A$2:$A$4</c:f><c:strCache><c:ptCount val="3"/>` +
+        `<c:pt idx="0"><c:v>A</c:v></c:pt>` +
+        `<c:pt idx="1"><c:v>B</c:v></c:pt>` +
+        `<c:pt idx="2"><c:v>C</c:v></c:pt>` +
+        `</c:strCache></c:strRef></c:cat>` +
+        `<c:val><c:numRef><c:f>Sheet1!$B$2:$B$4</c:f><c:numCache><c:ptCount val="3"/>` +
+        `<c:pt idx="0"><c:v>10</c:v></c:pt>` +
+        `<c:pt idx="1"><c:v>20</c:v></c:pt>` +
+        `<c:pt idx="2"><c:v>30</c:v></c:pt>` +
+        `</c:numCache></c:numRef></c:val>` +
+        `</c:ser>` +
+        `</c:barChart>` +
+        `</c:plotArea>` +
+        `</c:chart>` +
+        `</c:chartSpace>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/charts/chart1.xml', chartXml);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave9d-chart.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const chartEl = Object.values(firstPage.pageElements ?? {}).find((e: any) => e.type === 7) as any;
+    expect(chartEl, 'CHART element extracted').toBeTruthy();
+    expect(chartEl.chart?.chartType, 'chartType stripped to "bar"').toBe('bar');
+    expect(chartEl.chart?.categories, 'categories captured').toEqual(['A', 'B', 'C']);
+    expect(chartEl.chart?.series, 'series captured').toBeTruthy();
+    expect(chartEl.chart.series.length, 'one series').toBe(1);
+    expect(chartEl.chart.series[0].name, 'series name').toBe('Sales');
+    expect(chartEl.chart.series[0].values, 'series values').toEqual([10, 20, 30]);
+  });
+
+  test('pptx import wave 9e — image colour adjust + effects (E5 + E6)', async ({ page }) => {
+    // Slide carries <p:pic> with <a:blip> containing:
+    //   <a:lum bright="20000" contrast="-10000"/>  → +20 / -10 %
+    //   <a:grayscl/>
+    //   <a:duotone><a:srgbClr val="FF0000"/><a:srgbClr val="0000FF"/></a:duotone>
+    //   <a:effectLst><a:outerShdw blurRad="50800" dist="38100"><a:srgbClr val="000000"/></a:outerShdw></a:effectLst>
+    // After import, imageProperties carries brightness, contrast,
+    // grayscale, duotone, and effectLst.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      // Minimal 1×1 PNG (red pixel) base64 → bytes for the image part.
+      const png1x1Red = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9Q DwADhgGAWjR9awAAAABJRU5ErkJggg=='.replace(/\s+/g, '');
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:pic>` +
+        `<p:nvPicPr><p:cNvPr id="2" name="pic1"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>` +
+        `<p:blipFill>` +
+        `<a:blip r:embed="rId2">` +
+        `<a:lum bright="20000" contrast="-10000"/>` +
+        `<a:grayscl/>` +
+        `<a:duotone>` +
+        `<a:srgbClr val="FF0000"/>` +
+        `<a:srgbClr val="0000FF"/>` +
+        `</a:duotone>` +
+        `</a:blip>` +
+        `<a:stretch><a:fillRect/></a:stretch>` +
+        `</p:blipFill>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="1828800" cy="1371600"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
+        `<a:effectLst>` +
+        `<a:outerShdw blurRad="50800" dist="38100" dir="2700000">` +
+        `<a:srgbClr val="000000"/>` +
+        `</a:outerShdw>` +
+        `</a:effectLst>` +
+        `</p:spPr>` +
+        `</p:pic>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>` +
+        `</Relationships>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/media/image1.png', png1x1Red, { base64: true });
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave9e-imgcolor.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pic = Object.values(firstPage.pageElements ?? {}).find((e: any) => e.type === 1) as any;
+    expect(pic, 'image element extracted').toBeTruthy();
+    const ip = pic.image?.imageProperties;
+    expect(ip, 'imageProperties present').toBeTruthy();
+    // E5 — lum bright="20000" → 0.2; contrast="-10000" → -0.1.
+    expect(ip.brightness, 'brightness +0.2').toBeCloseTo(0.2, 3);
+    expect(ip.contrast, 'contrast -0.1').toBeCloseTo(-0.1, 3);
+    expect(ip.grayscale, 'grayscale flag set').toBe(true);
+    expect(ip.duotone, 'duotone hex pair').toBeTruthy();
+    expect((ip.duotone[0] ?? '').toUpperCase().replace('#', '')).toBe('FF0000');
+    expect((ip.duotone[1] ?? '').toUpperCase().replace('#', '')).toBe('0000FF');
+    // E6 — effectLst shadow.
+    expect(ip.effectLst, 'effectLst present').toBeTruthy();
+    expect(ip.effectLst.outerShdw, 'outerShdw decoded').toBeTruthy();
+    expect((ip.effectLst.outerShdw.color?.rgb ?? '').toUpperCase().replace('#', '')).toBe('000000');
+    expect(ip.effectLst.outerShdw.blurRad).toBe(50800);
+    expect(ip.effectLst.outerShdw.dist).toBe(38100);
+  });
+
+  test('pptx import wave 9f — custGeom path → SVG pathData (D6)', async ({ page }) => {
+    // Slide carries a freeform <a:custGeom> path (triangle, normalised
+    // to fractional coords). After import the shape's
+    // shapeProperties.pathData should hold the SVG-equivalent string.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      // Coord space w=10000 h=10000. Triangle at (0,10000) → (5000,0) → (10000,10000), closed.
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="freeform"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="3657600" cy="2743200"/></a:xfrm>` +
+        `<a:custGeom>` +
+        `<a:avLst/>` +
+        `<a:gdLst/>` +
+        `<a:ahLst/>` +
+        `<a:cxnLst/>` +
+        `<a:rect l="0" t="0" r="10000" b="10000"/>` +
+        `<a:pathLst>` +
+        `<a:path w="10000" h="10000">` +
+        `<a:moveTo><a:pt x="0" y="10000"/></a:moveTo>` +
+        `<a:lnTo><a:pt x="5000" y="0"/></a:lnTo>` +
+        `<a:lnTo><a:pt x="10000" y="10000"/></a:lnTo>` +
+        `<a:close/>` +
+        `</a:path>` +
+        `</a:pathLst>` +
+        `</a:custGeom>` +
+        `<a:solidFill><a:srgbClr val="33AA66"/></a:solidFill>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave9f-custgeom.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shape = Object.values(firstPage.pageElements ?? {}).find((e: any) => e.type === 0) as any;
+    expect(shape, 'shape extracted').toBeTruthy();
+    expect(shape.shape?.shapeType, 'shapeType set to custGeom (no prstGeom)').toBe('custGeom');
+    const pd = shape.shape?.shapeProperties?.pathData;
+    expect(pd, 'pathData emitted').toBeTruthy();
+    expect(typeof pd).toBe('string');
+    // Expect normalised fractional coords (rounded to 4dp).
+    expect(pd).toContain('M0.0000,1.0000');
+    expect(pd).toContain('L0.5000,0.0000');
+    expect(pd).toContain('L1.0000,1.0000');
+    expect(pd.endsWith('Z')).toBe(true);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.
