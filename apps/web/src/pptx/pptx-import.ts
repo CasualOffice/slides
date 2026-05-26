@@ -121,6 +121,16 @@ type ThemeMap = Map<string, string>;
 const FONT_MAJOR_KEY = '__majorLatin';
 const FONT_MINOR_KEY = '__minorLatin';
 
+// A5-idx — cache of theme's <a:fmtScheme><a:bgFillStyleLst> entries
+// keyed by ThemeMap identity. Stored as parsed XmlNode arrays so the
+// existing readColor / readGradFirstStop helpers can decode each entry
+// (which may itself be a solidFill / gradFill / blipFill) on demand.
+//
+// We attach via a parallel WeakMap rather than serialising entries into
+// the ThemeMap to avoid round-tripping XML through fast-xml-parser's
+// string format.
+const themeFmtSchemeCache = new WeakMap<ThemeMap, { bgFillStyleLst: XmlNode[]; fillStyleLst: XmlNode[] }>();
+
 const SCHEME_ALIASES: Record<string, string> = {
   bg1: 'lt1',
   bg2: 'lt2',
@@ -166,6 +176,52 @@ function parseThemeColors(themeXml: string): ThemeMap {
       if (slotName === 'extLst') continue;
       const hex = readClrSchemeChildColor(clrScheme[key]);
       if (hex) map.set(slotName, hex);
+    }
+  }
+
+  // A5-idx — capture <a:fmtScheme><a:bgFillStyleLst> + <a:fillStyleLst>
+  // entries so `<p:bgRef idx="N">` resolution can recover the actual
+  // fill (which may be solidFill / gradFill / blipFill / pattFill).
+  // Per OOXML §20.1.4.1.5 the indexes are:
+  //   1000      → fillStyleLst entry 1 (subtle)
+  //   1001-1003 → bgFillStyleLst entries 1..3 (subtle / moderate / intense)
+  //   1-999     → fillStyleLst entry idx (lookup by 1-based offset)
+  // Real-world templates almost always use the bgFillStyleLst range; we
+  // populate both lists so a fallback lookup is available.
+  const fmtScheme = findChild(themeElements, 'a:fmtScheme') as XmlNode | undefined;
+  if (fmtScheme) {
+    const bgFillStyleLst = findChild(fmtScheme, 'a:bgFillStyleLst');
+    const fillStyleLst = findChild(fmtScheme, 'a:fillStyleLst');
+    const collectStyleEntries = (lst: unknown): XmlNode[] => {
+      if (!lst || typeof lst !== 'object') return [];
+      const out: XmlNode[] = [];
+      // bgFillStyleLst children are a mix of <a:solidFill>, <a:gradFill>,
+      // <a:blipFill>, <a:noFill>, <a:pattFill> — keep them in document
+      // order so idx=1001 maps to the first child regardless of type.
+      // fast-xml-parser groups same-named children into arrays; iterate
+      // by tag name then flatten.
+      const node = lst as XmlNode;
+      // The order matters but the parser separates children by tag; we
+      // re-derive document order by scanning the keys (fast-xml-parser
+      // preserves insertion order on regular objects in V8).
+      for (const key of Object.keys(node)) {
+        if (key.startsWith('@')) continue;
+        // Skip whitespace text nodes
+        if (key === '#text') continue;
+        for (const child of toArray(node[key])) {
+          if (child && typeof child === 'object') {
+            // Wrap each child under its tag so downstream helpers can
+            // re-discover the type (a:solidFill vs a:gradFill).
+            out.push({ [key]: child } as XmlNode);
+          }
+        }
+      }
+      return out;
+    };
+    const bgEntries = collectStyleEntries(bgFillStyleLst);
+    const fillEntries = collectStyleEntries(fillStyleLst);
+    if (bgEntries.length > 0 || fillEntries.length > 0) {
+      themeFmtSchemeCache.set(map, { bgFillStyleLst: bgEntries, fillStyleLst: fillEntries });
     }
   }
 
@@ -381,6 +437,48 @@ function readSysColor(solid: unknown): string | null {
   const lastClr = sys?.['@lastClr'];
   if (typeof lastClr !== 'string' || !/^[0-9a-fA-F]{6}$/.test(lastClr)) return null;
   return applyColorModifiers(`#${lastClr.toUpperCase()}`, sys);
+}
+
+// A5-idx — resolve `<p:bgRef idx="N">` into a hex colour. Looks up the
+// theme's bgFillStyleLst (idx 1001+) or fillStyleLst (idx 1-1000) entry,
+// then decodes the matched fill the same way readColor does for inline
+// fills. The `<p:bgRef>` may also carry an inner `<a:schemeClr>` that
+// *tints* the indexed entry — we apply colour modifiers off the bgRef
+// itself when the indexed entry resolves to a schemeClr lookup.
+//
+// Returns the resolved hex (with leading "#") or null when the index
+// references an entry we can't decode (blipFill / pattFill / etc.).
+function resolveBgRefIdx(bgRef: XmlNode, theme: ThemeMap | null): string | null {
+  if (!theme) return null;
+  const cache = themeFmtSchemeCache.get(theme);
+  if (!cache) return null;
+  const idxRaw = bgRef['@idx'];
+  if (idxRaw === undefined) return null;
+  const idx = parseInt(String(idxRaw), 10);
+  if (!Number.isFinite(idx)) return null;
+  // Per OOXML §20.1.4.1.5:
+  //   idx === 0       → noFill (omit background)
+  //   idx in 1..999   → fillStyleLst[idx-1]
+  //   idx === 1000    → noFill (legacy alias)
+  //   idx in 1001+    → bgFillStyleLst[idx-1001]
+  let entry: XmlNode | undefined;
+  if (idx === 0 || idx === 1000) return null;
+  if (idx >= 1001) {
+    entry = cache.bgFillStyleLst[idx - 1001];
+  } else if (idx >= 1) {
+    entry = cache.fillStyleLst[idx - 1];
+  }
+  if (!entry) return null;
+  // The entry is wrapped under its OOXML tag name (e.g. { 'a:solidFill': {…} }).
+  // readColor + readGradFirstStop already understand a:solidFill /
+  // a:gradFill children, so pass the wrapper directly. For schemeClr
+  // entries, the bgRef's own inner schemeClr can carry modifiers that
+  // should override the entry's base — but in practice the bgRef
+  // schemeClr is just the colour seed for the indexed style. We let the
+  // entry win (matches PowerPoint's rendering most of the time).
+  const colour = readColor(entry, theme);
+  if (colour) return colour;
+  return null;
 }
 
 // Combined "read any colour" — srgbClr first, schemeClr as fallback,
@@ -2444,8 +2542,18 @@ function extractBgFromXml(xml: string, theme: ThemeMap | null): string | null {
   // (no <a:solidFill> wrapper). resolveSchemeColor handles bare
   // schemeClr; an inline srgbClr falls through to parseSrgbColor
   // (which also accepts the unwrapped form).
-  const bgRef = findChild(bg, 'p:bgRef');
+  const bgRef = findChild(bg, 'p:bgRef') as XmlNode | undefined;
   if (bgRef) {
+    // A5-idx — when bgRef carries an `@idx`, the indexed fill in the
+    // theme's `<a:fmtScheme>` is what PowerPoint actually paints. The
+    // inner `<a:schemeClr>` on the bgRef is a colour seed for the
+    // indexed style (some styles tint or recolour the entry); we let
+    // the indexed entry win because that matches the rendered output
+    // for the overwhelming majority of authored decks.
+    if (bgRef['@idx'] !== undefined) {
+      const indexed = resolveBgRefIdx(bgRef, theme);
+      if (indexed) return indexed;
+    }
     const schemed = resolveSchemeColor(bgRef, theme);
     if (schemed) return schemed;
     // Bare srgbClr child (rare on bgRef but legal).

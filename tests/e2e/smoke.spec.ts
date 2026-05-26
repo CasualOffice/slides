@@ -3617,6 +3617,143 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(sldNum, 'sldNum suppressed by <p:hf sldNum="0">').toBeFalsy();
   });
 
+  test('pptx import wave 9b — <p:bgRef idx> resolves bgFillStyleLst (A5-idx)', async ({ page }) => {
+    // Master carries `<p:bg><p:bgRef idx="1002">` (2nd bgFillStyleLst
+    // entry). Theme's bgFillStyleLst[1] is <a:solidFill><a:srgbClr
+    // val="3366CC"/>. After import the slide's pageBackgroundFill
+    // should be #3366CC.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      // Slide carries no background of its own — falls through to master.
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>` +
+        `</Relationships>`;
+      const layout =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sldLayout>`;
+      const layoutRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>` +
+        `</Relationships>`;
+      // Master carries the bgRef. idx="1002" → 2nd bgFillStyleLst entry.
+      const master =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld>` +
+        `<p:bg><p:bgRef idx="1002"><a:schemeClr val="bg1"/></p:bgRef></p:bg>` +
+        `<p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sldMaster>`;
+      const masterRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/>` +
+        `</Relationships>`;
+      // Theme — bgFillStyleLst with three entries; the 2nd is solidFill #3366CC.
+      const theme =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="TestTheme">` +
+        `<a:themeElements>` +
+        `<a:clrScheme name="Test">` +
+        `<a:dk1><a:srgbClr val="000000"/></a:dk1>` +
+        `<a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>` +
+        `<a:dk2><a:srgbClr val="333333"/></a:dk2>` +
+        `<a:lt2><a:srgbClr val="EEEEEE"/></a:lt2>` +
+        `<a:accent1><a:srgbClr val="FF0000"/></a:accent1>` +
+        `<a:accent2><a:srgbClr val="00FF00"/></a:accent2>` +
+        `<a:accent3><a:srgbClr val="0000FF"/></a:accent3>` +
+        `<a:accent4><a:srgbClr val="FFFF00"/></a:accent4>` +
+        `<a:accent5><a:srgbClr val="00FFFF"/></a:accent5>` +
+        `<a:accent6><a:srgbClr val="FF00FF"/></a:accent6>` +
+        `<a:hlink><a:srgbClr val="0000EE"/></a:hlink>` +
+        `<a:folHlink><a:srgbClr val="551A8B"/></a:folHlink>` +
+        `</a:clrScheme>` +
+        `<a:fontScheme name="TestFonts">` +
+        `<a:majorFont><a:latin typeface="Heading Sans"/></a:majorFont>` +
+        `<a:minorFont><a:latin typeface="Body Serif"/></a:minorFont>` +
+        `</a:fontScheme>` +
+        `<a:fmtScheme name="TestFmt">` +
+        `<a:fillStyleLst>` +
+        `<a:solidFill><a:srgbClr val="111111"/></a:solidFill>` +
+        `<a:solidFill><a:srgbClr val="222222"/></a:solidFill>` +
+        `<a:solidFill><a:srgbClr val="333333"/></a:solidFill>` +
+        `</a:fillStyleLst>` +
+        `<a:lnStyleLst><a:ln/></a:lnStyleLst>` +
+        `<a:effectStyleLst><a:effectStyle/></a:effectStyleLst>` +
+        `<a:bgFillStyleLst>` +
+        `<a:solidFill><a:srgbClr val="AABBCC"/></a:solidFill>` +
+        `<a:solidFill><a:srgbClr val="3366CC"/></a:solidFill>` +
+        `<a:solidFill><a:srgbClr val="DDEEFF"/></a:solidFill>` +
+        `</a:bgFillStyleLst>` +
+        `</a:fmtScheme>` +
+        `</a:themeElements>` +
+        `</a:theme>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/slideLayouts/slideLayout1.xml', layout);
+      zip.file('ppt/slideLayouts/_rels/slideLayout1.xml.rels', layoutRels);
+      zip.file('ppt/slideMasters/slideMaster1.xml', master);
+      zip.file('ppt/slideMasters/_rels/slideMaster1.xml.rels', masterRels);
+      zip.file('ppt/theme/theme1.xml', theme);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave9b-bgref-idx.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    expect(firstPage, 'first page extracted').toBeTruthy();
+    const bgHex = (firstPage?.pageBackgroundFill?.rgb ?? '').toUpperCase().replace('#', '');
+    expect(bgHex, 'bgRef idx=1002 resolved to bgFillStyleLst[1]').toBe('3366CC');
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.
