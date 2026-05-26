@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..dcb07e982f7ee74cc3d562bdec2e65904534354a 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1cac05c4bce4e7dedfdd1f9c0ce0e5f6edeb9b35 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -198,7 +198,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..dcb07e982f7ee74cc3d562bdec2e6590
  		}
  		if (isNotNull === false) return;
  		return new _univerjs_engine_render.RichText(this._localeService, id, config);
-@@ -756,9 +878,46 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -756,9 +878,81 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -243,19 +243,74 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..dcb07e982f7ee74cc3d562bdec2e6590
 +			} else if (cap === "flat") {
 +				strokeStyle.strokeLineCap = "butt";
 +			}
++		}
++		// Casual Slides patch — outerShdw (drop shadow) via the canvas
++		// shadow* shape props. effectLst.outerShdw carries `color,
++		// blurRad, dist, dir` where dist is in EMU and dir is in
++		// 60000ths of a degree, clockwise from 3-o'clock (east) per
++		// the OOXML spec. We convert to pixel offsets:
++		//   shadowOffsetX = (dist / EMU_PER_PX) * cos(angleRad)
++		//   shadowOffsetY = (dist / EMU_PER_PX) * sin(angleRad)
++		// blurRad in EMU is mapped to canvas shadowBlur in px (blurRad
++		// covers a much wider visual area on canvas than in PowerPoint,
++		// so we scale down by ~2 — PowerPoint's "blur 12.7pt" looks
++		// roughly correct as canvas shadowBlur ~6). shadowOpacity is
++		// fixed at 0.4 since the OOXML alpha (carried separately) is
++		// not parsed end-to-end yet.
++		// blurRad is intentionally simplified — canvas shadowBlur is
++		// browser-tuned and high blur values can quintuple paint cost
++		// on every redraw. Glow / reflection / innerShdw are not
++		// addressed here.
++		const EMU_PER_PX = 9525;
++		const shadowStyle = {};
++		const outerShdw = shapeProperties && shapeProperties.effectLst && shapeProperties.effectLst.outerShdw;
++		if (outerShdw) {
++			const distEmu = typeof outerShdw.dist === "number" ? outerShdw.dist : 0;
++			const distPx = distEmu / EMU_PER_PX;
++			const dirRaw = typeof outerShdw.dir === "number" ? outerShdw.dir : 0;
++			const angleRad = (dirRaw / 60000) * Math.PI / 180;
++			const blurEmu = typeof outerShdw.blurRad === "number" ? outerShdw.blurRad : 0;
++			const blurPx = blurEmu / EMU_PER_PX / 2;
++			shadowStyle.shadowEnabled = true;
++			shadowStyle.shadowColor = (0, _univerjs_core.getColorStyle)(outerShdw.color) || "rgba(0,0,0,1)";
++			shadowStyle.shadowOffsetX = distPx * Math.cos(angleRad);
++			shadowStyle.shadowOffsetY = distPx * Math.sin(angleRad);
++			shadowStyle.shadowBlur = blurPx;
++			shadowStyle.shadowOpacity = 0.4;
++			shadowStyle.shadowForStrokeEnabled = true;
  		}
  		if (shapeType === "rect") return new _univerjs_engine_render.Rect(id, {
  			fill,
-@@ -796,7 +955,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
- 			...strokeStyle
+@@ -775,7 +969,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 			flipX,
+ 			flipY,
+ 			forceRender: true,
+-			...strokeStyle
++			...strokeStyle,
++			...shadowStyle
+ 		});
+ 		if (shapeType === "roundRect") return new _univerjs_engine_render.Rect(id, {
+ 			fill,
+@@ -793,10 +988,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 			flipY,
+ 			forceRender: true,
+ 			radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
+-			...strokeStyle
++			...strokeStyle,
++			...shadowStyle
  		});
  		if (shapeType === "ellipse") {
 -			console.warn(shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius);
  			return new _univerjs_engine_render.Circle(id, {
  				fill,
  				top,
-@@ -816,6 +974,126 @@ var ShapeAdaptor = class extends ObjectAdaptor {
- 				...strokeStyle
+@@ -813,9 +1008,132 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 				flipY,
+ 				forceRender: true,
+ 				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
+-				...strokeStyle
++				...strokeStyle,
++				...shadowStyle
  			});
  		}
 +		// Casual Slides patch — per-prstGeom Path rendering for the most
@@ -355,7 +410,8 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..dcb07e982f7ee74cc3d562bdec2e6590
 +				flipX,
 +				flipY,
 +				forceRender: true,
-+				...strokeStyle
++				...strokeStyle,
++				...shadowStyle
 +			});
 +		}
 +		// Fallback for everything else — at least keep the element visible
@@ -376,13 +432,14 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..dcb07e982f7ee74cc3d562bdec2e6590
 +			flipX,
 +			flipY,
 +			forceRender: true,
-+			...strokeStyle
++			...strokeStyle,
++			...shadowStyle
 +		});
  	}
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..8ef975d8349ccb45e9717f1e15173f6d546df47a 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..cc2079239833cfbdd4652b2446fe8ef26589e46b 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
@@ -589,7 +646,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..8ef975d8349ccb45e9717f1e15173f6d
  		}
  		if (isNotNull === false) return;
  		return new RichText(this._localeService, id, config);
-@@ -755,9 +877,46 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -755,9 +877,81 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -634,19 +691,74 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..8ef975d8349ccb45e9717f1e15173f6d
 +			} else if (cap === "flat") {
 +				strokeStyle.strokeLineCap = "butt";
 +			}
++		}
++		// Casual Slides patch — outerShdw (drop shadow) via the canvas
++		// shadow* shape props. effectLst.outerShdw carries `color,
++		// blurRad, dist, dir` where dist is in EMU and dir is in
++		// 60000ths of a degree, clockwise from 3-o'clock (east) per
++		// the OOXML spec. We convert to pixel offsets:
++		//   shadowOffsetX = (dist / EMU_PER_PX) * cos(angleRad)
++		//   shadowOffsetY = (dist / EMU_PER_PX) * sin(angleRad)
++		// blurRad in EMU is mapped to canvas shadowBlur in px (blurRad
++		// covers a much wider visual area on canvas than in PowerPoint,
++		// so we scale down by ~2 — PowerPoint's "blur 12.7pt" looks
++		// roughly correct as canvas shadowBlur ~6). shadowOpacity is
++		// fixed at 0.4 since the OOXML alpha (carried separately) is
++		// not parsed end-to-end yet.
++		// blurRad is intentionally simplified — canvas shadowBlur is
++		// browser-tuned and high blur values can quintuple paint cost
++		// on every redraw. Glow / reflection / innerShdw are not
++		// addressed here.
++		const EMU_PER_PX = 9525;
++		const shadowStyle = {};
++		const outerShdw = shapeProperties && shapeProperties.effectLst && shapeProperties.effectLst.outerShdw;
++		if (outerShdw) {
++			const distEmu = typeof outerShdw.dist === "number" ? outerShdw.dist : 0;
++			const distPx = distEmu / EMU_PER_PX;
++			const dirRaw = typeof outerShdw.dir === "number" ? outerShdw.dir : 0;
++			const angleRad = (dirRaw / 60000) * Math.PI / 180;
++			const blurEmu = typeof outerShdw.blurRad === "number" ? outerShdw.blurRad : 0;
++			const blurPx = blurEmu / EMU_PER_PX / 2;
++			shadowStyle.shadowEnabled = true;
++			shadowStyle.shadowColor = getColorStyle(outerShdw.color) || "rgba(0,0,0,1)";
++			shadowStyle.shadowOffsetX = distPx * Math.cos(angleRad);
++			shadowStyle.shadowOffsetY = distPx * Math.sin(angleRad);
++			shadowStyle.shadowBlur = blurPx;
++			shadowStyle.shadowOpacity = 0.4;
++			shadowStyle.shadowForStrokeEnabled = true;
  		}
  		if (shapeType === "rect") return new Rect(id, {
  			fill,
-@@ -795,7 +954,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
- 			...strokeStyle
+@@ -774,7 +968,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 			flipX,
+ 			flipY,
+ 			forceRender: true,
+-			...strokeStyle
++			...strokeStyle,
++			...shadowStyle
+ 		});
+ 		if (shapeType === "roundRect") return new Rect(id, {
+ 			fill,
+@@ -792,10 +987,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 			flipY,
+ 			forceRender: true,
+ 			radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
+-			...strokeStyle
++			...strokeStyle,
++			...shadowStyle
  		});
  		if (shapeType === "ellipse") {
 -			console.warn(shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius);
  			return new Circle(id, {
  				fill,
  				top,
-@@ -815,6 +973,130 @@ var ShapeAdaptor = class extends ObjectAdaptor {
- 				...strokeStyle
+@@ -812,9 +1007,136 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 				flipY,
+ 				forceRender: true,
+ 				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
+-				...strokeStyle
++				...strokeStyle,
++				...shadowStyle
  			});
  		}
 +		// Casual Slides patch — per-prstGeom Path rendering for the most
@@ -750,7 +862,8 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..8ef975d8349ccb45e9717f1e15173f6d
 +				flipX,
 +				flipY,
 +				forceRender: true,
-+				...strokeStyle
++				...strokeStyle,
++				...shadowStyle
 +			});
 +		}
 +		// Fallback for everything else — at least keep the element visible
@@ -771,7 +884,8 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..8ef975d8349ccb45e9717f1e15173f6d
 +			flipX,
 +			flipY,
 +			forceRender: true,
-+			...strokeStyle
++			...strokeStyle,
++			...shadowStyle
 +		});
  	}
  };
