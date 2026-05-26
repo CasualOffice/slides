@@ -110,7 +110,16 @@ function resolveRelTarget(target: string, baseDir: string): string {
 // color to lighten/darken. Worth ~5 % more fidelity; deferred behind
 // the rest of wave 5/6 since the base-colour fix already unlocks the
 // majority of "title is invisible because text is white-on-white" cases.
+//
+// J3 — the theme also carries `<a:fontScheme>` with `<a:majorFont>` and
+// `<a:minorFont>` Latin typefaces. They flow through the same map under
+// reserved keys (`__majorLatin` / `__minorLatin`) — the color-scheme
+// names never collide with the double-underscore prefix, so a single
+// Map keeps the threading lightweight.
 type ThemeMap = Map<string, string>;
+
+const FONT_MAJOR_KEY = '__majorLatin';
+const FONT_MINOR_KEY = '__minorLatin';
 
 const SCHEME_ALIASES: Record<string, string> = {
   bg1: 'lt1',
@@ -147,17 +156,38 @@ function parseThemeColors(themeXml: string): ThemeMap {
   const theme = findChild(parsed, 'a:theme');
   const themeElements = findChild(theme, 'a:themeElements');
   const clrScheme = findChild(themeElements, 'a:clrScheme') as XmlNode | undefined;
-  if (!clrScheme) return map;
+  if (clrScheme) {
+    // a:clrScheme's children are named by scheme slot (dk1, lt1, accent1, …)
+    // — iterate the keys rather than reaching for known names.
+    for (const key of Object.keys(clrScheme)) {
+      if (key.startsWith('@')) continue; // skip attributes
+      if (!key.startsWith('a:')) continue;
+      const slotName = key.slice(2); // strip "a:" prefix
+      if (slotName === 'extLst') continue;
+      const hex = readClrSchemeChildColor(clrScheme[key]);
+      if (hex) map.set(slotName, hex);
+    }
+  }
 
-  // a:clrScheme's children are named by scheme slot (dk1, lt1, accent1, …)
-  // — iterate the keys rather than reaching for known names.
-  for (const key of Object.keys(clrScheme)) {
-    if (key.startsWith('@')) continue; // skip attributes
-    if (!key.startsWith('a:')) continue;
-    const slotName = key.slice(2); // strip "a:" prefix
-    if (slotName === 'extLst') continue;
-    const hex = readClrSchemeChildColor(clrScheme[key]);
-    if (hex) map.set(slotName, hex);
+  // J3 — `<a:fontScheme>` carries the deck-wide major (heading) and minor
+  // (body) typefaces. We harvest the Latin entry from each since Univer's
+  // single `IStyleBase.ff` slot stores a single font-family string — the
+  // East-Asian / complex-script subfonts (`<a:ea>`, `<a:cs>`) are
+  // followed by the parseRunProps fallback chain already (B4).
+  const fontScheme = findChild(themeElements, 'a:fontScheme') as XmlNode | undefined;
+  if (fontScheme) {
+    const majorFont = findChild(fontScheme, 'a:majorFont') as XmlNode | undefined;
+    const majorLatin = findChild(majorFont, 'a:latin') as XmlNode | undefined;
+    const majorTypeface = majorLatin?.['@typeface'];
+    if (typeof majorTypeface === 'string' && majorTypeface.length > 0) {
+      map.set(FONT_MAJOR_KEY, majorTypeface);
+    }
+    const minorFont = findChild(fontScheme, 'a:minorFont') as XmlNode | undefined;
+    const minorLatin = findChild(minorFont, 'a:latin') as XmlNode | undefined;
+    const minorTypeface = minorLatin?.['@typeface'];
+    if (typeof minorTypeface === 'string' && minorTypeface.length > 0) {
+      map.set(FONT_MINOR_KEY, minorTypeface);
+    }
   }
   return map;
 }
@@ -415,7 +445,11 @@ function readT(node: unknown): string {
 //
 // Color extraction handles `<a:solidFill><a:srgbClr val="HEX"/></>` —
 // theme colors (`<a:schemeClr>`) are deferred until we read the theme.
-function parseRunProps(rPr: unknown, theme: ThemeMap | null = null): Partial<ISlideRichTextProps> {
+function parseRunProps(
+  rPr: unknown,
+  theme: ThemeMap | null = null,
+  isTitle: boolean = false,
+): Partial<ISlideRichTextProps> {
   if (!rPr || typeof rPr !== 'object') return {};
   const node = rPr as XmlNode;
   const out: Partial<ISlideRichTextProps> = {};
@@ -512,22 +546,42 @@ function parseRunProps(rPr: unknown, theme: ThemeMap | null = null): Partial<ISl
     }
   }
 
-  // Font family (B3 + B4): prefer `<a:latin>`, then fall back to
+  // Font family (B3 + B4 + J3): prefer `<a:latin>`, then fall back to
   // `<a:ea>` (East-Asian) and `<a:cs>` (complex-script). Univer's
   // IStyleBase has a single `ff` slot, so the priority order picks the
   // one most likely to render the run's glyphs. CJK-only decks that
   // omit `<a:latin>` previously fell through to the renderer default —
   // now they get the authored typeface.
+  //
+  // J3 — when none of the three is present (a bare `<a:rPr>` or no
+  // run-level font), fall back to the theme's `<a:fontScheme>`:
+  // title-type placeholders pick up `<a:majorFont><a:latin>`; everything
+  // else inherits `<a:minorFont><a:latin>`. The `isTitle` flag carries
+  // the placeholder type from the caller (extractPlaceholderRects /
+  // extractRichDoc).
+  //
+  // OOXML also uses two special `<a:latin typeface>` sentinels that
+  // reference the theme indirectly: `+mj-lt` (major Latin) and `+mn-lt`
+  // (minor Latin). When we see those, resolve them right here instead of
+  // passing the literal "+mj-lt" string to the renderer.
   const latin = findChild(node, 'a:latin') as XmlNode | undefined;
   const ea = findChild(node, 'a:ea') as XmlNode | undefined;
   const cs = findChild(node, 'a:cs') as XmlNode | undefined;
+  const resolveThemeSentinel = (raw: string | false): string | false => {
+    if (raw === '+mj-lt') return theme?.get(FONT_MAJOR_KEY) ?? raw;
+    if (raw === '+mn-lt') return theme?.get(FONT_MINOR_KEY) ?? raw;
+    return raw;
+  };
   const typeface =
-    (typeof latin?.['@typeface'] === 'string' && latin['@typeface']) ||
-    (typeof ea?.['@typeface'] === 'string' && ea['@typeface']) ||
-    (typeof cs?.['@typeface'] === 'string' && cs['@typeface']) ||
+    resolveThemeSentinel(typeof latin?.['@typeface'] === 'string' && latin['@typeface']) ||
+    resolveThemeSentinel(typeof ea?.['@typeface'] === 'string' && ea['@typeface']) ||
+    resolveThemeSentinel(typeof cs?.['@typeface'] === 'string' && cs['@typeface']) ||
     '';
   if (typeof typeface === 'string' && typeface.length > 0) {
     out.ff = typeface;
+  } else if (theme) {
+    const themeFont = isTitle ? theme.get(FONT_MAJOR_KEY) : theme.get(FONT_MINOR_KEY);
+    if (themeFont) out.ff = themeFont;
   }
 
   return out;
@@ -803,6 +857,7 @@ function extractRichDoc(
   theme: ThemeMap | null = null,
   relMap: Map<string, string> | null = null,
   fontScale: number = 1,
+  isTitle: boolean = false,
 ): {
   text: string;
   props: Partial<ISlideRichTextProps>;
@@ -837,7 +892,7 @@ function extractRichDoc(
       // Build the run's style: layout/master defaults < layout pPr
       // defaults < this run's rPr.
       const rPr = findChild(r, 'a:rPr');
-      const runStyle = parseRunProps(rPr, theme);
+      const runStyle = parseRunProps(rPr, theme, isTitle);
       // C13 — apply `<a:normAutofit fontScale>` to the run's font
       // size at import. Scale both the explicit run override and the
       // inherited fallback so frames that rely on placeholder defaults
@@ -1320,14 +1375,26 @@ function extractPlaceholderRects(layoutOrMasterXml: string, theme: ThemeMap | nu
     // <p:txBody><a:lstStyle><a:lvl1pPr><a:defRPr ...>.
     // Use lvl1 as our canonical placeholder default; deeper levels
     // (a:lvl2pPr etc.) matter once bullets land in wave 6.
+    //
+    // J3 — title-type placeholders fall back to the major font; everything
+    // else to the minor font. parseRunProps consults the flag when the
+    // defRPr has no explicit `<a:latin>` / `<a:ea>` / `<a:cs>`.
+    const phType = ph['@type'];
+    const isTitlePh = phType === 'title' || phType === 'ctrTitle';
     let defaultRunProps: Partial<ISlideRichTextProps> | undefined;
     const txBody = findChild(sp, 'p:txBody');
     const lstStyle = findChild(txBody, 'a:lstStyle');
     const lvl1pPr = findChild(lstStyle, 'a:lvl1pPr');
     const defRPr = findChild(lvl1pPr, 'a:defRPr');
     if (defRPr) {
-      const parsed = parseRunProps(defRPr, theme);
+      const parsed = parseRunProps(defRPr, theme, isTitlePh);
       if (Object.keys(parsed).length > 0) defaultRunProps = parsed;
+    } else if (theme) {
+      // No defRPr but we still want the theme font fallback so the
+      // placeholder's inherited default reflects the deck's heading /
+      // body typeface. Emit a minimal ff-only defaultRunProps.
+      const themeFont = isTitlePh ? theme.get(FONT_MAJOR_KEY) : theme.get(FONT_MINOR_KEY);
+      if (themeFont) defaultRunProps = { ff: themeFont };
     }
 
     // Either an xfrm rect or text-style defaults is enough to be worth
@@ -1391,6 +1458,156 @@ async function resolveThemeForSlide(
   const theme = themeXml ? parseThemeColors(themeXml) : null;
   cache.set(masterPath, theme);
   return theme;
+}
+
+// I5 — footer / date / page-number "service" placeholders. Layouts and
+// masters routinely declare `<p:sp>` with `<p:ph type="ftr">`,
+// `<p:ph type="dt">` (date), or `<p:ph type="sldNum">` carrying both
+// geometry AND the displayed text ("‹#›" for slide number, "&[Date]" for
+// the dynamic date, "Footer" or an authored brand string for ftr).
+// When the slide doesn't declare its own version, the user still
+// expects these to render. PowerPoint resolves them through the
+// header-footer system; we approximate by emitting the layout/master
+// content as a TEXT element on import.
+interface ServicePlaceholder {
+  type: 'ftr' | 'dt' | 'sldNum';
+  rect: PlaceholderRect;
+  text: string;
+  props: Partial<ISlideRichTextProps>;
+  rich: IDocumentData | null;
+}
+
+// Walk a `<p:sldLayout>` or `<p:sldMaster>` XML and collect every
+// footer/date/sldNum placeholder along with its rendered text. Returns
+// a map keyed by the placeholder type so the caller can look up
+// "what's the master-supplied footer text?".
+function extractServicePlaceholders(layoutOrMasterXml: string, theme: ThemeMap | null = null): Map<'ftr' | 'dt' | 'sldNum', ServicePlaceholder> {
+  const parsed = parser.parse(layoutOrMasterXml) as XmlNode;
+  const root =
+    (findChild(parsed, 'p:sldLayout') as XmlNode | undefined) ??
+    (findChild(parsed, 'p:sldMaster') as XmlNode | undefined);
+  const map = new Map<'ftr' | 'dt' | 'sldNum', ServicePlaceholder>();
+  if (!root) return map;
+  const spTree = findChild(findChild(root, 'p:cSld'), 'p:spTree');
+  for (const sp of toArray(findChild(spTree, 'p:sp'))) {
+    if (!sp || typeof sp !== 'object') continue;
+    const nvSpPr = findChild(sp, 'p:nvSpPr');
+    const nvPr = findChild(nvSpPr, 'p:nvPr');
+    const ph = findChild(nvPr, 'p:ph') as XmlNode | undefined;
+    if (!ph) continue;
+    const phType = ph['@type'];
+    if (phType !== 'ftr' && phType !== 'dt' && phType !== 'sldNum') continue;
+
+    const spPr = findChild(sp, 'p:spPr');
+    const xfrm = findChild(spPr, 'a:xfrm');
+    const off = xfrm ? (findChild(xfrm, 'a:off') as XmlNode | undefined) : undefined;
+    const ext = xfrm ? (findChild(xfrm, 'a:ext') as XmlNode | undefined) : undefined;
+
+    const lstStyle = findChild(findChild(sp, 'p:txBody'), 'a:lstStyle');
+    const lvl1pPr = findChild(lstStyle, 'a:lvl1pPr');
+    const defRPr = findChild(lvl1pPr, 'a:defRPr');
+    let defaultRunProps: Partial<ISlideRichTextProps> | undefined;
+    if (defRPr) {
+      const parsedDef = parseRunProps(defRPr, theme);
+      if (Object.keys(parsedDef).length > 0) defaultRunProps = parsedDef;
+    }
+
+    const rect: PlaceholderRect = {
+      left: emu2px(off?.['@x'] as string | undefined),
+      top: emu2px(off?.['@y'] as string | undefined),
+      width: emu2px(ext?.['@cx'] as string | undefined),
+      height: emu2px(ext?.['@cy'] as string | undefined),
+      defaultRunProps,
+    };
+
+    // Pull text + run formatting via the existing shared extractor so
+    // multi-run formatting in the master/layout placeholder (e.g. a
+    // styled "&[Date]" run) lands the same way as a slide-side run.
+    const txBody = findChild(sp, 'p:txBody');
+    let { text, props, rich } = extractRichDoc(
+      txBody,
+      `service-${phType}`,
+      defaultRunProps,
+      theme,
+      null,
+      1,
+      false,
+    );
+
+    // `<a:fld>` (text field — slide number / date placeholders use it)
+    // doesn't get walked by extractRichDoc since the run loop only
+    // iterates `<a:r>`. As a pragmatic fallback, when the placeholder
+    // text came back empty AND the txBody contains an `<a:fld>` with
+    // visible text, use that. Live substitution (replacing the field
+    // with the actual slide number / date) is renderer work.
+    if (text.trim().length === 0 && txBody) {
+      const paras = toArray(findChild(txBody, 'a:p'));
+      const fldTexts: string[] = [];
+      for (const p of paras) {
+        for (const fld of toArray(findChild(p, 'a:fld'))) {
+          if (!fld || typeof fld !== 'object') continue;
+          const t = (fld as XmlNode)['a:t'];
+          if (typeof t === 'string') fldTexts.push(t);
+          else if (t && typeof t === 'object') {
+            const inner = (t as XmlNode)['#text'];
+            if (typeof inner === 'string') fldTexts.push(inner);
+          }
+        }
+      }
+      if (fldTexts.length > 0) {
+        text = fldTexts.join('');
+        // Use the placeholder's default run props as the run's style
+        // (best we can do without parsing the fld's own rPr).
+        props = { ...(defaultRunProps ?? {}) };
+        rich = null;
+      }
+    }
+
+    // Only emit the service placeholder when it actually carries
+    // visible text. An empty footer placeholder in the master is a
+    // common "reserved slot" — we don't want to paint blank text boxes
+    // when the slide deliberately omits the footer.
+    if (text.trim().length === 0) continue;
+
+    map.set(phType, { type: phType, rect, text, props, rich });
+  }
+  return map;
+}
+
+// Resolve a slide's layout (then master) and merge their service
+// placeholders. Layout entries win over master (same precedence as
+// buildPlaceholderMap).
+async function buildServicePlaceholders(
+  slideRelsXml: string | null,
+  zip: JSZip,
+  theme: ThemeMap | null,
+): Promise<Map<'ftr' | 'dt' | 'sldNum', ServicePlaceholder>> {
+  if (!slideRelsXml) return new Map();
+  const layoutTarget = findRelTargetByType(slideRelsXml, '/slideLayout');
+  if (!layoutTarget) return new Map();
+  const layoutPath = resolveRelTarget(layoutTarget, 'ppt/slides/');
+  const layoutXml = await zip.file(layoutPath)?.async('string');
+  if (!layoutXml) return new Map();
+
+  const layoutDir = layoutPath.slice(0, layoutPath.lastIndexOf('/') + 1);
+  const layoutName = layoutPath.split('/').pop() ?? '';
+  const layoutRelsXml = await zip.file(`${layoutDir}_rels/${layoutName}.rels`)?.async('string');
+
+  let masterMap = new Map<'ftr' | 'dt' | 'sldNum', ServicePlaceholder>();
+  if (layoutRelsXml) {
+    const masterTarget = findRelTargetByType(layoutRelsXml, '/slideMaster');
+    if (masterTarget) {
+      const masterPath = resolveRelTarget(masterTarget, layoutDir);
+      const masterXml = await zip.file(masterPath)?.async('string');
+      if (masterXml) masterMap = extractServicePlaceholders(masterXml, theme);
+    }
+  }
+
+  const layoutMap = extractServicePlaceholders(layoutXml, theme);
+  // Master first, then layout overrides (per OOXML order).
+  const merged = new Map<'ftr' | 'dt' | 'sldNum', ServicePlaceholder>(masterMap);
+  for (const [k, v] of layoutMap) merged.set(k, v);
+  return merged;
 }
 
 // Resolve a slide's layout (then master) and merge their placeholder
@@ -1464,6 +1681,8 @@ interface ImageRegistry {
   placeholderRects: Map<string, PlaceholderRect>;
   /** Theme color scheme from `ppt/theme/themeN.xml` (J2) */
   theme: ThemeMap | null;
+  /** Deck-level `<p:defaultTextStyle>` lvl1pPr/defRPr — lowest-priority text defaults (K3) */
+  deckDefaultRunProps?: Partial<ISlideRichTextProps>;
 }
 
 const MIME_FROM_EXT: Record<string, string> = {
@@ -1639,13 +1858,28 @@ async function processSpTree(
       // `fs` (including those inherited from placeholder defaults).
       const txBodyPr = findChild(txBody, 'a:bodyPr');
       const fontScale = parseBodyPrFontScale(txBodyPr);
+      // J3 — title-type placeholders inherit the theme's major Latin
+      // font; everything else picks up the minor Latin font. The flag
+      // also feeds parseRunProps for inline `+mj-lt` / `+mn-lt` sentinels.
+      const nvSpPr = findChild(sp, 'p:nvSpPr');
+      const nvPr = findChild(nvSpPr, 'p:nvPr');
+      const ph = findChild(nvPr, 'p:ph') as XmlNode | undefined;
+      const phType = ph?.['@type'];
+      const isTitle = phType === 'title' || phType === 'ctrTitle';
+      // K3 — fallback priority: deck-default < master/layout placeholder default.
+      // The placeholder default (already merged across layout > master in
+      // buildPlaceholderMap) wins field-by-field on top of the deck default.
+      const fallback = reg.deckDefaultRunProps || phInherited?.defaultRunProps
+        ? { ...(reg.deckDefaultRunProps ?? {}), ...(phInherited?.defaultRunProps ?? {}) }
+        : undefined;
       const { text, props, rich } = extractRichDoc(
         txBody,
         elId,
-        phInherited?.defaultRunProps,
+        fallback,
         reg.theme,
         reg.imageRelMap,
         fontScale,
+        isTitle,
       );
       const richText: ISlideRichTextProps = {
         text,
@@ -2118,6 +2352,27 @@ async function extractElementsFromSlideXml(
   return elements;
 }
 
+// I5 — collect the set of placeholder types declared in the slide's own
+// `<p:spTree>`. Used to decide which service placeholders (ftr / dt /
+// sldNum) need to be synthesised from the layout / master.
+function extractSlideDeclaredPlaceholderTypes(slideXml: string): Set<string> {
+  const declared = new Set<string>();
+  const parsed = parser.parse(slideXml) as XmlNode;
+  const spTree = findChild(findChild(findChild(parsed, 'p:sld'), 'p:cSld'), 'p:spTree');
+  if (!spTree) return declared;
+  const walk = (tree: unknown): void => {
+    for (const sp of toArray(findChild(tree, 'p:sp'))) {
+      if (!sp || typeof sp !== 'object') continue;
+      const ph = findChild(findChild(findChild(sp, 'p:nvSpPr'), 'p:nvPr'), 'p:ph') as XmlNode | undefined;
+      const t = ph?.['@type'];
+      if (typeof t === 'string') declared.add(t);
+    }
+    for (const grp of toArray(findChild(tree, 'p:grpSp'))) walk(grp);
+  };
+  walk(spTree);
+  return declared;
+}
+
 // A2 — read `<p:cSld><p:bg>` for the slide background. Resolves both
 // `<p:bgPr><a:solidFill><a:srgbClr>` and `<p:bgPr><a:solidFill><a:schemeClr>`
 // (J2) — the latter via the theme map. Gradient (`<a:gradFill>`),
@@ -2279,6 +2534,61 @@ async function extractSlideBackgroundImage(
   };
 }
 
+// K3 — `<p:presentation><p:defaultTextStyle>` carries per-level
+// (`<p:lvl1pPr>`, `<p:lvl2pPr>`, …) `<a:defRPr>` defaults that apply
+// when nothing else up the chain (run → paragraph → placeholder layout
+// → placeholder master) supplies an override. PowerPoint uses this for
+// "all-text on this deck defaults to Calibri 18 pt" style settings.
+//
+// We parse the `<p:lvl1pPr><a:defRPr>` only — matching the existing I4
+// behaviour where lvl1 is treated as the canonical placeholder default.
+// Deeper levels (lvl2pPr etc.) would matter when we surface a richer
+// per-level cascade; that's deferred.
+//
+// Returned as `Partial<ISlideRichTextProps>` so it slots in alongside
+// `phInherited?.defaultRunProps`. Layout/master placeholder defaults
+// still win on top (per OOXML order: deck-level < master < layout <
+// slide / run).
+function extractDeckDefaultRunProps(presentation: XmlNode | undefined, theme: ThemeMap | null): Partial<ISlideRichTextProps> | undefined {
+  const dts = findChild(presentation, 'p:defaultTextStyle') as XmlNode | undefined;
+  if (!dts) return undefined;
+  const lvl1pPr = findChild(dts, 'a:lvl1pPr') as XmlNode | undefined;
+  const defRPr = findChild(lvl1pPr, 'a:defRPr');
+  if (!defRPr) return undefined;
+  const parsed = parseRunProps(defRPr, theme);
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
+// K1 — read `docProps/core.xml` for `<dc:title>`. When present (and
+// non-empty), this becomes the deck's display title instead of the
+// filename. Other metadata (creator / description / subject) is
+// captured here too in case future UI surfaces them; for now we only
+// thread the title back into `snapshot.title`.
+function extractCoreProps(coreXml: string): { title?: string; creator?: string; description?: string; subject?: string } {
+  const out: { title?: string; creator?: string; description?: string; subject?: string } = {};
+  const parsed = parser.parse(coreXml) as XmlNode;
+  const root = findChild(parsed, 'cp:coreProperties') as XmlNode | undefined;
+  if (!root) return out;
+  const readText = (key: string): string | undefined => {
+    const node = findChild(root, key);
+    if (typeof node === 'string') return node;
+    if (node && typeof node === 'object') {
+      const t = (node as XmlNode)['#text'];
+      if (typeof t === 'string') return t;
+    }
+    return undefined;
+  };
+  const title = readText('dc:title');
+  const creator = readText('dc:creator');
+  const description = readText('dc:description');
+  const subject = readText('dc:subject');
+  if (title && title.length > 0) out.title = title;
+  if (creator && creator.length > 0) out.creator = creator;
+  if (description && description.length > 0) out.description = description;
+  if (subject && subject.length > 0) out.subject = subject;
+  return out;
+}
+
 export async function importPptxToSlides(file: ArrayBuffer, fileName: string): Promise<ISlideData> {
   const zip = await JSZip.loadAsync(file);
 
@@ -2295,6 +2605,28 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     width: emu2px((sldSz?.['@cx'] as string | undefined) ?? '9144000'),
     height: emu2px((sldSz?.['@cy'] as string | undefined) ?? '6858000'),
   };
+
+  // K1 — `docProps/core.xml` → snapshot.title (via <dc:title>). When
+  // absent / empty, we fall back to the filename below. Reading happens
+  // up here so it's available alongside pageSize before the slide loop.
+  const coreXml = await zip.file('docProps/core.xml')?.async('string');
+  const coreProps = coreXml ? extractCoreProps(coreXml) : {};
+
+  // K2 — `docProps/custom.xml` is the schema-defined slot for author-
+  // attached custom metadata (`<Properties><property name="…">…</property>`).
+  // We don't parse it — just capture the XML bytes for the passthrough
+  // round-trip so author-defined fields survive an open/save cycle.
+  const customPropsXml = await zip.file('docProps/custom.xml')?.async('string');
+
+  // K3 — `<p:presentation><p:defaultTextStyle>` lvl1pPr/defRPr → the
+  // lowest-priority text defaults. Layout/master placeholder defaults
+  // still win on top; this only kicks in when nothing else in the
+  // placeholder / run chain supplies an override (e.g. a free-floating
+  // text frame with a bare `<a:r>`). We pass `null` for theme here so
+  // any schemeClr references inside the defRPr fall through; this is
+  // rare in practice and matches the "no theme on docProps" defaults
+  // most decks emit.
+  const deckDefaultRunProps = extractDeckDefaultRunProps(presentation, null);
 
   const sldIdLst = findChild(presentation, 'p:sldIdLst');
   const sldIds = toArray(findChild(sldIdLst, 'p:sldId'));
@@ -2360,12 +2692,54 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     const theme = await resolveThemeForSlide(slideRelsXml, zip, themeCache);
     const placeholderRects = await buildPlaceholderMap(slideRelsXml, zip, theme);
 
-    const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip, placeholderRects, theme };
+    const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip, placeholderRects, theme, deckDefaultRunProps };
     const pageOrdinal = i + 1;
     const pageId = `page-${pageOrdinal}`;
     const elements = await extractElementsFromSlideXml(slideXml, reg, pageOrdinal);
     const elementMap: Record<string, IPageElement> = {};
     for (const el of elements) elementMap[el.id] = el;
+
+    // I5 — synthesise footer / date / slide-number placeholders from the
+    // layout / master when the slide doesn't declare them. PowerPoint
+    // gates these on per-slide `<p:hf>` toggles which we don't read yet;
+    // we approximate "deck author included a footer in the layout/master
+    // and the slide didn't opt out" by simply emitting any layout/master
+    // service placeholder with non-empty text that the slide doesn't
+    // already own.
+    const declaredPhTypes = extractSlideDeclaredPlaceholderTypes(slideXml);
+    const servicePhs = await buildServicePlaceholders(slideRelsXml, zip, theme);
+    let serviceCounter = 0;
+    for (const [phType, svc] of servicePhs) {
+      if (declaredPhTypes.has(phType)) continue;
+      serviceCounter += 1;
+      const elId = `s${pageOrdinal}-svc-${phType}-${serviceCounter}`;
+      const richText: ISlideRichTextProps = {
+        text: svc.text,
+        ...svc.props,
+        ...(svc.rich
+          ? { rich: { ...svc.rich, id: `${elId}-doc` } as IDocumentData }
+          : {}),
+      } as ISlideRichTextProps;
+      // Service placeholders sit ABOVE the authored content so the
+      // footer / page number paints over a backdrop image. zIndex picks
+      // up from the slide's last element + 1 to keep tree order intact.
+      const maxZ = elements.reduce((m, e) => Math.max(m, e.zIndex), 0);
+      elementMap[elId] = {
+        id: elId,
+        zIndex: maxZ + serviceCounter,
+        left: svc.rect.left,
+        top: svc.rect.top,
+        width: svc.rect.width,
+        height: svc.rect.height,
+        angle: 0,
+        flipX: false,
+        flipY: false,
+        title: '',
+        description: '',
+        type: PageElementType.TEXT,
+        richText,
+      };
+    }
 
     // A4 — picture background. Synthesised as an IMAGE element at
     // z-index 0 so it sits beneath the authored content (extractor
@@ -2454,6 +2828,7 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     readAll(rawRels),
   ]);
 
+  const hasCustomProps = customPropsXml !== undefined && customPropsXml.length > 0;
   const hasPassthrough =
     Object.keys(rawLayouts).length > 0 ||
     Object.keys(rawMasters).length > 0 ||
@@ -2462,11 +2837,16 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     Object.keys(rawComments).length > 0 ||
     Object.keys(rawDiagrams).length > 0 ||
     Object.keys(rawInk).length > 0 ||
-    Object.keys(rawCharts).length > 0;
+    Object.keys(rawCharts).length > 0 ||
+    hasCustomProps;
+
+  // K1 — prefer the deck-authored title from docProps/core.xml; fall
+  // back to filename when absent so legacy decks still round-trip.
+  const title = coreProps.title ?? fileName.replace(/\.pptx$/i, '');
 
   return {
     id: `imported-${Date.now().toString(36)}`,
-    title: fileName.replace(/\.pptx$/i, ''),
+    title,
     pageSize,
     body: { pages, pageOrder },
     ...(hasPassthrough
@@ -2484,6 +2864,12 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
                 ink: rawInk,
                 charts: rawCharts,
                 rels: rawRels,
+                // K2 — opaque passthrough of docProps/custom.xml. Only
+                // emitted when the source deck carried one so most
+                // pptxs (which omit custom.xml entirely) stay lean.
+                ...(hasCustomProps
+                  ? { customProps: { 'docProps/custom.xml': customPropsXml! } }
+                  : {}),
               }),
             },
           ],

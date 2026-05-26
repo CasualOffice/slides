@@ -10,6 +10,10 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
+## Snapshot — 2026-05-27 (post wave 8b-8f)
+
+**73 / 87 items at ✅, 6 at ⚠️.** Wave 8b-8f tackles the long tail of parser items: J3 (theme font scheme fallback), K1 (deck title from docProps/core.xml), K2 (custom props passthrough), K3 (`<p:defaultTextStyle>` deck-level defaults), and I5 (footer / date / sldNum service placeholders synthesised from master/layout when the slide doesn't declare them). The combined effect: imported decks now carry author-authored titles, deck-wide typography defaults, and footer / page-number elements that previously dropped silently.
+
 ## Snapshot — 2026-05-26 (post wave 7o)
 
 **68 / 87 items at ✅, 6 at ⚠️.** Wave 7o tackles Gap 3 (the long-deferred new `IPageElement` variants). The slides patch adds `TABLE` / `CHART` / `VIDEO` to `PageElementType` and the matching `ITable` / `IChart` / `IVideo` interfaces. Importer parses `<p:graphicFrame>` with `<a:tbl>` into a full `ITable` structure (rows × cells with spans, fills, borders) and `<c:chart>` references into an `IChart` whose payload rides via passthrough. Exporter emits TABLE through PptxGenJS's `addTable` for a real round-trip; CHART relies on the chart-XML passthrough (slide-XML graphicFrame reference not yet re-emitted — wave 8 work). G1-G4 flip ❌ → ✅; H1 ❌ → ✅ (chart XML round-trips); H2 / H3 stay ⚠️.
@@ -167,7 +171,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | I2 | Slide master XML passthrough | ✅ | Med | Low | Wave 7k — same harvest as I1, keyed under `masters` in the same `CASUAL_SLIDES_PPTX_RAW` payload. |
 | I3 | **Placeholder geometry inheritance** (xfrm from layout / master) | ✅ | **Critical** | Med | Wave 4 — `buildPlaceholderMap` walks slide → layout → master and assembles a `(type\|idx)` → xfrm map. Layout overrides master; matches OOXML's inheritance order. |
 | I4 | Placeholder default text style inheritance | ✅ | High | Med | Wave 4b — `<a:lstStyle><a:lvl1pPr><a:defRPr>` parsed from layout / master and applied when the slide's run lacks `<a:rPr>`. Level-2+ paragraphs still inherit `lvl1pPr`; multi-level bullets land with wave 6. |
-| I5 | Date / page-number / footer placeholders | ❌ | Med | Med | — |
+| I5 | Date / page-number / footer placeholders | ✅ | Med | Med | Wave 8f — `extractServicePlaceholders` walks the layout/master `<p:spTree>` for `<p:ph type="ftr\|dt\|sldNum">` with non-empty text and harvests geometry + run-style + text body. After processSpTree, the import loop synthesises a TEXT element for every service placeholder type the slide doesn't already declare. Slide number `<a:fld type="slidenum">` text passes through verbatim — live substitution per slide is renderer work (P4). `<p:hf>` per-slide toggles not yet honoured. |
 | I6 | Layout background fill (when slide inherits) | ❌ | High | Med | — |
 
 ## J. Theme
@@ -176,16 +180,16 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 |------|------|--------|--------|-----------|-------|
 | J1 | Theme XML passthrough | ✅ | Med | Low | Wave 7k — every `ppt/theme/*.xml` part captured into the same `CASUAL_SLIDES_PPTX_RAW` payload under `themes`. Complements J2's parsed `<a:clrScheme>` lookup — the raw XML keeps `<a:fontScheme>` and `<a:fmtScheme>` (which we don't model) intact for export. |
 | J2 | **Color scheme resolution** (`<a:schemeClr>` → hex) | ✅ | High | Med | Wave 5 — `resolveThemeForSlide` walks slide → layout → master → theme; `parseThemeColors` reads `<a:clrScheme>`; `resolveSchemeColor` handles tx/bg aliases. Wave 5b layered lumMod / lumOff / tint / shade on top. satMod / hueMod / alpha still drop. |
-| J3 | Font scheme (major / minor typefaces) | ❌ | Med | Med | Falls back from B3 when `<a:latin>` is absent. |
+| J3 | Font scheme (major / minor typefaces) | ✅ | Med | Med | Wave 8b — `parseThemeColors` also harvests `<a:fontScheme><a:majorFont><a:latin>` / `<a:minorFont><a:latin>` into reserved `__majorLatin` / `__minorLatin` keys on the same ThemeMap. `parseRunProps` falls back when no explicit `<a:latin>` / `<a:ea>` / `<a:cs>` is set: title-type placeholders (`<p:ph type="title"\|"ctrTitle">`) get the major font, everything else the minor. Inline `+mj-lt` / `+mn-lt` typeface sentinels resolve through the same lookup. |
 | J4 | Format scheme (default fills / lines / effects) | ❌ | Low | High | Defer. |
 
 ## K. Document-level
 
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
-| K1 | Title / author / company metadata | ⚠️ | Low | Low | Set on export (`Casual Slides` author); not read on import. |
-| K2 | Custom properties | ❌ | Low | Low | — |
-| K3 | Default text style (`<p:defaultTextStyle>`) | ❌ | Med | Med | — |
+| K1 | Title / author / company metadata | ✅ | Low | Low | Wave 8c — `extractCoreProps` reads `docProps/core.xml` for `<dc:title>`; when present and non-empty, it becomes `snapshot.title`. Filename remains the fallback. `dc:creator` / `dc:description` / `dc:subject` are also harvested into `coreProps` for future UI surfacing. |
+| K2 | Custom properties | ✅ | Low | Low | Wave 8d — `docProps/custom.xml` captured into `CASUAL_SLIDES_PPTX_RAW.customProps` (only emitted when present). `restorePassthrough` re-injects the bytes on export so author-defined props survive the round-trip. Opaque passthrough — no parsing. |
+| K3 | Default text style (`<p:defaultTextStyle>`) | ✅ | Med | Med | Wave 8e — `extractDeckDefaultRunProps` reads `<p:presentation><p:defaultTextStyle><a:lvl1pPr><a:defRPr>` into `ImageRegistry.deckDefaultRunProps`. The processSpTree text branch spreads it under the placeholder-inherited defaults so layout/master still wins on top, but free-floating text frames now pick up the deck-level fallback. lvl2+ deferred (matches the I4 lvl1-only stance). |
 | K4 | Headers / footers | ❌ | Low | Med | — |
 | K5 | Comments (`<p:cm>`) | ✅ | Med | Med | Wave 7n — every `ppt/comments/*.xml` part (+ rels) captured into `CASUAL_SLIDES_PPTX_RAW.comments` and re-injected on export. Native UI for comments still TODO (P3 feature work). |
 | K6 | Audio / video | ❌ | Low | Med | Needs binary-part passthrough (current capture is text/xml only). |

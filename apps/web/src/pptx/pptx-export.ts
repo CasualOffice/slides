@@ -319,6 +319,11 @@ interface PptxRawPayload {
   ink?: Record<string, string>;
   charts?: Record<string, string>;
   rels?: Record<string, string>;
+  // K2 — passthrough of `docProps/custom.xml`. PptxGenJS doesn't emit
+  // a custom-props part, so re-injecting our captured bytes round-trips
+  // the author-defined custom metadata. The bucket is keyed by zip-path
+  // so the inject pass writes it verbatim.
+  customProps?: Record<string, string>;
 }
 
 async function restorePassthrough(blob: Blob, snapshot: ISlideData): Promise<Blob> {
@@ -336,7 +341,7 @@ async function restorePassthrough(blob: Blob, snapshot: ISlideData): Promise<Blo
 
   // Restore only the categories PptxGenJS doesn't generate. Skipping
   // layouts/masters/themes preserves PptxGenJS's wired rels.
-  const restorableBuckets: Array<keyof PptxRawPayload> = ['notesSlides', 'comments', 'diagrams', 'ink', 'charts', 'rels'];
+  const restorableBuckets: Array<keyof PptxRawPayload> = ['notesSlides', 'comments', 'diagrams', 'ink', 'charts', 'rels', 'customProps'];
   let hasAny = false;
   for (const key of restorableBuckets) {
     if (payload[key] && Object.keys(payload[key] ?? {}).length > 0) {
