@@ -15,7 +15,7 @@ patchedDependencies:
     hash: dc4e427f760010fb7dcaec71ce94ded097278a99ea9c77d4abfc5cf08e3a9428
     path: patches/@univerjs__slides-ui@0.24.0.patch
   '@univerjs/slides@0.24.0':
-    hash: aa6bbf7c4dfe58d18b93c18d9f065957fb822c4404589d14750cb3664aa37e74
+    hash: 2627df07ce6fb684edfddca3e699b1bd0c7779b7b616b657aa0da55b7cc121aa
     path: patches/@univerjs__slides@0.24.0.patch
 
 importers:
@@ -79,7 +79,7 @@ importers:
         version: 0.24.0(patch_hash=e348ab5be94eea0f795a0e92c0c0832a56b0c94928495a43f9371d6988124be4)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/slides':
         specifier: 0.24.0
-        version: 0.24.0(patch_hash=aa6bbf7c4dfe58d18b93c18d9f065957fb822c4404589d14750cb3664aa37e74)(react@18.3.1)(rxjs@7.8.2)
+        version: 0.24.0(patch_hash=2627df07ce6fb684edfddca3e699b1bd0c7779b7b616b657aa0da55b7cc121aa)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/slides-ui':
         specifier: 0.24.0
         version: 0.24.0(patch_hash=dc4e427f760010fb7dcaec71ce94ded097278a99ea9c77d4abfc5cf08e3a9428)(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
@@ -2619,7 +2619,7 @@ snapshots:
       '@univerjs/drawing': 0.24.0(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/engine-render': 0.24.0(patch_hash=e348ab5be94eea0f795a0e92c0c0832a56b0c94928495a43f9371d6988124be4)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/icons': 1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@univerjs/slides': 0.24.0(patch_hash=aa6bbf7c4dfe58d18b93c18d9f065957fb822c4404589d14750cb3664aa37e74)(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/slides': 0.24.0(patch_hash=2627df07ce6fb684edfddca3e699b1bd0c7779b7b616b657aa0da55b7cc121aa)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/ui': 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
       react: 18.3.1
       rxjs: 7.8.2
@@ -2628,7 +2628,7 @@ snapshots:
       - '@types/react-dom'
       - react-dom
 
-  '@univerjs/slides@0.24.0(patch_hash=aa6bbf7c4dfe58d18b93c18d9f065957fb822c4404589d14750cb3664aa37e74)(react@18.3.1)(rxjs@7.8.2)':
+  '@univerjs/slides@0.24.0(patch_hash=2627df07ce6fb684edfddca3e699b1bd0c7779b7b616b657aa0da55b7cc121aa)(react@18.3.1)(rxjs@7.8.2)':
     dependencies:
       '@univerjs/core': 0.24.0(patch_hash=494e36ae707d96f1c9c2edd1462c56d654f440ed41fe97f72797a32aca1201eb)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/engine-render': 0.24.0(patch_hash=e348ab5be94eea0f795a0e92c0c0832a56b0c94928495a43f9371d6988124be4)(react@18.3.1)(rxjs@7.8.2)

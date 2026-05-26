@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1cac05c4bce4e7dedfdd1f9c0ce0e5f6edeb9b35 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..eb8423056ef499ff0aaace1adc479edcbdd294a6 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -90,18 +90,38 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1cac05c4bce4e7dedfdd1f9c0ce0e5f6
  	}
  };
  var ImageAdaptorFactory = class {
-@@ -667,6 +716,79 @@ var ImageAdaptorFactory = class {
+@@ -667,6 +716,195 @@ var ImageAdaptorFactory = class {
  };
  CanvasObjectProviderRegistry.add(new ImageAdaptorFactory());
  
-+// Casual Slides patch — minimal TABLE adaptor (PageElementType.TABLE = 6).
-+// Renders the table's outer bounding rect with a light fill so the
-+// element is visible at the right position and size. Cell text +
-+// border rendering is a follow-up wave. Without this adaptor, every
-+// pptx that carries a <p:graphicFrame><a:tbl> was invisible.
-+var TableAdaptor = class extends ObjectAdaptor {
-+	constructor(..._args) {
-+		super(..._args);
++// Casual Slides patch — TABLE adaptor (PageElementType.TABLE = 6).
++// pptx-import G1-G4 parses <a:tbl> into pageElement.table = { rows:
++// [{ height, cells: [{ text, richText, fillRgb, outlineRgb,
++// outlineWeight, colSpan, rowSpan, hMerge, vMerge }] }],
++// columnWidths }. Earlier this adaptor drew just a bounding rect.
++// Now we render each cell as its own Rect (fill + border) plus a
++// RichText overlay for the text content, wrapped in an engine-render
++// Group so the table presents as one transformer-attachable object.
++//
++// Layout: rows + columns sized from the parser-supplied
++// `columnWidths` and per-row `height`. When the parser omits widths
++// or heights (e.g. autosized tables), we fall back to even
++// distribution of the table's outer width / height across the
++// declared columns / rows.
++//
++// Merges: cells flagged with `hMerge` or `vMerge` are skip-rendered
++// (their visual area is covered by the leading cell's `colSpan` /
++// `rowSpan`). The leading cell's drawn width / height grows to span
++// the merged columns / rows. We don't subtract borders on merged
++// boundaries — close enough for first-pass visual fidelity.
++//
++// Constructor takes LocaleService so we can build RichText overlays
++// (RichText's ctor wants `_localeService` for font fallback). Same
++// injection pattern as RichTextAdaptor.
++let TableAdaptor = class TableAdaptor extends ObjectAdaptor {
++	constructor(_localeService) {
++		super();
++		this._localeService = _localeService;
 +		_defineProperty(this, "zIndex", 2);
 +		_defineProperty(this, "viewKey", 6);
 +	}
@@ -110,17 +130,113 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1cac05c4bce4e7dedfdd1f9c0ce0e5f6
 +		return this;
 +	}
 +	convert(pageElement) {
-+		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY } = pageElement;
-+		return new _univerjs_engine_render.Rect(id, {
-+			fill: "rgba(245, 247, 250, 1)",
-+			stroke: "rgba(100, 116, 139, 1)",
-+			strokeWidth: 1,
-+			top, left, width, height, zIndex,
-+			angle, scaleX, scaleY, skewX, skewY, flipX, flipY,
-+			forceRender: true
++		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY, table } = pageElement;
++		if (!table || !table.rows || table.rows.length === 0) {
++			return new _univerjs_engine_render.Rect(id, {
++				fill: "rgba(245, 247, 250, 1)",
++				stroke: "rgba(100, 116, 139, 1)",
++				strokeWidth: 1,
++				top, left, width, height, zIndex,
++				angle, scaleX, scaleY, skewX, skewY, flipX, flipY,
++				forceRender: true
++			});
++		}
++		const declaredCols = (table.columnWidths || []).length;
++		const maxCellsInRow = table.rows.reduce((m, r) => Math.max(m, (r.cells || []).length), 0);
++		const numCols = Math.max(declaredCols, maxCellsInRow, 1);
++		const colWidths = [];
++		const declared = table.columnWidths || [];
++		const declaredSum = declared.reduce((s, w) => s + (w || 0), 0);
++		for (let i = 0; i < numCols; i++) {
++			if (declared[i] !== undefined) {
++				colWidths.push(declared[i]);
++			} else {
++				const remaining = Math.max(0, (width || 0) - declaredSum);
++				const undeclaredCount = numCols - declaredCols;
++				colWidths.push(undeclaredCount > 0 ? remaining / undeclaredCount : (width || 0) / numCols);
++			}
++		}
++		const declaredRowSum = table.rows.reduce((s, r) => s + (typeof r.height === "number" ? r.height : 0), 0);
++		const undeclaredRows = table.rows.filter((r) => typeof r.height !== "number").length;
++		const rowHeights = table.rows.map((r) => {
++			if (typeof r.height === "number") return r.height;
++			if (undeclaredRows === 0) return (height || 0) / table.rows.length;
++			return Math.max(0, (height || 0) - declaredRowSum) / undeclaredRows;
 +		});
++		const colX = [0];
++		for (const w of colWidths) colX.push(colX[colX.length - 1] + w);
++		const rowY = [0];
++		for (const h of rowHeights) rowY.push(rowY[rowY.length - 1] + h);
++		const children = [];
++		for (let r = 0; r < table.rows.length; r++) {
++			const row = table.rows[r];
++			const cells = row.cells || [];
++			for (let c = 0; c < cells.length; c++) {
++				const cell = cells[c];
++				if (cell.hMerge || cell.vMerge) continue;
++				const colSpan = Math.max(1, cell.colSpan || 1);
++				const rowSpan = Math.max(1, cell.rowSpan || 1);
++				const cellLeft = left + colX[c];
++				const cellTop = top + rowY[r];
++				const cellRight = colX[Math.min(c + colSpan, colX.length - 1)];
++				const cellBottom = rowY[Math.min(r + rowSpan, rowY.length - 1)];
++				const cellWidth = (left + cellRight) - cellLeft;
++				const cellHeight = (top + cellBottom) - cellTop;
++				const cellFill = cell.fillRgb ? (0, _univerjs_core.getColorStyle)({ rgb: cell.fillRgb }) || "rgba(255,255,255,0)" : "rgba(255,255,255,0)";
++				const cellStroke = cell.outlineRgb ? (0, _univerjs_core.getColorStyle)({ rgb: cell.outlineRgb }) || "rgba(100,116,139,1)" : "rgba(100,116,139,1)";
++				const cellStrokeWidth = typeof cell.outlineWeight === "number" ? cell.outlineWeight : 1;
++				const cellRect = new _univerjs_engine_render.Rect(`${id}-r${r}c${c}-bg`, {
++					left: cellLeft,
++					top: cellTop,
++					width: cellWidth,
++					height: cellHeight,
++					fill: cellFill,
++					stroke: cellStroke,
++					strokeWidth: cellStrokeWidth,
++					zIndex: 0,
++					forceRender: true
++				});
++				children.push(cellRect);
++				const richDoc = cell.richText && cell.richText.rich;
++				if (richDoc) {
++					children.push(new _univerjs_engine_render.RichText(this._localeService, `${id}-r${r}c${c}-tx`, {
++						left: cellLeft,
++						top: cellTop,
++						width: cellWidth,
++						height: cellHeight,
++						zIndex: 1,
++						richText: richDoc,
++						forceRender: true
++					}));
++				} else if (cell.text) {
++					children.push(new _univerjs_engine_render.RichText(this._localeService, `${id}-r${r}c${c}-tx`, {
++						left: cellLeft,
++						top: cellTop,
++						width: cellWidth,
++						height: cellHeight,
++						zIndex: 1,
++						text: cell.text,
++						forceRender: true
++					}));
++				}
++			}
++		}
++		if (children.length === 0) {
++			children.push(new _univerjs_engine_render.Rect(`${id}-empty`, {
++				left, top, width, height,
++				fill: "rgba(245, 247, 250, 1)",
++				stroke: "rgba(100, 116, 139, 1)",
++				strokeWidth: 1,
++				zIndex: 0,
++				forceRender: true
++			}));
++		}
++		const group = new _univerjs_engine_render.Group(id, ...children);
++		group.reCalculateObjects();
++		return group;
 +	}
 +};
++TableAdaptor = __decorate([__decorateParam(0, (0, _univerjs_core.Inject)(_univerjs_core.LocaleService))], TableAdaptor);
 +var TableAdaptorFactory = class {
 +	constructor() {
 +		_defineProperty(this, "zIndex", 5);
@@ -170,7 +286,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1cac05c4bce4e7dedfdd1f9c0ce0e5f6
  //#endregion
  //#region src/views/render/adaptors/rich-text-adaptor.ts
  let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
-@@ -699,7 +821,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -699,7 +937,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  			forceRender: true
  		};
  		let isNotNull = false;
@@ -185,7 +301,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1cac05c4bce4e7dedfdd1f9c0ce0e5f6
  			config = {
  				...config,
  				text,
-@@ -715,12 +843,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -715,12 +959,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  				cl
  			};
  			isNotNull = true;
@@ -198,7 +314,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1cac05c4bce4e7dedfdd1f9c0ce0e5f6
  		}
  		if (isNotNull === false) return;
  		return new _univerjs_engine_render.RichText(this._localeService, id, config);
-@@ -756,9 +878,81 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -756,9 +994,81 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -281,7 +397,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1cac05c4bce4e7dedfdd1f9c0ce0e5f6
  		}
  		if (shapeType === "rect") return new _univerjs_engine_render.Rect(id, {
  			fill,
-@@ -775,7 +969,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -775,7 +1085,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipX,
  			flipY,
  			forceRender: true,
@@ -291,7 +407,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1cac05c4bce4e7dedfdd1f9c0ce0e5f6
  		});
  		if (shapeType === "roundRect") return new _univerjs_engine_render.Rect(id, {
  			fill,
-@@ -793,10 +988,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -793,10 +1104,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipY,
  			forceRender: true,
  			radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -304,7 +420,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1cac05c4bce4e7dedfdd1f9c0ce0e5f6
  			return new _univerjs_engine_render.Circle(id, {
  				fill,
  				top,
-@@ -813,9 +1008,132 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -813,9 +1124,132 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -439,14 +555,14 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1cac05c4bce4e7dedfdd1f9c0ce0e5f6
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..cc2079239833cfbdd4652b2446fe8ef26589e46b 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..a34b112d3d1c7b9e833fbb4960eae38d2a7a5436 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
  import { DocumentDataModel, IConfigService, IContextService, IUniverInstanceService, Inject, Injector, LocaleService, Plugin, Registry, Styles, UnitModel, UniverInstanceType, Worksheet, generateRandomId, getColorStyle, merge, sortRules } from "@univerjs/core";
  import { BehaviorSubject } from "rxjs";
 -import { Circle, DocumentSkeleton, DocumentViewModel, Documents, IRenderingEngine, Image, Liquid, PageLayoutType, Rect, RichText, Scene, SceneViewer, ScrollBar, Slide, Spreadsheet, SpreadsheetColumnHeader, SpreadsheetRowHeader, SpreadsheetSkeleton, Viewport, getColor } from "@univerjs/engine-render";
-+import { Circle, DocumentSkeleton, DocumentViewModel, Documents, IRenderingEngine, Image, Liquid, PageLayoutType, Path, Rect, RichText, Scene, SceneViewer, ScrollBar, Slide, Spreadsheet, SpreadsheetColumnHeader, SpreadsheetRowHeader, SpreadsheetSkeleton, Viewport, getColor } from "@univerjs/engine-render";
++import { Circle, DocumentSkeleton, DocumentViewModel, Documents, Group, IRenderingEngine, Image, Liquid, PageLayoutType, Path, Rect, RichText, Scene, SceneViewer, ScrollBar, Slide, Spreadsheet, SpreadsheetColumnHeader, SpreadsheetRowHeader, SpreadsheetSkeleton, Viewport, getColor } from "@univerjs/engine-render";
  
  //#region src/basics/const/default-slide.ts
  /**
@@ -538,18 +654,38 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..cc2079239833cfbdd4652b2446fe8ef2
  	}
  };
  var ImageAdaptorFactory = class {
-@@ -666,6 +715,79 @@ var ImageAdaptorFactory = class {
+@@ -666,6 +715,212 @@ var ImageAdaptorFactory = class {
  };
  CanvasObjectProviderRegistry.add(new ImageAdaptorFactory());
  
-+// Casual Slides patch — minimal TABLE adaptor (PageElementType.TABLE = 6).
-+// Renders the table's outer bounding rect with a light fill so the
-+// element is visible at the right position and size. Cell text +
-+// border rendering is a follow-up wave. Without this adaptor, every
-+// pptx that carries a <p:graphicFrame><a:tbl> was invisible.
-+var TableAdaptor = class extends ObjectAdaptor {
-+	constructor(..._args) {
-+		super(..._args);
++// Casual Slides patch — TABLE adaptor (PageElementType.TABLE = 6).
++// pptx-import G1-G4 parses <a:tbl> into pageElement.table = { rows:
++// [{ height, cells: [{ text, richText, fillRgb, outlineRgb,
++// outlineWeight, colSpan, rowSpan, hMerge, vMerge }] }],
++// columnWidths }. Earlier this adaptor drew just a bounding rect.
++// Now we render each cell as its own Rect (fill + border) plus a
++// RichText overlay for the text content, wrapped in an engine-render
++// Group so the table presents as one transformer-attachable object.
++//
++// Layout: rows + columns sized from the parser-supplied
++// `columnWidths` and per-row `height`. When the parser omits widths
++// or heights (e.g. autosized tables), we fall back to even
++// distribution of the table's outer width / height across the
++// declared columns / rows.
++//
++// Merges: cells flagged with `hMerge` or `vMerge` are skip-rendered
++// (their visual area is covered by the leading cell's `colSpan` /
++// `rowSpan`). The leading cell's drawn width / height grows to span
++// the merged columns / rows. We don't subtract borders on merged
++// boundaries — close enough for first-pass visual fidelity.
++//
++// Constructor takes LocaleService so we can build RichText overlays
++// (RichText's ctor wants `_localeService` for font fallback). Same
++// injection pattern as RichTextAdaptor.
++let TableAdaptor = class TableAdaptor extends ObjectAdaptor {
++	constructor(_localeService) {
++		super();
++		this._localeService = _localeService;
 +		_defineProperty(this, "zIndex", 2);
 +		_defineProperty(this, "viewKey", 6);
 +	}
@@ -558,17 +694,130 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..cc2079239833cfbdd4652b2446fe8ef2
 +		return this;
 +	}
 +	convert(pageElement) {
-+		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY } = pageElement;
-+		return new Rect(id, {
-+			fill: "rgba(245, 247, 250, 1)",
-+			stroke: "rgba(100, 116, 139, 1)",
-+			strokeWidth: 1,
-+			top, left, width, height, zIndex,
-+			angle, scaleX, scaleY, skewX, skewY, flipX, flipY,
-+			forceRender: true
++		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY, table } = pageElement;
++		// If `table` is missing (shouldn't happen, but defensive),
++		// fall back to the previous bounding-rect behaviour so the
++		// element is at least visible.
++		if (!table || !table.rows || table.rows.length === 0) {
++			return new Rect(id, {
++				fill: "rgba(245, 247, 250, 1)",
++				stroke: "rgba(100, 116, 139, 1)",
++				strokeWidth: 1,
++				top, left, width, height, zIndex,
++				angle, scaleX, scaleY, skewX, skewY, flipX, flipY,
++				forceRender: true
++			});
++		}
++		// Resolve column widths. If parser didn't supply or supplied
++		// too few, distribute evenly to fill `width`.
++		const declaredCols = (table.columnWidths || []).length;
++		const maxCellsInRow = table.rows.reduce((m, r) => Math.max(m, (r.cells || []).length), 0);
++		const numCols = Math.max(declaredCols, maxCellsInRow, 1);
++		const colWidths = [];
++		const declared = table.columnWidths || [];
++		const declaredSum = declared.reduce((s, w) => s + (w || 0), 0);
++		for (let i = 0; i < numCols; i++) {
++			if (declared[i] !== undefined) {
++				colWidths.push(declared[i]);
++			} else {
++				// Spread remaining width across the columns we don't
++				// have an explicit value for.
++				const remaining = Math.max(0, (width || 0) - declaredSum);
++				const undeclaredCount = numCols - declaredCols;
++				colWidths.push(undeclaredCount > 0 ? remaining / undeclaredCount : (width || 0) / numCols);
++			}
++		}
++		// Resolve row heights similarly.
++		const declaredRowSum = table.rows.reduce((s, r) => s + (typeof r.height === "number" ? r.height : 0), 0);
++		const undeclaredRows = table.rows.filter((r) => typeof r.height !== "number").length;
++		const rowHeights = table.rows.map((r) => {
++			if (typeof r.height === "number") return r.height;
++			if (undeclaredRows === 0) return (height || 0) / table.rows.length;
++			return Math.max(0, (height || 0) - declaredRowSum) / undeclaredRows;
 +		});
++		// Cumulative x / y offsets for each col / row boundary.
++		const colX = [0];
++		for (const w of colWidths) colX.push(colX[colX.length - 1] + w);
++		const rowY = [0];
++		for (const h of rowHeights) rowY.push(rowY[rowY.length - 1] + h);
++		const children = [];
++		for (let r = 0; r < table.rows.length; r++) {
++			const row = table.rows[r];
++			const cells = row.cells || [];
++			for (let c = 0; c < cells.length; c++) {
++				const cell = cells[c];
++				if (cell.hMerge || cell.vMerge) continue;
++				const colSpan = Math.max(1, cell.colSpan || 1);
++				const rowSpan = Math.max(1, cell.rowSpan || 1);
++				const cellLeft = left + colX[c];
++				const cellTop = top + rowY[r];
++				const cellRight = colX[Math.min(c + colSpan, colX.length - 1)];
++				const cellBottom = rowY[Math.min(r + rowSpan, rowY.length - 1)];
++				const cellWidth = (left + cellRight) - cellLeft;
++				const cellHeight = (top + cellBottom) - cellTop;
++				const cellFill = cell.fillRgb ? getColorStyle({ rgb: cell.fillRgb }) || "rgba(255,255,255,0)" : "rgba(255,255,255,0)";
++				const cellStroke = cell.outlineRgb ? getColorStyle({ rgb: cell.outlineRgb }) || "rgba(100,116,139,1)" : "rgba(100,116,139,1)";
++				const cellStrokeWidth = typeof cell.outlineWeight === "number" ? cell.outlineWeight : 1;
++				const cellRect = new Rect(`${id}-r${r}c${c}-bg`, {
++					left: cellLeft,
++					top: cellTop,
++					width: cellWidth,
++					height: cellHeight,
++					fill: cellFill,
++					stroke: cellStroke,
++					strokeWidth: cellStrokeWidth,
++					zIndex: 0,
++					forceRender: true
++				});
++				children.push(cellRect);
++				// Text overlay — prefer the rich DocumentData if present
++				// (B-wave runs / props), else fall back to flat text.
++				const richDoc = cell.richText && cell.richText.rich;
++				if (richDoc) {
++					children.push(new RichText(this._localeService, `${id}-r${r}c${c}-tx`, {
++						left: cellLeft,
++						top: cellTop,
++						width: cellWidth,
++						height: cellHeight,
++						zIndex: 1,
++						richText: richDoc,
++						forceRender: true
++					}));
++				} else if (cell.text) {
++					children.push(new RichText(this._localeService, `${id}-r${r}c${c}-tx`, {
++						left: cellLeft,
++						top: cellTop,
++						width: cellWidth,
++						height: cellHeight,
++						zIndex: 1,
++						text: cell.text,
++						forceRender: true
++					}));
++				}
++			}
++		}
++		// Empty table (e.g. all-merge): still emit a stub so the
++		// element exists. addObjects on Group needs at least one
++		// child to give it dimensions.
++		if (children.length === 0) {
++			children.push(new Rect(`${id}-empty`, {
++				left, top, width, height,
++				fill: "rgba(245, 247, 250, 1)",
++				stroke: "rgba(100, 116, 139, 1)",
++				strokeWidth: 1,
++				zIndex: 0,
++				forceRender: true
++			}));
++		}
++		const group = new Group(id, ...children);
++		// Re-base children's coordinates so they're relative to the
++		// Group's bounding box (computed from child extents). After
++		// this call, dragging the Group moves all cells together.
++		group.reCalculateObjects();
++		return group;
 +	}
 +};
++TableAdaptor = __decorate([__decorateParam(0, Inject(LocaleService))], TableAdaptor);
 +var TableAdaptorFactory = class {
 +	constructor() {
 +		_defineProperty(this, "zIndex", 5);
@@ -618,7 +867,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..cc2079239833cfbdd4652b2446fe8ef2
  //#endregion
  //#region src/views/render/adaptors/rich-text-adaptor.ts
  let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
-@@ -698,7 +820,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -698,7 +953,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  			forceRender: true
  		};
  		let isNotNull = false;
@@ -633,7 +882,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..cc2079239833cfbdd4652b2446fe8ef2
  			config = {
  				...config,
  				text,
-@@ -714,12 +842,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -714,12 +975,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  				cl
  			};
  			isNotNull = true;
@@ -646,7 +895,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..cc2079239833cfbdd4652b2446fe8ef2
  		}
  		if (isNotNull === false) return;
  		return new RichText(this._localeService, id, config);
-@@ -755,9 +877,81 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -755,9 +1010,81 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -729,7 +978,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..cc2079239833cfbdd4652b2446fe8ef2
  		}
  		if (shapeType === "rect") return new Rect(id, {
  			fill,
-@@ -774,7 +968,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -774,7 +1101,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipX,
  			flipY,
  			forceRender: true,
@@ -739,7 +988,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..cc2079239833cfbdd4652b2446fe8ef2
  		});
  		if (shapeType === "roundRect") return new Rect(id, {
  			fill,
-@@ -792,10 +987,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -792,10 +1120,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipY,
  			forceRender: true,
  			radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -752,7 +1001,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..cc2079239833cfbdd4652b2446fe8ef2
  			return new Circle(id, {
  				fill,
  				top,
-@@ -812,9 +1007,136 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -812,9 +1140,136 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
