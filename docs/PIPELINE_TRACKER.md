@@ -39,7 +39,7 @@ Each sprint balances feature + fidelity work — we are an editor as well as a p
 | # | Feature                          | Owner | Status   | Notes |
 |---|----------------------------------|-------|----------|-------|
 | 10 | Master / layout passthrough     | main  | ✅ landed | Fidelity. Delivered as part of wave 7k — `ppt/slideLayouts/*.xml` + `ppt/slideMasters/*.xml` (+ rels) captured into `ISlideData.resources["CASUAL_SLIDES_PPTX_RAW"]` and re-injected on export. Tracked in `FIDELITY_TRACKER.md` (I1 + I2). |
-| 11 | Theme colors / fonts round-trip | main  | ✅ landed | Fidelity. Delivered across waves 5 (J2 schemeClr resolution) + 7k (J1 theme XML passthrough). `<a:clrScheme>` parsed into a colour map and applied throughout; full `<a:theme>` XML preserved verbatim for export. `<a:fontScheme>` reads pending (J3 — defer until a deck surfaces it). |
+| 11 | Theme colors / fonts round-trip | main  | ✅ landed | Fidelity. Delivered across waves 5 (J2 schemeClr resolution) + 7k (J1 theme XML passthrough) + 8b (J3 fontScheme major/minor fallback resolving `+mj-lt`/`+mn-lt` sentinels and title-vs-body typography). `<a:clrScheme>` parsed into a colour map; full `<a:theme>` XML preserved verbatim for export. |
 | 12 | Find and replace                | -     | planned  | Feature. Modal + iterate all text elements. |
 | 13 | Comments                        | -     | planned  | Feature. Anchor comments to slides via `resources` slot. K5 passthrough already lands the bytes (wave 7n); needs UI surface. |
 

@@ -10,9 +10,17 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-27 (post wave 8b-8f)
+## Snapshot — 2026-05-27 (post wave 8b-8f + renderer pipeline)
 
 **73 / 87 items at ✅, 6 at ⚠️.** Wave 8b-8f tackles the long tail of parser items: J3 (theme font scheme fallback), K1 (deck title from docProps/core.xml), K2 (custom props passthrough), K3 (`<p:defaultTextStyle>` deck-level defaults), and I5 (footer / date / sldNum service placeholders synthesised from master/layout when the slide doesn't declare them). The combined effect: imported decks now carry author-authored titles, deck-wide typography defaults, and footer / page-number elements that previously dropped silently.
+
+**Renderer pipeline (parallel session, same date)** — pnpm patches to `@univerjs/slides@0.24.0` `lib/{es,cjs}/index.js` so the canvas actually honours fields the parser was already emitting. Until these landed, many ✅ items in the tracker rendered as if they were ❌:
+
+- **RichTextAdaptor** now prefers `richText.rich` (IDocumentData) over the flat `text` field — unblocks B16 multi-run + C2 alignment + C3 indent + C4 line-spacing + C5 paragraph spacing + C6/C7 bullets + C8 nesting + C9 RTL + C10 insets + C11 vertical anchor + C12 frame rotation + C13 autofit + C14 wrap (commit `497b70c`)
+- **ShapeAdaptor**: Rect fallback for unknown prstGeom values so non-rect shapes stop vanishing (`767841e`); per-prstGeom `Path` rendering for line / triangle / diamond / parallelogram / trapezoid / pentagon / hexagon / octagon / rightArrow / leftArrow / upArrow / downArrow / chevron / plus / star (`c744e17`); `outline.dashStyle` → canvas `strokeDashArray` (`fd0f90d`); `outline.cap` → canvas `strokeLineCap` (`ff2c217`); `effectLst.outerShdw` → canvas shadow props (`e279b47`).
+- **ImageAdaptor** honours `cropProperties` via engine-render `Image.srcRect` (`d1d3d3a`).
+- **TableAdaptor** + **ChartAdaptor** added so `PageElementType.TABLE` / `CHART` no longer drop silently (`bf510ec`); TableAdaptor now renders per-cell Rect (fill + border) + RichText overlay inside a Group (`c43610c`).
+- **Placeholder matching** is now tolerant to (type, idx) shape mismatches between slide and layout — titles no longer floating at (0, 0) when the slide says `type="title"` and the layout says `type="title" idx="0"` (`5040dbc`).
 
 ## Snapshot — 2026-05-26 (post wave 7o)
 
