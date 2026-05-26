@@ -10,9 +10,11 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7j)
+## Snapshot — 2026-05-26 (post wave 7k)
 
-**49 / 87 items at ✅, 5 at ⚠️.** Wave 7j closes the last two open `<a:bodyPr>` items: C12 (body rotation) and C13 (text-frame autofit). `<a:bodyPr rot="N">` (60000ths of a degree, positive clockwise) lands on `documentStyle.renderConfig.centerAngle` in degrees. `<a:bodyPr><a:normAutofit fontScale="N"/></a:bodyPr>` multiplies each run's `fs` (and the inherited placeholder default that flows into `props.fs`) by `fontScale / 100000` at import — Univer's `IDocumentRenderConfig` has no autofit slot, so the shrink is baked in. `lnSpcReduction` is deferred (Univer's line-spacing model is multiplicative; layering autofit on top needs a runtime check).
+**54 / 87 items at ✅, 5 at ⚠️.** Wave 7k unlocks five items via three fork patches landed in this same wave: B14 (`<a:rPr spc>` → `IStyleBase.spc` — added to core), D16 (`<a:ln cap>` → `IOutline.cap` — added to core), and I1 + I2 + J1 (raw layout/master/theme XML stashed under `ISlideData.resources[CASUAL_SLIDES_PPTX_RAW]` — `resources` slot added to slides). The three fork edits are byte-identical between the fork branch `slide/element-mutations` and the `pnpm patch` artifacts in `patches/@univerjs__core@0.24.0.patch` (new) and `patches/@univerjs__slides@0.24.0.patch` (extended on top of the rev-tracking patch).
+
+Wave 7j (preceding): C12 (`<a:bodyPr rot>` → `renderConfig.centerAngle`) and C13 (`<a:normAutofit fontScale>` → multiplies `fs` at import; lossy on round-trip).
 
 Wave 7i (preceding): B17 — `<a:rPr><a:hlinkClick r:id="rIdN"/>` resolves via the slide's rels file to an http(s) URL and emits an `ICustomRange` with `rangeType: CustomRangeType.HYPERLINK` on the text frame's `IDocumentBody.customRanges`. Slide-internal jump targets are skipped (we don't surface pageId at the run level today).
 
@@ -61,7 +63,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | B11 | Font color — schemeClr (theme) | ✅ | High | Med | Wave 5 — `readColor` resolves `<a:solidFill><a:schemeClr val=…>` against the parsed `<a:clrScheme>`. lumMod / lumOff / tint / shade modifiers still drop. |
 | B12 | Font color — prstClr / sysClr | ✅ | Low | Low | Wave 7h — `readColor` adds a `PRST_COLOR_MAP` lookup (30 common OOXML named colours: `red`, `black`, `dkBlue` …) and reads `<a:sysClr @lastClr>` as the resolved hex passthrough. Colour modifiers (lumMod / lumOff / tint / shade) flow through the same `applyColorModifiers` path as srgb/scheme. |
 | B13 | Highlight color (`<a:rPr highlight>`) | ❌ | Low | Low | — |
-| B14 | Letter spacing (`<a:rPr spc>`) | ❌ | Low | Low | — |
+| B14 | Letter spacing (`<a:rPr spc>`) | ✅ | Low | Low | Wave 7k — `<a:rPr @spc>` (hundredths of a point) → `IStyleBase.spc` in pt. `IStyleBase.spc` added by `patches/@univerjs__core@0.24.0.patch` (mirrored from `univer-revamp` on `slide/element-mutations`). Negative values widen-tighten symmetrically. |
 | B15 | Text outline (`<a:rPr><a:ln>`) | ❌ | Low | Med | — |
 | B16 | **Multi-run paragraphs** (mixed bold / color / size mid-line) | ✅ | High | Med | Wave 6 — `extractRichDoc` emits one `ITextRun` per `<a:r>` with its own style; placed into `richText.rich` as a full `IDocumentData`. Flat `richText.text` / `fs` / `bl` etc. are still populated for export and renderer-fallback paths. |
 | B17 | Hyperlinks (`<a:hlinkClick>`) | ✅ | Med | Med | Wave 7i — `<a:rPr><a:hlinkClick r:id="rIdN"/>` resolves through the slide's rels (already threaded into `extractRichDoc` via `reg.imageRelMap`) to a Target URL. http(s) URLs emit an `ICustomRange { rangeType: CustomRangeType.HYPERLINK, properties: { url } }` over the run's character span on `IDocumentBody.customRanges`. Slide-internal targets (action="ppaction://hlinksldjump") skipped — needs pageId resolution at the run level (P2 work). |
@@ -104,7 +106,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | D13 | Outline color (srgbClr) | ✅ | High | — | — |
 | D14 | Outline weight | ✅ | High | — | EMU → px. |
 | D15 | Outline dash pattern (`<a:prstDash>`) | ✅ | Med | Low | Wave 7 — `parsePrstDash` maps PowerPoint's preset dash values to Univer's `BorderStyleTypes` (DOTTED / DASHED / DASH_DOT etc.). |
-| D16 | Outline cap (`<a:ln @cap>`) | ❌ | Low | Low | — |
+| D16 | Outline cap (`<a:ln @cap>`) | ✅ | Low | Low | Wave 7k — `<a:ln @cap="flat\|rnd\|sq">` lands on `IOutline.cap`. `IOutline.cap` added by `patches/@univerjs__core@0.24.0.patch`. `flat` is the OOXML default; only explicit non-default values are emitted to keep the shape model lean. Applied to both `<p:sp>` and `<p:cxnSp>` branches. |
 | D17 | Arrowheads (`<a:headEnd>` `<a:tailEnd>`) | ❌ | Med | Low | — |
 | D18 | Shape shadow (`<a:effectLst><a:outerShdw>`) | ❌ | Med | Med | — |
 | D19 | Glow / reflection / blur | ❌ | Low | Med | — |
@@ -153,8 +155,8 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
-| I1 | Slide layout XML passthrough (resources slot) | ❌ | Med | Low | Carry XML across round-trip even if unused. |
-| I2 | Slide master XML passthrough | ❌ | Med | Low | — |
+| I1 | Slide layout XML passthrough (resources slot) | ✅ | Med | Low | Wave 7k — every `ppt/slideLayouts/*.xml` part captured into `ISlideData.resources[].data` under name `CASUAL_SLIDES_PPTX_RAW` as `JSON.stringify({ layouts: { <zipPath>: <xml> } })`. `resources?: IResources` added to `ISlideData` by `patches/@univerjs__slides@0.24.0.patch` (extending the rev-tracking patch). |
+| I2 | Slide master XML passthrough | ✅ | Med | Low | Wave 7k — same harvest as I1, keyed under `masters` in the same `CASUAL_SLIDES_PPTX_RAW` payload. |
 | I3 | **Placeholder geometry inheritance** (xfrm from layout / master) | ✅ | **Critical** | Med | Wave 4 — `buildPlaceholderMap` walks slide → layout → master and assembles a `(type\|idx)` → xfrm map. Layout overrides master; matches OOXML's inheritance order. |
 | I4 | Placeholder default text style inheritance | ✅ | High | Med | Wave 4b — `<a:lstStyle><a:lvl1pPr><a:defRPr>` parsed from layout / master and applied when the slide's run lacks `<a:rPr>`. Level-2+ paragraphs still inherit `lvl1pPr`; multi-level bullets land with wave 6. |
 | I5 | Date / page-number / footer placeholders | ❌ | Med | Med | — |
@@ -164,7 +166,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
-| J1 | Theme XML passthrough | ❌ | Med | Low | Carry across round-trip even if unused. |
+| J1 | Theme XML passthrough | ✅ | Med | Low | Wave 7k — every `ppt/theme/*.xml` part captured into the same `CASUAL_SLIDES_PPTX_RAW` payload under `themes`. Complements J2's parsed `<a:clrScheme>` lookup — the raw XML keeps `<a:fontScheme>` and `<a:fmtScheme>` (which we don't model) intact for export. |
 | J2 | **Color scheme resolution** (`<a:schemeClr>` → hex) | ✅ | High | Med | Wave 5 — `resolveThemeForSlide` walks slide → layout → master → theme; `parseThemeColors` reads `<a:clrScheme>`; `resolveSchemeColor` handles tx/bg aliases. Wave 5b layered lumMod / lumOff / tint / shade on top. satMod / hueMod / alpha still drop. |
 | J3 | Font scheme (major / minor typefaces) | ❌ | Med | Med | Falls back from B3 when `<a:latin>` is absent. |
 | J4 | Format scheme (default fills / lines / effects) | ❌ | Low | High | Defer. |

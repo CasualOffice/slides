@@ -1,0 +1,29 @@
+diff --git a/lib/types/types/interfaces/i-shape-properties.d.ts b/lib/types/types/interfaces/i-shape-properties.d.ts
+index 0af84f2f82f2d8f49e6aeccb6ea30947a3a56239..194c29136ddbd5092173df38d1584ada3ab3160f 100644
+--- a/lib/types/types/interfaces/i-shape-properties.d.ts
++++ b/lib/types/types/interfaces/i-shape-properties.d.ts
+@@ -27,4 +27,8 @@ export interface IOutline {
+     outlineFill: IColorStyle;
+     weight: number;
+     dashStyle?: BorderStyleTypes;
++    /**
++     * Line cap. Maps to OOXML `<a:ln cap="flat|rnd|sq">`. 'flat' is the default.
++     */
++    cap?: 'flat' | 'rnd' | 'sq';
+ }
+diff --git a/lib/types/types/interfaces/i-style-data.d.ts b/lib/types/types/interfaces/i-style-data.d.ts
+index 702cf1c6ab6a33191b96cf4d6eb8f6feed78b0ce..99c090e23bb7e868b9d0aa674945a631735ecf1b 100644
+--- a/lib/types/types/interfaces/i-style-data.d.ts
++++ b/lib/types/types/interfaces/i-style-data.d.ts
+@@ -204,6 +204,11 @@ export interface IStyleBase {
+      * overline
+      */
+     ol?: ITextDecoration;
++    /**
++     * Letter spacing (tracking) in pt. Positive widens, negative tightens.
++     * Maps to OOXML `<a:rPr spc>` (hundredths of a point) and CSS `letter-spacing`.
++     */
++    spc?: number;
+     /**
+      * background
+      */

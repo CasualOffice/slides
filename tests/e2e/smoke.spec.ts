@@ -2311,6 +2311,127 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(firstRun.ts?.fs, 'fs scaled by fontScale').toBe(19.2);
   });
 
+  test('pptx import wave 7k — fork-patch enablement (B14 + D16 + I1 + I2 + J1)', async ({ page }) => {
+    // Three model widenings landed via patches/@univerjs__core@0.24.0.patch
+    // and the extended patches/@univerjs__slides@0.24.0.patch unlock five
+    // fidelity items in one shot:
+    //  • B14 — <a:rPr spc="200"> (200 hundredths of pt = 2.0 pt) → ts.spc = 2.
+    //  • D16 — <a:ln cap="rnd"> → outline.cap = 'rnd'.
+    //  • I1/I2/J1 — every layout/master/theme part is harvested from the
+    //    zip into ISlideData.resources[].data under name CASUAL_SLIDES_PPTX_RAW.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        // B14 — text run with letter spacing.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="spc"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="3000000" cy="800000"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `</p:spPr>` +
+        `<p:txBody>` +
+        `<a:bodyPr/>` +
+        `<a:p><a:r><a:rPr lang="en-US" spc="200"/><a:t>spaced</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        // D16 — shape with outline cap="rnd".
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="3" name="cap"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="2000000"/><a:ext cx="3000000" cy="0"/></a:xfrm>` +
+        `<a:prstGeom prst="line"/>` +
+        `<a:ln w="25400" cap="rnd"><a:solidFill><a:srgbClr val="0000FF"/></a:solidFill></a:ln>` +
+        `</p:spPr>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+      const layout =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld name="dummy"><p:spTree/></p:cSld>` +
+        `</p:sldLayout>`;
+      const master =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree/></p:cSld>` +
+        `</p:sldMaster>`;
+      const theme =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Dummy"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/slideLayouts/slideLayout1.xml', layout);
+      zip.file('ppt/slideMasters/slideMaster1.xml', master);
+      zip.file('ppt/theme/theme1.xml', theme);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave7k.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    const elements = Object.values(firstPage.pageElements ?? {});
+
+    // B14 — text run carries ts.spc = 2.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text = elements.find((e: any) => e.richText?.text === 'spaced') as any;
+    expect(text, 'spc text frame extracted').toBeTruthy();
+    const runs = text.richText.rich?.body?.textRuns ?? [];
+    expect(runs[0]?.ts?.spc, 'spc="200" → ts.spc = 2 pt').toBe(2);
+
+    // D16 — line shape's outline carries cap='rnd'.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const line = elements.find((e: any) => e.shape?.shapeType === 'line') as any;
+    expect(line, 'line shape extracted').toBeTruthy();
+    expect(line.shape?.shapeProperties?.outline?.cap, 'outline.cap = "rnd"').toBe('rnd');
+
+    // I1 + I2 + J1 — resources slot carries the raw XML payload.
+    expect(Array.isArray(r.resources), 'resources slot populated').toBe(true);
+    const passthrough = r.resources?.find((e: { name: string }) => e.name === 'CASUAL_SLIDES_PPTX_RAW');
+    expect(passthrough, 'CASUAL_SLIDES_PPTX_RAW resource exists').toBeTruthy();
+    const raw = JSON.parse(passthrough!.data);
+    expect(raw.layouts['ppt/slideLayouts/slideLayout1.xml'], 'layout XML captured').toContain('p:sldLayout');
+    expect(raw.masters['ppt/slideMasters/slideMaster1.xml'], 'master XML captured').toContain('p:sldMaster');
+    expect(raw.themes['ppt/theme/theme1.xml'], 'theme XML captured').toContain('a:theme');
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

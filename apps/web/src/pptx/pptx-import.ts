@@ -451,6 +451,17 @@ function parseRunProps(rPr: unknown, theme: ThemeMap | null = null): Partial<ISl
   const colour = readColor(node, theme);
   if (colour) out.cl = { rgb: colour };
 
+  // B14 — `<a:rPr spc="N">` is letter spacing in hundredths of a point.
+  // Univer's `IStyleBase.spc` (added via fork patch) is plain pt. We pass
+  // both positive (widen) and negative (tighten) values through.
+  const spcRaw = node['@spc'];
+  if (typeof spcRaw === 'string' || typeof spcRaw === 'number') {
+    const spc = parseInt(String(spcRaw), 10);
+    if (Number.isFinite(spc) && spc !== 0) {
+      (out as Partial<ISlideRichTextProps> & { spc?: number }).spc = spc / 100;
+    }
+  }
+
   // Font family (B3 + B4): prefer `<a:latin>`, then fall back to
   // `<a:ea>` (East-Asian) and `<a:cs>` (complex-script). Univer's
   // IStyleBase has a single `ff` slot, so the priority order picks the
@@ -991,6 +1002,7 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   outlineRgb: string | null;
   outlineWeightPx: number | null;
   outlineDash: BorderStyleTypes | null;
+  outlineCap: 'flat' | 'rnd' | 'sq' | null;
 } {
   const prstGeom = findChild(spPr, 'a:prstGeom') as XmlNode | undefined;
   const prstAttr = prstGeom?.['@prst'];
@@ -1009,10 +1021,18 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   let outlineRgb: string | null = null;
   let outlineWeightPx: number | null = null;
   let outlineDash: BorderStyleTypes | null = null;
+  let outlineCap: 'flat' | 'rnd' | 'sq' | null = null;
   const ln = findChild(spPr, 'a:ln') as XmlNode | undefined;
   if (ln) {
     outlineRgb = readColor(ln, theme) ?? parseSrgbColor(ln);
     outlineDash = parsePrstDash(ln);
+    // D16 — `<a:ln cap="flat|rnd|sq">` lands on the patched `IOutline.cap`.
+    // 'flat' is the OOXML default, so we only emit explicit non-default
+    // values to keep the shape model lean.
+    const capAttr = ln['@cap'];
+    if (capAttr === 'rnd' || capAttr === 'sq' || capAttr === 'flat') {
+      outlineCap = capAttr;
+    }
     const w = ln['@w'];
     if (typeof w === 'string' || typeof w === 'number') {
       const emu = parseInt(String(w), 10);
@@ -1027,7 +1047,7 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
     }
   }
 
-  return { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash };
+  return { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap };
 }
 
 // Placeholder geometry inherited from the slide layout / master (I3).
@@ -1457,16 +1477,17 @@ async function processSpTree(
     }
 
     if (spPr) {
-      const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash } = parseShapeAppearance(spPr, reg.theme);
+      const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap } = parseShapeAppearance(spPr, reg.theme);
       const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shapeProperties: any = {};
       if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
-      if (outlineRgb || outlineWeightPx !== null || outlineDash !== null) {
+      if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null) {
         shapeProperties.outline = {
           outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
           weight: outlineWeightPx ?? 1,
           ...(outlineDash !== null ? { dashStyle: outlineDash } : {}),
+          ...(outlineCap !== null ? { cap: outlineCap } : {}),
         };
       }
       out.push({
@@ -1510,16 +1531,17 @@ async function processSpTree(
 
     const zIndex = z.next;
     z.next += 1;
-    const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash } = parseShapeAppearance(spPr, reg.theme);
+    const { shapeType, fillRgb, outlineRgb, outlineWeightPx, outlineDash, outlineCap } = parseShapeAppearance(spPr, reg.theme);
     const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shapeProperties: any = {};
     if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
-    if (outlineRgb || outlineWeightPx !== null || outlineDash !== null) {
+    if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null) {
       shapeProperties.outline = {
         outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
         weight: outlineWeightPx ?? 1,
         ...(outlineDash !== null ? { dashStyle: outlineDash } : {}),
+        ...(outlineCap !== null ? { cap: outlineCap } : {}),
       };
     }
     out.push({
@@ -1828,6 +1850,15 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
   const imageCache = new Map<string, string>();
   const themeCache = new Map<string, ThemeMap | null>();
 
+  // I1 + I2 + J1 — capture raw OOXML for layouts / masters / themes so
+  // the round-trip can re-emit parts we don't natively model. Stored on
+  // ISlideData.resources under CASUAL_SLIDES_PPTX_RAW (matches the
+  // ARCHITECTURE.md plan). Keyed by zip-path so the export side can
+  // splice them back in unchanged.
+  const rawLayouts: Record<string, string> = {};
+  const rawMasters: Record<string, string> = {};
+  const rawThemes: Record<string, string> = {};
+
   for (let i = 0; i < sldIds.length; i += 1) {
     const sldId = sldIds[i] as XmlNode;
     const rId = sldId['@r:id'] as string | undefined;
@@ -1895,10 +1926,51 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     pageOrder.push(pageId);
   }
 
+  // I1 + I2 + J1 — harvest every layout / master / theme part by walking
+  // the zip's known prefixes. We do this once after the slide loop so the
+  // resources slot carries the full set even when no slide references
+  // them (handles decks where Office authored extra layouts).
+  zip.forEach((zipPath, entry) => {
+    if (entry.dir) return;
+    if (zipPath.startsWith('ppt/slideLayouts/') && zipPath.endsWith('.xml')) {
+      rawLayouts[zipPath] = '';
+    } else if (zipPath.startsWith('ppt/slideMasters/') && zipPath.endsWith('.xml')) {
+      rawMasters[zipPath] = '';
+    } else if (zipPath.startsWith('ppt/theme/') && zipPath.endsWith('.xml')) {
+      rawThemes[zipPath] = '';
+    }
+  });
+  await Promise.all([
+    ...Object.keys(rawLayouts).map(async (p) => {
+      rawLayouts[p] = (await zip.file(p)?.async('string')) ?? '';
+    }),
+    ...Object.keys(rawMasters).map(async (p) => {
+      rawMasters[p] = (await zip.file(p)?.async('string')) ?? '';
+    }),
+    ...Object.keys(rawThemes).map(async (p) => {
+      rawThemes[p] = (await zip.file(p)?.async('string')) ?? '';
+    }),
+  ]);
+
+  const hasPassthrough =
+    Object.keys(rawLayouts).length > 0 ||
+    Object.keys(rawMasters).length > 0 ||
+    Object.keys(rawThemes).length > 0;
+
   return {
     id: `imported-${Date.now().toString(36)}`,
     title: fileName.replace(/\.pptx$/i, ''),
     pageSize,
     body: { pages, pageOrder },
+    ...(hasPassthrough
+      ? {
+          resources: [
+            {
+              name: 'CASUAL_SLIDES_PPTX_RAW',
+              data: JSON.stringify({ layouts: rawLayouts, masters: rawMasters, themes: rawThemes }),
+            },
+          ],
+        }
+      : {}),
   };
 }

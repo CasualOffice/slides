@@ -58,10 +58,15 @@ index f22ab09ec126799709980b2d50cf54585e2d634d..c4d21f0b7baee04bc3b5e19295ca0c09
      getUnitId(): string;
      getPages(): {
 diff --git a/lib/types/types/interfaces/i-slide-data.d.ts b/lib/types/types/interfaces/i-slide-data.d.ts
-index 88df969eec8ab5685575597e40aaa007d4eb0823..4e90cbf33aac9cb33e044c54559785f85cd19f56 100644
+index 88df969eec8ab5685575597e40aaa007d4eb0823..468851b600275f85d4c610ee74e0873b6df39b55 100644
 --- a/lib/types/types/interfaces/i-slide-data.d.ts
 +++ b/lib/types/types/interfaces/i-slide-data.d.ts
-@@ -17,6 +17,11 @@ import type { IColorStyle, ICustomBlock, IDocumentData, IImageProperties, ILists
+@@ -13,14 +13,27 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  */
+-import type { IColorStyle, ICustomBlock, IDocumentData, IImageProperties, ILists, IPlaceholder, IShapeProperties, ISize, IStyleBase, IStyleData, ITransformState, IWorksheetData, LocaleType, Nullable, ThemeColorType } from '@univerjs/core';
++import type { IColorStyle, ICustomBlock, IDocumentData, IImageProperties, ILists, IPlaceholder, IResources, IShapeProperties, ISize, IStyleBase, IStyleData, ITransformState, IWorksheetData, LocaleType, Nullable, ThemeColorType } from '@univerjs/core';
  import type { ShapeType } from '../enum/prst-geom-type';
  export interface ISlideData extends IReferenceSource {
      id: string;
@@ -73,3 +78,15 @@ index 88df969eec8ab5685575597e40aaa007d4eb0823..4e90cbf33aac9cb33e044c54559785f8
      locale?: LocaleType;
      title: string;
      pageSize: ISize;
+     body?: ISlidePageBody;
++    /**
++     * Plugin / passthrough slot. Same shape as `IWorkbookData.resources` in
++     * the sheets package — plugin authors register a name and store opaque
++     * payloads here. Used for OOXML round-trip passthrough (raw XML for
++     * layouts, masters, themes that the model doesn't natively cover),
++     * comments, animations, etc.
++     */
++    resources?: IResources;
+ }
+ interface IReferenceSource {
+     master?: {
