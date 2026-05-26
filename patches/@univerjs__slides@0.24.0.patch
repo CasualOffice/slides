@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ff4b91177fc6b1f4c9a8ec6d792f4b54402d0018 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..f74b1cc547ee35f51a80d8b691a8311413dd6403 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -139,7 +139,41 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ff4b91177fc6b1f4c9a8ec6d792f4b54
  		}
  		if (isNotNull === false) return;
  		return new _univerjs_engine_render.RichText(this._localeService, id, config);
-@@ -796,7 +877,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -756,9 +837,32 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
+ 		const strokeStyle = {};
+ 		if (outline) {
+-			const { outlineFill, weight } = outline;
++			const { outlineFill, weight, dashStyle } = outline;
+ 			strokeStyle.strokeWidth = weight;
+ 			strokeStyle.stroke = (0, _univerjs_core.getColorStyle)(outlineFill) || "rgba(0,0,0,1)";
++			// Casual Slides patch — honour dashStyle (BorderStyleTypes) by
++			// mapping to engine-render's strokeDashArray (canvas lineDash).
++			// 1=THIN/2=HAIR/8=MEDIUM/13=THICK are solid (no entry); 0=NONE
++			// renders no stroke (handled below by clearing stroke).
++			// Reference: packages/core/src/types/enum/border-style-types.ts.
++			const dashMap = {
++				3: [1, 2],         // DOTTED
++				4: [4, 2],         // DASHED
++				5: [4, 2, 1, 2],   // DASH_DOT
++				6: [4, 2, 1, 2, 1, 2], // DASH_DOT_DOT
++				9: [6, 3],         // MEDIUM_DASHED
++				10: [6, 3, 1, 3],  // MEDIUM_DASH_DOT
++				11: [6, 3, 1, 3, 1, 3], // MEDIUM_DASH_DOT_DOT
++				12: [4, 2, 1, 2]   // SLANT_DASH_DOT
++			};
++			if (dashStyle !== undefined && dashMap[dashStyle]) {
++				strokeStyle.strokeDashArray = dashMap[dashStyle];
++			}
++			if (dashStyle === 0) {
++				// BorderStyleTypes.NONE — drop the stroke entirely.
++				strokeStyle.stroke = "rgba(0,0,0,0)";
++				strokeStyle.strokeWidth = 0;
++			}
+ 		}
+ 		if (shapeType === "rect") return new _univerjs_engine_render.Rect(id, {
+ 			fill,
+@@ -796,7 +900,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			...strokeStyle
  		});
  		if (shapeType === "ellipse") {
@@ -147,7 +181,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ff4b91177fc6b1f4c9a8ec6d792f4b54
  			return new _univerjs_engine_render.Circle(id, {
  				fill,
  				top,
-@@ -816,6 +896,29 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -816,6 +919,29 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				...strokeStyle
  			});
  		}
@@ -178,7 +212,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..ff4b91177fc6b1f4c9a8ec6d792f4b54
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..e931e7b832ec1403a3f2746ee47abbe627dfa7cf 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..1c15ec4bc2eae76f64509c57e7fafe9562e70954 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -44,6 +44,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -318,7 +352,41 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..e931e7b832ec1403a3f2746ee47abbe6
  		}
  		if (isNotNull === false) return;
  		return new RichText(this._localeService, id, config);
-@@ -795,7 +876,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -755,9 +836,32 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+ 		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
+ 		const strokeStyle = {};
+ 		if (outline) {
+-			const { outlineFill, weight } = outline;
++			const { outlineFill, weight, dashStyle } = outline;
+ 			strokeStyle.strokeWidth = weight;
+ 			strokeStyle.stroke = getColorStyle(outlineFill) || "rgba(0,0,0,1)";
++			// Casual Slides patch — honour dashStyle (BorderStyleTypes) by
++			// mapping to engine-render's strokeDashArray (canvas lineDash).
++			// 1=THIN/2=HAIR/8=MEDIUM/13=THICK are solid (no entry); 0=NONE
++			// renders no stroke (handled below by clearing stroke).
++			// Reference: packages/core/src/types/enum/border-style-types.ts.
++			const dashMap = {
++				3: [1, 2],         // DOTTED
++				4: [4, 2],         // DASHED
++				5: [4, 2, 1, 2],   // DASH_DOT
++				6: [4, 2, 1, 2, 1, 2], // DASH_DOT_DOT
++				9: [6, 3],         // MEDIUM_DASHED
++				10: [6, 3, 1, 3],  // MEDIUM_DASH_DOT
++				11: [6, 3, 1, 3, 1, 3], // MEDIUM_DASH_DOT_DOT
++				12: [4, 2, 1, 2]   // SLANT_DASH_DOT
++			};
++			if (dashStyle !== undefined && dashMap[dashStyle]) {
++				strokeStyle.strokeDashArray = dashMap[dashStyle];
++			}
++			if (dashStyle === 0) {
++				// BorderStyleTypes.NONE — drop the stroke entirely.
++				strokeStyle.stroke = "rgba(0,0,0,0)";
++				strokeStyle.strokeWidth = 0;
++			}
+ 		}
+ 		if (shapeType === "rect") return new Rect(id, {
+ 			fill,
+@@ -795,7 +899,6 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			...strokeStyle
  		});
  		if (shapeType === "ellipse") {
@@ -326,7 +394,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..e931e7b832ec1403a3f2746ee47abbe6
  			return new Circle(id, {
  				fill,
  				top,
-@@ -815,6 +895,29 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -815,6 +918,29 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				...strokeStyle
  			});
  		}
