@@ -2134,15 +2134,88 @@ function extractSlideHidden(slideXml: string): boolean {
   return show === '0' || show === 0 || show === 'false';
 }
 
-function extractSlideBackground(slideXml: string, theme: ThemeMap | null): string | null {
-  const parsed = parser.parse(slideXml) as XmlNode;
-  const cSld = findChild(findChild(parsed, 'p:sld'), 'p:cSld');
+// Read the `<p:cSld><p:bg>` block off any root (`<p:sld>`,
+// `<p:sldLayout>`, `<p:sldMaster>`). Returns the resolved hex colour
+// or null.
+//
+// PowerPoint's <p:bg> wraps one of:
+//   <p:bgPr>  — direct fill (solidFill, gradFill, blipFill — pictures
+//               handled separately via extractSlideBackgroundImage).
+//   <p:bgRef idx="…"> — index into theme's `<a:bgFillStyleLst>`. The
+//                       inner <a:schemeClr> tints whatever the indexed
+//                       entry produces. For our v1 we resolve the
+//                       inner schemeClr directly — that's the colour
+//                       PowerPoint actually paints in most templates.
+//                       Full bgFillStyleLst lookup is a follow-up.
+function extractBgFromXml(xml: string, theme: ThemeMap | null): string | null {
+  const parsed = parser.parse(xml) as XmlNode;
+  const root =
+    (findChild(parsed, 'p:sld') as XmlNode | undefined) ??
+    (findChild(parsed, 'p:sldLayout') as XmlNode | undefined) ??
+    (findChild(parsed, 'p:sldMaster') as XmlNode | undefined);
+  if (!root) return null;
+  const cSld = findChild(root, 'p:cSld');
   const bg = findChild(cSld, 'p:bg');
   if (!bg) return null;
   const bgPr = findChild(bg, 'p:bgPr');
-  if (!bgPr) return null;
-  return readColor(bgPr, theme) ?? parseSrgbColor(bgPr);
+  if (bgPr) return readColor(bgPr, theme) ?? parseSrgbColor(bgPr);
+  // A5-idx — `<p:bgRef idx>` carries an inline schemeClr/srgbClr child
+  // (no <a:solidFill> wrapper). resolveSchemeColor handles bare
+  // schemeClr; an inline srgbClr falls through to parseSrgbColor
+  // (which also accepts the unwrapped form).
+  const bgRef = findChild(bg, 'p:bgRef');
+  if (bgRef) {
+    const schemed = resolveSchemeColor(bgRef, theme);
+    if (schemed) return schemed;
+    // Bare srgbClr child (rare on bgRef but legal).
+    const srgb = findChild(bgRef, 'a:srgbClr') as XmlNode | undefined;
+    const val = srgb?.['@val'];
+    if (typeof val === 'string' && /^[0-9a-fA-F]{6}$/.test(val)) {
+      return applyColorModifiers(`#${val.toUpperCase()}`, srgb);
+    }
+  }
+  return null;
 }
+
+// I6 — slide background inheritance. PowerPoint themes routinely put
+// `<p:bg>` on the slideMaster or slideLayout, not the slide. Without
+// inheritance, every themed deck imports as a stack of white slides.
+// Walks slide → layout → master, returning the first non-null bg.
+async function resolveSlideBackground(
+  slideXml: string,
+  slideRelsXml: string | null,
+  zip: JSZip,
+  theme: ThemeMap | null,
+): Promise<string | null> {
+  // 1. Slide's own bg (A2).
+  const own = extractBgFromXml(slideXml, theme);
+  if (own) return own;
+
+  if (!slideRelsXml) return null;
+
+  // 2. Layout's bg (I6 — first inheritance step).
+  const layoutTarget = findRelTargetByType(slideRelsXml, '/slideLayout');
+  if (!layoutTarget) return null;
+  const layoutPath = resolveRelTarget(layoutTarget, 'ppt/slides/');
+  const layoutXml = await zip.file(layoutPath)?.async('string');
+  if (layoutXml) {
+    const lay = extractBgFromXml(layoutXml, theme);
+    if (lay) return lay;
+  }
+
+  // 3. Master's bg (I6 — second inheritance step).
+  const layoutDir = layoutPath.slice(0, layoutPath.lastIndexOf('/') + 1);
+  const layoutName = layoutPath.split('/').pop() ?? '';
+  const layoutRelsXml = await zip.file(`${layoutDir}_rels/${layoutName}.rels`)?.async('string');
+  if (!layoutRelsXml) return null;
+  const masterTarget = findRelTargetByType(layoutRelsXml, '/slideMaster');
+  if (!masterTarget) return null;
+  const masterPath = resolveRelTarget(masterTarget, layoutDir);
+  const masterXml = await zip.file(masterPath)?.async('string');
+  if (!masterXml) return null;
+  return extractBgFromXml(masterXml, theme);
+}
+
 
 // A4 — picture background. Univer's `ISlidePage.pageBackgroundFill` is
 // an `IColorStyle` and can't carry an image, so we synthesise a backdrop
@@ -2301,10 +2374,12 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     const bgImage = await extractSlideBackgroundImage(slideXml, reg, pageOrdinal, pageSize);
     if (bgImage) elementMap[bgImage.id] = bgImage;
 
-    // A2 — slide background. Theme- and layout-inherited backgrounds
-    // are still TODO (A5 / I6); when this slide has no `<p:bg>` we
-    // keep the historical white default.
-    const slideBg = extractSlideBackground(slideXml, theme);
+    // A2 + I6 — slide background, with layout / master inheritance.
+    // PowerPoint themes usually put `<p:bg>` on the master rather than
+    // on each slide; without the chain walk every themed deck imported
+    // as a stack of white slides. resolveSlideBackground tries slide →
+    // layout → master and returns the first non-null fill.
+    const slideBg = await resolveSlideBackground(slideXml, slideRelsXml, zip, theme);
 
     // A6 — only emit slideProperties when the slide is actually hidden,
     // so visible slides keep their lean page model. layoutObjectId /
