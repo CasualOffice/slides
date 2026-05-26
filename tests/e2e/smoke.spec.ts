@@ -1816,6 +1816,111 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(contentUrl.startsWith('data:image/png;base64,'), 'data URI populated').toBe(true);
   });
 
+  test('pptx import wave 7f — strikethrough + baseline + linked images (B8 + B9 + E2)', async ({ page }) => {
+    // One slide carries three wave-7f items in one shot:
+    //  • B8 — text run 1 has <a:rPr strike="sngStrike"/> → ts.st truthy.
+    //  • B9 — text run 2 has <a:rPr baseline="30000"/> → ts.va === SUPERSCRIPT (3).
+    //  • E2 — <p:pic> with <a:blip r:link="rId2"/>; rels rId2 →
+    //         "https://example.com/img.png" passes through to
+    //         imageProperties.contentUrl directly (no fetch).
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const reimported = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="text"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="914400"/><a:ext cx="5000000" cy="1000000"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `</p:spPr>` +
+        `<p:txBody>` +
+        `<a:bodyPr/>` +
+        `<a:p>` +
+        `<a:r><a:rPr lang="en-US" strike="sngStrike"/><a:t>struck</a:t></a:r>` +
+        `<a:r><a:rPr lang="en-US" baseline="30000"/><a:t>super</a:t></a:r>` +
+        `</a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `<p:pic>` +
+        `<p:nvPicPr><p:cNvPr id="3" name="linked"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>` +
+        `<p:blipFill>` +
+        `<a:blip r:link="rId2"/>` +
+        `<a:stretch><a:fillRect/></a:stretch>` +
+        `</p:blipFill>` +
+        `<p:spPr>` +
+        `<a:xfrm><a:off x="914400" y="2500000"/><a:ext cx="2000000" cy="1500000"/></a:xfrm>` +
+        `<a:prstGeom prst="rect"/>` +
+        `</p:spPr>` +
+        `</p:pic>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="https://example.com/img.png" TargetMode="External"/>` +
+        `</Relationships>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave7f.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = reimported;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    const elements = Object.values(firstPage.pageElements ?? {});
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const text = elements.find((e: any) => e.richText?.rich) as any;
+    expect(text, 'text frame extracted with rich IDocumentData').toBeTruthy();
+    const runs = text.richText.rich.body.textRuns;
+    expect(runs.length, 'two text runs').toBeGreaterThanOrEqual(2);
+
+    expect(runs[0].ts?.st, '<a:rPr strike="sngStrike"> → ts.st truthy').toBeTruthy();
+    expect(runs[0].ts?.va, 'no baseline on run 1').toBeFalsy();
+
+    expect(runs[1].ts?.va, '<a:rPr baseline="30000"> → ts.va === SUPERSCRIPT (3)').toBe(3);
+    expect(runs[1].ts?.st, 'no strikethrough on run 2').toBeFalsy();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const img = elements.find((e: any) => e.image) as any;
+    expect(img, 'linked image extracted').toBeTruthy();
+    expect(img.image?.imageProperties?.contentUrl, 'r:link → contentUrl passthrough').toBe('https://example.com/img.png');
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.

@@ -3,7 +3,7 @@ import { XMLParser } from 'fast-xml-parser';
 import type { IPageElement, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
 import type { IBullet, IDocumentData, IDocumentStyle, IParagraph, ITextRun, IParagraphStyle } from '@univerjs/core';
-import { BorderStyleTypes, HorizontalAlign, PresetListType, VerticalAlign } from '@univerjs/core';
+import { BaselineOffset, BorderStyleTypes, HorizontalAlign, PresetListType, VerticalAlign } from '@univerjs/core';
 
 // pptx import — JSZip + fast-xml-parser → ISlideData.
 //
@@ -384,6 +384,29 @@ function parseRunProps(rPr: unknown, theme: ThemeMap | null = null): Partial<ISl
     // is `{ s: 1 }` (single line); we pass that.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (out as any).ul = { s: 1 };
+  }
+
+  // B8 — strikethrough. <a:rPr strike="sngStrike|dblStrike"> →
+  // IStyleBase.st (same ITextDecoration shape as ul). 'noStrike'
+  // and absent attribute = off. `dblStrike` collapses to a single
+  // line because Univer's ITextDecoration has no double variant —
+  // acceptable lossiness for a rare attribute.
+  const strike = node['@strike'];
+  if (strike === 'sngStrike' || strike === 'dblStrike') {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (out as any).st = { s: 1 };
+  }
+
+  // B9 — sub/superscript. <a:rPr baseline="N"> with N in thousandths
+  // of a percent. Positive (e.g. 30000) = SUPERSCRIPT, negative
+  // (e.g. -25000) = SUBSCRIPT, 0 / absent = NORMAL (omitted).
+  const baselineRaw = node['@baseline'];
+  if (typeof baselineRaw === 'string' || typeof baselineRaw === 'number') {
+    const baseline = parseInt(String(baselineRaw), 10);
+    if (Number.isFinite(baseline) && baseline !== 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (out as any).va = baseline > 0 ? BaselineOffset.SUPERSCRIPT : BaselineOffset.SUBSCRIPT;
+    }
   }
 
   // Color: <a:solidFill><a:srgbClr val="…"/></a:solidFill> or
@@ -1424,21 +1447,43 @@ async function processPicNode(
   }
   const blip = findChild(blipFill, 'a:blip') as XmlNode | undefined;
   const rEmbed = blip?.['@r:embed'] as string | undefined;
-  if (!rEmbed) return null;
-  const relTarget = reg.imageRelMap.get(rEmbed);
-  if (!relTarget) return null;
-  const slidesRoot = 'ppt/slides/';
-  const zipPath = relTarget.startsWith('/')
-    ? relTarget.slice(1)
-    : (relTarget.startsWith('..')
-      ? `ppt/${relTarget.replace(/^\.\.\//, '')}`
-      : `${slidesRoot}${relTarget}`);
+  const rLink = blip?.['@r:link'] as string | undefined;
 
-  let dataUri = reg.cache.get(zipPath) ?? null;
-  if (!dataUri) {
-    dataUri = await readImageAsDataUri(reg.zip, zipPath);
-    if (!dataUri) return null;
-    reg.cache.set(zipPath, dataUri);
+  // E2 — linked images. `<a:blip r:link="rIdN"/>` resolves to an
+  // external Target URL via the slide's rels (rather than embedded
+  // bytes under `ppt/media/`). For http(s) URLs we pass the URL
+  // through to `imageProperties.contentUrl` directly — no fetch, no
+  // data-URI conversion. Local-path links (unusual, point at the
+  // author's filesystem) are skipped.
+  let contentUrl: string | null = null;
+  if (rEmbed) {
+    const relTarget = reg.imageRelMap.get(rEmbed);
+    if (!relTarget) return null;
+    const slidesRoot = 'ppt/slides/';
+    const zipPath = relTarget.startsWith('/')
+      ? relTarget.slice(1)
+      : (relTarget.startsWith('..')
+        ? `ppt/${relTarget.replace(/^\.\.\//, '')}`
+        : `${slidesRoot}${relTarget}`);
+
+    let dataUri = reg.cache.get(zipPath) ?? null;
+    if (!dataUri) {
+      dataUri = await readImageAsDataUri(reg.zip, zipPath);
+      if (!dataUri) return null;
+      reg.cache.set(zipPath, dataUri);
+    }
+    contentUrl = dataUri;
+  } else if (rLink) {
+    const linkTarget = reg.imageRelMap.get(rLink);
+    if (!linkTarget) return null;
+    if (/^https?:\/\//i.test(linkTarget)) {
+      contentUrl = linkTarget;
+    } else {
+      // Local-path link — we don't load author-filesystem assets.
+      return null;
+    }
+  } else {
+    return null;
   }
 
   const zIndex = z.next;
@@ -1459,7 +1504,7 @@ async function processPicNode(
     image: {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       imageProperties: {
-        contentUrl: dataUri,
+        contentUrl,
         ...(cropProperties ? { cropProperties } : {}),
       } as any,
     },

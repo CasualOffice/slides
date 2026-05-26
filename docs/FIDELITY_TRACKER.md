@@ -10,9 +10,11 @@ What every real `.pptx` carries vs. what our importer/exporter currently round-t
 
 Visual impact = how noticeable the gap is in a typical business deck. Complexity = relative effort to land the fix.
 
-## Snapshot — 2026-05-26 (post wave 7e)
+## Snapshot — 2026-05-26 (post wave 7f)
 
-**38 / 87 items at ✅, 5 at ⚠️.** Wave 7e lands A4 — picture backgrounds. Univer's `ISlidePage.pageBackgroundFill` is an `IColorStyle` and can't carry an image, so `extractSlideBackgroundImage` synthesises a backdrop IMAGE element at z-index 0 covering the whole slide (the regular element extractor starts at z=1, so the bg always sits beneath authored content). Stretch / tile / `<a:srcRect>` on bgPr deferred — first pass renders edge-to-edge stretch.
+**41 / 87 items at ✅, 5 at ⚠️.** Wave 7f closes three small text + image fidelity gaps: B8 (`<a:rPr strike>` → `IStyleBase.st`), B9 (`<a:rPr baseline>` → `IStyleBase.va` via `BaselineOffset.SUPERSCRIPT` / `SUBSCRIPT`), and E2 (`<a:blip r:link>` → http(s) URL passed through to `imageProperties.contentUrl` directly).
+
+Wave 7e (preceding): A4 — picture backgrounds. `extractSlideBackgroundImage` synthesises a backdrop IMAGE element at z-index 0 covering the whole slide (Univer's `ISlidePage.pageBackgroundFill` is an `IColorStyle` and can't carry an image). Stretch / tile / `<a:srcRect>` on bgPr deferred.
 
 Wave 7d (preceding): D12 (`<a:noFill/>` distinguished from absent fill via a transparent sentinel — round-trips because the export side skips PptxGenJS's `fill` opt when it sees the sentinel), F4 (line-like prsts inflate their zero-dimension bbox to the stroke width so horizontal/vertical lines actually render), and B4 (font-family fallback chain `<a:latin>` → `<a:ea>` → `<a:cs>` for CJK / complex-script decks).
 
@@ -45,8 +47,8 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | B5 | Bold (`<a:rPr b>`) | ✅ | High | — | First run only. |
 | B6 | Italic (`<a:rPr i>`) | ✅ | Med | — | First run only. |
 | B7 | Underline (`<a:rPr u>`) | ✅ | Low | — | First run only. |
-| B8 | Strikethrough (`<a:rPr strike>`) | ❌ | Low | Low | — |
-| B9 | Subscript / superscript (`<a:rPr baseline>`) | ❌ | Low | Low | — |
+| B8 | Strikethrough (`<a:rPr strike>`) | ✅ | Low | Low | Wave 7f — `parseRunProps` maps `<a:rPr strike="sngStrike"\|"dblStrike">` to `IStyleBase.st = { s: 1 }`. `dblStrike` collapses to a single line (Univer's `ITextDecoration` has no double variant); acceptable lossiness. `noStrike` and absent attribute = off. |
+| B9 | Subscript / superscript (`<a:rPr baseline>`) | ✅ | Low | Low | Wave 7f — `parseRunProps` maps `<a:rPr baseline="N">` (thousandths of a percent) to `IStyleBase.va`: positive (e.g. `30000`) → `BaselineOffset.SUPERSCRIPT`, negative (e.g. `-25000`) → `BaselineOffset.SUBSCRIPT`, `0` / absent → omitted (NORMAL by default). |
 | B10 | Font color — srgbClr | ✅ | High | — | First run only. |
 | B11 | Font color — schemeClr (theme) | ✅ | High | Med | Wave 5 — `readColor` resolves `<a:solidFill><a:schemeClr val=…>` against the parsed `<a:clrScheme>`. lumMod / lumOff / tint / shade modifiers still drop. |
 | B12 | Font color — prstClr / sysClr | ❌ | Low | Low | — |
@@ -106,7 +108,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | Code | Item | Status | Impact | Complexity | Notes |
 |------|------|--------|--------|-----------|-------|
 | E1 | Embedded bytes (`<a:blip r:embed>`) | ✅ | Critical | — | data: URI. |
-| E2 | Linked images (`<a:blip r:link>`) | ❌ | Low | Low | — |
+| E2 | Linked images (`<a:blip r:link>`) | ✅ | Low | Low | Wave 7f — `processPicNode` reads `<a:blip r:link>` alongside `r:embed`. The rId resolves to an external Target via the slide's rels; `http(s)` URLs pass through to `imageProperties.contentUrl` directly (no fetch, no data-URI conversion). Local-path links (author-filesystem refs) are skipped. |
 | E3 | Image cropping (`<a:srcRect>`) | ✅ | Med | Low | Wave 7c — `srcRect @l/@t/@r/@b` (percent * 1000) → `cropProperties.offsetLeft/Top/Right/Bottom` (0..1 fractions). |
 | E4 | Image transparency (`<a:alphaModFix>`) | ❌ | Low | Low | — |
 | E5 | Image colour adjust (lum/duotone/grayscale) | ❌ | Low | Med | — |
