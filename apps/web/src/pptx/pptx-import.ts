@@ -2389,6 +2389,32 @@ function extractSlideHidden(slideXml: string): boolean {
   return show === '0' || show === 0 || show === 'false';
 }
 
+// K4 — per-slide header / footer / date / slide-number toggles.
+// OOXML lets a slide carry `<p:hf sldNum="0|1" hdr="0|1" ftr="0|1"
+// dt="0|1"/>` (defaults to "1" when omitted — i.e. show that placeholder
+// if the layout/master declared one). When the slide opts out (sets a
+// flag to "0"), we skip synthesising the matching service placeholder
+// from the master even though I5 would otherwise emit it.
+//
+// PowerPoint also uses these toggles on layouts + masters; we read only
+// the slide-level version since the service-placeholder synthesis in I5
+// is driven by the slide's intent. Most decks rely on the default
+// (everything visible), so the function returns a Set of types the
+// slide explicitly opts OUT of.
+type HfFlag = 'ftr' | 'dt' | 'sldNum';
+function extractSlideHfOptOuts(slideXml: string): Set<HfFlag> {
+  const out = new Set<HfFlag>();
+  const parsed = parser.parse(slideXml) as XmlNode;
+  const sld = findChild(parsed, 'p:sld') as XmlNode | undefined;
+  const hf = findChild(sld, 'p:hf') as XmlNode | undefined;
+  if (!hf) return out;
+  const isOff = (v: unknown): boolean => v === '0' || v === 0 || v === 'false';
+  if (isOff(hf['@ftr'])) out.add('ftr');
+  if (isOff(hf['@dt'])) out.add('dt');
+  if (isOff(hf['@sldNum'])) out.add('sldNum');
+  return out;
+}
+
 // Read the `<p:cSld><p:bg>` block off any root (`<p:sld>`,
 // `<p:sldLayout>`, `<p:sldMaster>`). Returns the resolved hex colour
 // or null.
@@ -2700,17 +2726,17 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     for (const el of elements) elementMap[el.id] = el;
 
     // I5 — synthesise footer / date / slide-number placeholders from the
-    // layout / master when the slide doesn't declare them. PowerPoint
-    // gates these on per-slide `<p:hf>` toggles which we don't read yet;
-    // we approximate "deck author included a footer in the layout/master
-    // and the slide didn't opt out" by simply emitting any layout/master
-    // service placeholder with non-empty text that the slide doesn't
-    // already own.
+    // layout / master when the slide doesn't declare them. K4 — honour
+    // the per-slide `<p:hf sldNum="0|1" ftr="0|1" dt="0|1"/>` toggles so
+    // a slide that opts out of (say) the page-number doesn't get the
+    // synthesised one painted on top.
     const declaredPhTypes = extractSlideDeclaredPlaceholderTypes(slideXml);
+    const hfOptOuts = extractSlideHfOptOuts(slideXml);
     const servicePhs = await buildServicePlaceholders(slideRelsXml, zip, theme);
     let serviceCounter = 0;
     for (const [phType, svc] of servicePhs) {
       if (declaredPhTypes.has(phType)) continue;
+      if (hfOptOuts.has(phType)) continue;
       serviceCounter += 1;
       const elId = `s${pageOrdinal}-svc-${phType}-${serviceCounter}`;
       const richText: ISlideRichTextProps = {

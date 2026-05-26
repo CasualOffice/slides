@@ -3501,6 +3501,122 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(sldNum.left, 'sldNum left inherited from master').toBeCloseTo(768, 0);
   });
 
+  test('pptx import wave 9a — slide <p:hf> opts out service placeholders (K4)', async ({ page }) => {
+    // Master declares both ftr and sldNum service placeholders. Slide
+    // sets `<p:hf sldNum="0"/>`, opting out of the page number. After
+    // import, the footer survives but the slide-number is skipped.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      // Slide opts out of slide-number via <p:hf sldNum="0"/>; ftr stays
+      // implicit (default = visible).
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `<p:hf sldNum="0"/>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>` +
+        `</Relationships>`;
+      const layout =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sldLayout>`;
+      const layoutRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>` +
+        `</Relationships>`;
+      const master =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        // ftr
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="ftr"/><p:cNvSpPr/><p:nvPr><p:ph type="ftr" sz="quarter" idx="11"/></p:nvPr></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="457200" y="5943600"/><a:ext cx="2743200" cy="274320"/></a:xfrm></p:spPr>` +
+        `<p:txBody><a:bodyPr/><a:lstStyle/>` +
+        `<a:p><a:r><a:rPr lang="en-US"/><a:t>FooterText</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        // sldNum — slide opts out, should NOT appear in the result.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="3" name="sldNum"/><p:cNvSpPr/><p:nvPr><p:ph type="sldNum" sz="quarter" idx="12"/></p:nvPr></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="7315200" y="5943600"/><a:ext cx="914400" cy="274320"/></a:xfrm></p:spPr>` +
+        `<p:txBody><a:bodyPr/><a:lstStyle/>` +
+        `<a:p><a:r><a:rPr lang="en-US"/><a:t>PageNum</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sldMaster>`;
+      const masterRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/slideLayouts/slideLayout1.xml', layout);
+      zip.file('ppt/slideLayouts/_rels/slideLayout1.xml.rels', layoutRels);
+      zip.file('ppt/slideMasters/slideMaster1.xml', master);
+      zip.file('ppt/slideMasters/_rels/slideMaster1.xml.rels', masterRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave9a-hf-optout.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    expect(firstPage, 'first page extracted').toBeTruthy();
+    const elements = Object.values(firstPage.pageElements ?? {});
+    // Only the footer should have been synthesised (sldNum opted out).
+    expect(elements.length, 'only footer synthesised (sldNum opted out)').toBe(1);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ftr = elements.find((e: any) => e.richText?.text?.includes('FooterText')) as any;
+    expect(ftr, 'footer survives <p:hf> default').toBeTruthy();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sldNum = elements.find((e: any) => e.id?.includes('svc-sldNum'));
+    expect(sldNum, 'sldNum suppressed by <p:hf sldNum="0">').toBeFalsy();
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.
