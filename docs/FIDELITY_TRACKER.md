@@ -167,7 +167,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | I2 | Slide master XML passthrough | ✅ | Med | Low | Wave 7k — same harvest as I1, keyed under `masters` in the same `CASUAL_SLIDES_PPTX_RAW` payload. |
 | I3 | **Placeholder geometry inheritance** (xfrm from layout / master) | ✅ | **Critical** | Med | Wave 4 — `buildPlaceholderMap` walks slide → layout → master and assembles a `(type\|idx)` → xfrm map. Layout overrides master; matches OOXML's inheritance order. |
 | I4 | Placeholder default text style inheritance | ✅ | High | Med | Wave 4b — `<a:lstStyle><a:lvl1pPr><a:defRPr>` parsed from layout / master and applied when the slide's run lacks `<a:rPr>`. Level-2+ paragraphs still inherit `lvl1pPr`; multi-level bullets land with wave 6. |
-| I5 | Date / page-number / footer placeholders | ❌ | Med | Med | — |
+| I5 | Date / page-number / footer placeholders | ✅ | Med | Med | Wave 8f — `extractServicePlaceholders` walks the layout/master `<p:spTree>` for `<p:ph type="ftr\|dt\|sldNum">` with non-empty text and harvests geometry + run-style + text body. After processSpTree, the import loop synthesises a TEXT element for every service placeholder type the slide doesn't already declare. Slide number `<a:fld type="slidenum">` text passes through verbatim — live substitution per slide is renderer work (P4). `<p:hf>` per-slide toggles not yet honoured. |
 | I6 | Layout background fill (when slide inherits) | ❌ | High | Med | — |
 
 ## J. Theme

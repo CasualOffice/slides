@@ -1460,6 +1460,156 @@ async function resolveThemeForSlide(
   return theme;
 }
 
+// I5 — footer / date / page-number "service" placeholders. Layouts and
+// masters routinely declare `<p:sp>` with `<p:ph type="ftr">`,
+// `<p:ph type="dt">` (date), or `<p:ph type="sldNum">` carrying both
+// geometry AND the displayed text ("‹#›" for slide number, "&[Date]" for
+// the dynamic date, "Footer" or an authored brand string for ftr).
+// When the slide doesn't declare its own version, the user still
+// expects these to render. PowerPoint resolves them through the
+// header-footer system; we approximate by emitting the layout/master
+// content as a TEXT element on import.
+interface ServicePlaceholder {
+  type: 'ftr' | 'dt' | 'sldNum';
+  rect: PlaceholderRect;
+  text: string;
+  props: Partial<ISlideRichTextProps>;
+  rich: IDocumentData | null;
+}
+
+// Walk a `<p:sldLayout>` or `<p:sldMaster>` XML and collect every
+// footer/date/sldNum placeholder along with its rendered text. Returns
+// a map keyed by the placeholder type so the caller can look up
+// "what's the master-supplied footer text?".
+function extractServicePlaceholders(layoutOrMasterXml: string, theme: ThemeMap | null = null): Map<'ftr' | 'dt' | 'sldNum', ServicePlaceholder> {
+  const parsed = parser.parse(layoutOrMasterXml) as XmlNode;
+  const root =
+    (findChild(parsed, 'p:sldLayout') as XmlNode | undefined) ??
+    (findChild(parsed, 'p:sldMaster') as XmlNode | undefined);
+  const map = new Map<'ftr' | 'dt' | 'sldNum', ServicePlaceholder>();
+  if (!root) return map;
+  const spTree = findChild(findChild(root, 'p:cSld'), 'p:spTree');
+  for (const sp of toArray(findChild(spTree, 'p:sp'))) {
+    if (!sp || typeof sp !== 'object') continue;
+    const nvSpPr = findChild(sp, 'p:nvSpPr');
+    const nvPr = findChild(nvSpPr, 'p:nvPr');
+    const ph = findChild(nvPr, 'p:ph') as XmlNode | undefined;
+    if (!ph) continue;
+    const phType = ph['@type'];
+    if (phType !== 'ftr' && phType !== 'dt' && phType !== 'sldNum') continue;
+
+    const spPr = findChild(sp, 'p:spPr');
+    const xfrm = findChild(spPr, 'a:xfrm');
+    const off = xfrm ? (findChild(xfrm, 'a:off') as XmlNode | undefined) : undefined;
+    const ext = xfrm ? (findChild(xfrm, 'a:ext') as XmlNode | undefined) : undefined;
+
+    const lstStyle = findChild(findChild(sp, 'p:txBody'), 'a:lstStyle');
+    const lvl1pPr = findChild(lstStyle, 'a:lvl1pPr');
+    const defRPr = findChild(lvl1pPr, 'a:defRPr');
+    let defaultRunProps: Partial<ISlideRichTextProps> | undefined;
+    if (defRPr) {
+      const parsedDef = parseRunProps(defRPr, theme);
+      if (Object.keys(parsedDef).length > 0) defaultRunProps = parsedDef;
+    }
+
+    const rect: PlaceholderRect = {
+      left: emu2px(off?.['@x'] as string | undefined),
+      top: emu2px(off?.['@y'] as string | undefined),
+      width: emu2px(ext?.['@cx'] as string | undefined),
+      height: emu2px(ext?.['@cy'] as string | undefined),
+      defaultRunProps,
+    };
+
+    // Pull text + run formatting via the existing shared extractor so
+    // multi-run formatting in the master/layout placeholder (e.g. a
+    // styled "&[Date]" run) lands the same way as a slide-side run.
+    const txBody = findChild(sp, 'p:txBody');
+    let { text, props, rich } = extractRichDoc(
+      txBody,
+      `service-${phType}`,
+      defaultRunProps,
+      theme,
+      null,
+      1,
+      false,
+    );
+
+    // `<a:fld>` (text field — slide number / date placeholders use it)
+    // doesn't get walked by extractRichDoc since the run loop only
+    // iterates `<a:r>`. As a pragmatic fallback, when the placeholder
+    // text came back empty AND the txBody contains an `<a:fld>` with
+    // visible text, use that. Live substitution (replacing the field
+    // with the actual slide number / date) is renderer work.
+    if (text.trim().length === 0 && txBody) {
+      const paras = toArray(findChild(txBody, 'a:p'));
+      const fldTexts: string[] = [];
+      for (const p of paras) {
+        for (const fld of toArray(findChild(p, 'a:fld'))) {
+          if (!fld || typeof fld !== 'object') continue;
+          const t = (fld as XmlNode)['a:t'];
+          if (typeof t === 'string') fldTexts.push(t);
+          else if (t && typeof t === 'object') {
+            const inner = (t as XmlNode)['#text'];
+            if (typeof inner === 'string') fldTexts.push(inner);
+          }
+        }
+      }
+      if (fldTexts.length > 0) {
+        text = fldTexts.join('');
+        // Use the placeholder's default run props as the run's style
+        // (best we can do without parsing the fld's own rPr).
+        props = { ...(defaultRunProps ?? {}) };
+        rich = null;
+      }
+    }
+
+    // Only emit the service placeholder when it actually carries
+    // visible text. An empty footer placeholder in the master is a
+    // common "reserved slot" — we don't want to paint blank text boxes
+    // when the slide deliberately omits the footer.
+    if (text.trim().length === 0) continue;
+
+    map.set(phType, { type: phType, rect, text, props, rich });
+  }
+  return map;
+}
+
+// Resolve a slide's layout (then master) and merge their service
+// placeholders. Layout entries win over master (same precedence as
+// buildPlaceholderMap).
+async function buildServicePlaceholders(
+  slideRelsXml: string | null,
+  zip: JSZip,
+  theme: ThemeMap | null,
+): Promise<Map<'ftr' | 'dt' | 'sldNum', ServicePlaceholder>> {
+  if (!slideRelsXml) return new Map();
+  const layoutTarget = findRelTargetByType(slideRelsXml, '/slideLayout');
+  if (!layoutTarget) return new Map();
+  const layoutPath = resolveRelTarget(layoutTarget, 'ppt/slides/');
+  const layoutXml = await zip.file(layoutPath)?.async('string');
+  if (!layoutXml) return new Map();
+
+  const layoutDir = layoutPath.slice(0, layoutPath.lastIndexOf('/') + 1);
+  const layoutName = layoutPath.split('/').pop() ?? '';
+  const layoutRelsXml = await zip.file(`${layoutDir}_rels/${layoutName}.rels`)?.async('string');
+
+  let masterMap = new Map<'ftr' | 'dt' | 'sldNum', ServicePlaceholder>();
+  if (layoutRelsXml) {
+    const masterTarget = findRelTargetByType(layoutRelsXml, '/slideMaster');
+    if (masterTarget) {
+      const masterPath = resolveRelTarget(masterTarget, layoutDir);
+      const masterXml = await zip.file(masterPath)?.async('string');
+      if (masterXml) masterMap = extractServicePlaceholders(masterXml, theme);
+    }
+  }
+
+  const layoutMap = extractServicePlaceholders(layoutXml, theme);
+  // Master first, then layout overrides (per OOXML order).
+  const merged = new Map<'ftr' | 'dt' | 'sldNum', ServicePlaceholder>(masterMap);
+  for (const [k, v] of layoutMap) merged.set(k, v);
+  return merged;
+}
+
 // Resolve a slide's layout (then master) and merge their placeholder
 // rects. Layout overrides master where both define the same key —
 // that matches PowerPoint's inheritance order.
@@ -2202,6 +2352,27 @@ async function extractElementsFromSlideXml(
   return elements;
 }
 
+// I5 — collect the set of placeholder types declared in the slide's own
+// `<p:spTree>`. Used to decide which service placeholders (ftr / dt /
+// sldNum) need to be synthesised from the layout / master.
+function extractSlideDeclaredPlaceholderTypes(slideXml: string): Set<string> {
+  const declared = new Set<string>();
+  const parsed = parser.parse(slideXml) as XmlNode;
+  const spTree = findChild(findChild(findChild(parsed, 'p:sld'), 'p:cSld'), 'p:spTree');
+  if (!spTree) return declared;
+  const walk = (tree: unknown): void => {
+    for (const sp of toArray(findChild(tree, 'p:sp'))) {
+      if (!sp || typeof sp !== 'object') continue;
+      const ph = findChild(findChild(findChild(sp, 'p:nvSpPr'), 'p:nvPr'), 'p:ph') as XmlNode | undefined;
+      const t = ph?.['@type'];
+      if (typeof t === 'string') declared.add(t);
+    }
+    for (const grp of toArray(findChild(tree, 'p:grpSp'))) walk(grp);
+  };
+  walk(spTree);
+  return declared;
+}
+
 // A2 — read `<p:cSld><p:bg>` for the slide background. Resolves both
 // `<p:bgPr><a:solidFill><a:srgbClr>` and `<p:bgPr><a:solidFill><a:schemeClr>`
 // (J2) — the latter via the theme map. Gradient (`<a:gradFill>`),
@@ -2527,6 +2698,48 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     const elements = await extractElementsFromSlideXml(slideXml, reg, pageOrdinal);
     const elementMap: Record<string, IPageElement> = {};
     for (const el of elements) elementMap[el.id] = el;
+
+    // I5 — synthesise footer / date / slide-number placeholders from the
+    // layout / master when the slide doesn't declare them. PowerPoint
+    // gates these on per-slide `<p:hf>` toggles which we don't read yet;
+    // we approximate "deck author included a footer in the layout/master
+    // and the slide didn't opt out" by simply emitting any layout/master
+    // service placeholder with non-empty text that the slide doesn't
+    // already own.
+    const declaredPhTypes = extractSlideDeclaredPlaceholderTypes(slideXml);
+    const servicePhs = await buildServicePlaceholders(slideRelsXml, zip, theme);
+    let serviceCounter = 0;
+    for (const [phType, svc] of servicePhs) {
+      if (declaredPhTypes.has(phType)) continue;
+      serviceCounter += 1;
+      const elId = `s${pageOrdinal}-svc-${phType}-${serviceCounter}`;
+      const richText: ISlideRichTextProps = {
+        text: svc.text,
+        ...svc.props,
+        ...(svc.rich
+          ? { rich: { ...svc.rich, id: `${elId}-doc` } as IDocumentData }
+          : {}),
+      } as ISlideRichTextProps;
+      // Service placeholders sit ABOVE the authored content so the
+      // footer / page number paints over a backdrop image. zIndex picks
+      // up from the slide's last element + 1 to keep tree order intact.
+      const maxZ = elements.reduce((m, e) => Math.max(m, e.zIndex), 0);
+      elementMap[elId] = {
+        id: elId,
+        zIndex: maxZ + serviceCounter,
+        left: svc.rect.left,
+        top: svc.rect.top,
+        width: svc.rect.width,
+        height: svc.rect.height,
+        angle: 0,
+        flipX: false,
+        flipY: false,
+        title: '',
+        description: '',
+        type: PageElementType.TEXT,
+        richText,
+      };
+    }
 
     // A4 — picture background. Synthesised as an IMAGE element at
     // z-index 0 so it sits beneath the authored content (extractor

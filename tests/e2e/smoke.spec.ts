@@ -3374,6 +3374,133 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(colorHex, 'deck default color').toBe('CC0033');
   });
 
+  test('pptx import wave 8f — footer / date / sldNum from master (I5)', async ({ page }) => {
+    // Hand-roll a deck where the slide has no service placeholders, but
+    // the master defines `<p:ph type="ftr">` (with text "Confidential")
+    // and `<p:ph type="sldNum">` (with text "‹#›"). After import, both
+    // should land as TEXT elements with the layout/master-supplied
+    // geometry, so the renderer doesn't drop the footer / slide number.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const snapshot = await page.evaluate(async () => {
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      // Slide has NO placeholders — just an empty spTree.
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const slideRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>` +
+        `</Relationships>`;
+      // Layout — empty, just points at the master.
+      const layout =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sldLayout>`;
+      const layoutRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>` +
+        `</Relationships>`;
+      // Master carries two service placeholders with text + geometry.
+      const master =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        // ftr — at (0.5 in, 6.5 in) sized (3 in × 0.3 in). Text: "Confidential".
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="2" name="ftr"/><p:cNvSpPr/><p:nvPr><p:ph type="ftr" sz="quarter" idx="11"/></p:nvPr></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="457200" y="5943600"/><a:ext cx="2743200" cy="274320"/></a:xfrm></p:spPr>` +
+        `<p:txBody><a:bodyPr/><a:lstStyle/>` +
+        `<a:p><a:r><a:rPr lang="en-US"/><a:t>Confidential</a:t></a:r></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        // sldNum — at (8 in, 6.5 in) sized (1 in × 0.3 in). Text: a slide-number sentinel.
+        `<p:sp>` +
+        `<p:nvSpPr><p:cNvPr id="3" name="sldNum"/><p:cNvSpPr/><p:nvPr><p:ph type="sldNum" sz="quarter" idx="12"/></p:nvPr></p:nvSpPr>` +
+        `<p:spPr><a:xfrm><a:off x="7315200" y="5943600"/><a:ext cx="914400" cy="274320"/></a:xfrm></p:spPr>` +
+        `<p:txBody><a:bodyPr/><a:lstStyle/>` +
+        `<a:p><a:fld id="{F1}" type="slidenum"><a:t>#</a:t></a:fld></a:p>` +
+        `</p:txBody>` +
+        `</p:sp>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sldMaster>`;
+      const masterRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', slideRels);
+      zip.file('ppt/slideLayouts/slideLayout1.xml', layout);
+      zip.file('ppt/slideLayouts/_rels/slideLayout1.xml.rels', layoutRels);
+      zip.file('ppt/slideMasters/slideMaster1.xml', master);
+      zip.file('ppt/slideMasters/_rels/slideMaster1.xml.rels', masterRels);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+        };
+      };
+      return await (window as unknown as W).__casualSlides_getPptxClient().import(buf, 'wave8f-service-ph.pptx');
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = snapshot;
+    const firstPage = r?.body?.pages?.[r?.body?.pageOrder?.[0]];
+    expect(firstPage, 'first page extracted').toBeTruthy();
+    const elements = Object.values(firstPage.pageElements ?? {});
+    // Slide had nothing; only the synthesised service placeholders survive.
+    expect(elements.length, 'service placeholders emitted').toBe(2);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const footer = elements.find((e: any) => e.richText?.text?.includes('Confidential')) as any;
+    expect(footer, 'footer emitted').toBeTruthy();
+    expect(footer.type, 'footer is a TEXT element').toBe(2); // PageElementType.TEXT = 2
+    // Geometry from master: (0.5 in, 6.5 in) = (48 px, 624 px) — 9525 EMU/px.
+    expect(footer.left, 'footer left inherited from master').toBeCloseTo(48, 0);
+    expect(footer.top, 'footer top inherited from master').toBeCloseTo(624, 0);
+    expect(footer.width, 'footer width inherited').toBeCloseTo(288, 0);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sldNum = elements.find((e: any) => e.id?.includes('svc-sldNum')) as any;
+    expect(sldNum, 'sldNum emitted').toBeTruthy();
+    expect(sldNum.type, 'sldNum is a TEXT element').toBe(2);
+    expect(sldNum.left, 'sldNum left inherited from master').toBeCloseTo(768, 0);
+  });
+
   test('pptx import preserves shape geometry + fill', async ({ page }) => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.
