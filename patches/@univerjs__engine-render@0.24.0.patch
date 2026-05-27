@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index fafb8476bdd10d7a5224234dc0d7494756933de3..e9a92077e9dd59460130a0096a4adc2a55785ae0 100644
+index fafb8476bdd10d7a5224234dc0d7494756933de3..7eb51576f63f4fefb7dbfa36b79e09a02baf0570 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -12648,6 +12648,12 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -77,7 +77,35 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e9a92077e9dd59460130a0096a4adc2a
  				this._setTransForm();
  				this.refreshDocumentByDocData();
  			}
-@@ -20757,12 +20795,18 @@ var RichText = class extends BaseObject {
+@@ -20709,6 +20747,27 @@ var RichText = class extends BaseObject {
+ 		const m = this.transform.getMatrix();
+ 		mainCtx.save();
+ 		mainCtx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
++		// C12 — arbitrary-angle body rotation. Glyph extension already
++		// handles 90°/270° per-glyph; rotate the frame here for all
++		// other angles.
++		const docRenderConfig = (() => {
++			try {
++				const docs = this._documents;
++				const sk = docs && typeof docs.getDocsSkeleton === "function" ? docs.getDocsSkeleton() : null;
++				const vm = sk && typeof sk.getViewModel === "function" ? sk.getViewModel() : null;
++				const dm = vm && typeof vm.getDataModel === "function" ? vm.getDataModel() : null;
++				const snap = dm && typeof dm.getSnapshot === "function" ? dm.getSnapshot() : null;
++				return snap && snap.documentStyle && snap.documentStyle.renderConfig;
++			} catch (_e) { return null; }
++		})();
++		const centerAngle = docRenderConfig && docRenderConfig.centerAngle;
++		if (typeof centerAngle === "number" && centerAngle !== 0 && centerAngle % 90 !== 0) {
++			const cx = this.width / 2;
++			const cy = this.height / 2;
++			mainCtx.translate(cx, cy);
++			mainCtx.rotate(centerAngle * Math.PI / 180);
++			mainCtx.translate(-cx, -cy);
++		}
+ 		this._draw(mainCtx);
+ 		mainCtx.restore();
+ 		this.makeDirty(false);
+@@ -20757,12 +20816,18 @@ var RichText = class extends BaseObject {
  		};
  	}
  	_initialProps(props) {
@@ -99,7 +127,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e9a92077e9dd59460130a0096a4adc2a
  			left: (props === null || props === void 0 ? void 0 : props.left) || 0,
  			top: (props === null || props === void 0 ? void 0 : props.top) || 0,
  			angle: props === null || props === void 0 ? void 0 : props.angle
-@@ -20776,9 +20820,11 @@ var RichText = class extends BaseObject {
+@@ -20776,9 +20841,11 @@ var RichText = class extends BaseObject {
  	refreshDocumentByDocData() {
  		const docViewModel = new DocumentViewModel(this.documentModel = new _univerjs_core.DocumentDataModel(this._documentData));
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -113,7 +141,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e9a92077e9dd59460130a0096a4adc2a
  		});
  		this._documentSkeleton.getViewModel().getDataModel().updateDocumentDataPageSize(this.width, Infinity);
  		this._documentSkeleton.calculate();
-@@ -21330,6 +21376,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21330,6 +21397,15 @@ var FontAndBaseLine = class extends docExtension {
  			ctx.rotate(Math.PI / 2);
  			ctx.translate(-width / 2, (aba + abd) / 2 - abd);
  			ctx.fillText(content, 0, 0);
@@ -129,7 +157,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e9a92077e9dd59460130a0096a4adc2a
  			ctx.restore();
  		} else {
  			const CHECKED_GLYPH = "☑";
-@@ -21360,6 +21415,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21360,6 +21436,15 @@ var FontAndBaseLine = class extends docExtension {
  					y_offset = -(glyph.width - fontHeight) / 2;
  				}
  				ctx.fillText(content, spanPointWithFont.x + x_offset, spanPointWithFont.y + y_offset);
@@ -145,7 +173,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e9a92077e9dd59460130a0096a4adc2a
  			}
  		}
  	}
-@@ -24644,7 +24708,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
+@@ -24644,7 +24729,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
@@ -156,7 +184,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e9a92077e9dd59460130a0096a4adc2a
  	}
  	_onKeyDown(evt) {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..d3e122b3da5e5bdae8234a5d6a53d0e696ab12b5 100644
+index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..428f53ff25f446b6a8c3e25da7eddc27ef1dc358 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -12619,6 +12619,13 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -235,7 +263,35 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..d3e122b3da5e5bdae8234a5d6a53d0e6
  				this._setTransForm();
  				this.refreshDocumentByDocData();
  			}
-@@ -20728,12 +20767,26 @@ var RichText = class extends BaseObject {
+@@ -20680,6 +20719,27 @@ var RichText = class extends BaseObject {
+ 		const m = this.transform.getMatrix();
+ 		mainCtx.save();
+ 		mainCtx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
++		// C12 — arbitrary-angle body rotation. Glyph extension already
++		// handles 90°/270° per-glyph; rotate the frame here for all
++		// other angles.
++		const docRenderConfig = (() => {
++			try {
++				const docs = this._documents;
++				const sk = docs && typeof docs.getDocsSkeleton === "function" ? docs.getDocsSkeleton() : null;
++				const vm = sk && typeof sk.getViewModel === "function" ? sk.getViewModel() : null;
++				const dm = vm && typeof vm.getDataModel === "function" ? vm.getDataModel() : null;
++				const snap = dm && typeof dm.getSnapshot === "function" ? dm.getSnapshot() : null;
++				return snap && snap.documentStyle && snap.documentStyle.renderConfig;
++			} catch (_e) { return null; }
++		})();
++		const centerAngle = docRenderConfig && docRenderConfig.centerAngle;
++		if (typeof centerAngle === "number" && centerAngle !== 0 && centerAngle % 90 !== 0) {
++			const cx = this.width / 2;
++			const cy = this.height / 2;
++			mainCtx.translate(cx, cy);
++			mainCtx.rotate(centerAngle * Math.PI / 180);
++			mainCtx.translate(-cx, -cy);
++		}
+ 		this._draw(mainCtx);
+ 		mainCtx.restore();
+ 		this.makeDirty(false);
+@@ -20728,12 +20788,26 @@ var RichText = class extends BaseObject {
  		};
  	}
  	_initialProps(props) {
@@ -265,7 +321,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..d3e122b3da5e5bdae8234a5d6a53d0e6
  			left: (props === null || props === void 0 ? void 0 : props.left) || 0,
  			top: (props === null || props === void 0 ? void 0 : props.top) || 0,
  			angle: props === null || props === void 0 ? void 0 : props.angle
-@@ -20747,9 +20800,11 @@ var RichText = class extends BaseObject {
+@@ -20747,9 +20821,11 @@ var RichText = class extends BaseObject {
  	refreshDocumentByDocData() {
  		const docViewModel = new DocumentViewModel(this.documentModel = new DocumentDataModel(this._documentData));
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -279,7 +335,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..d3e122b3da5e5bdae8234a5d6a53d0e6
  		});
  		this._documentSkeleton.getViewModel().getDataModel().updateDocumentDataPageSize(this.width, Infinity);
  		this._documentSkeleton.calculate();
-@@ -21301,6 +21356,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21301,6 +21377,15 @@ var FontAndBaseLine = class extends docExtension {
  			ctx.rotate(Math.PI / 2);
  			ctx.translate(-width / 2, (aba + abd) / 2 - abd);
  			ctx.fillText(content, 0, 0);
@@ -295,7 +351,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..d3e122b3da5e5bdae8234a5d6a53d0e6
  			ctx.restore();
  		} else {
  			const CHECKED_GLYPH = "☑";
-@@ -21331,6 +21395,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21331,6 +21416,15 @@ var FontAndBaseLine = class extends docExtension {
  					y_offset = -(glyph.width - fontHeight) / 2;
  				}
  				ctx.fillText(content, spanPointWithFont.x + x_offset, spanPointWithFont.y + y_offset);
@@ -311,7 +367,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..d3e122b3da5e5bdae8234a5d6a53d0e6
  			}
  		}
  	}
-@@ -24615,7 +24688,8 @@ var InputManager = class InputManager extends Disposable {
+@@ -24615,7 +24709,8 @@ var InputManager = class InputManager extends Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
