@@ -1063,6 +1063,16 @@ function extractRichDoc(
   relMap: Map<string, string> | null = null,
   fontScale: number = 1,
   isTitle: boolean = false,
+  // C16 — for each regular-parsed paragraph at index i,
+  // `orderedParaChildren[i]` is the DOM-ordered child list (from
+  // fast-xml-parser preserveOrder mode). Used to interleave `<a:r>`
+  // runs and `<a:br>` soft line breaks. When provided, `<a:br>` cuts
+  // the current paragraph segment and starts a continuation segment
+  // with the same paragraphStyle minus bullet + spaceAbove (so
+  // multi-line bulleted items don't repeat the bullet on each visual
+  // line). When undefined (table cells, legacy callers), the function
+  // falls back to runs-only iteration and silently drops `<a:br>`.
+  orderedParaChildren?: unknown[][],
 ): {
   text: string;
   props: Partial<ISlideRichTextProps>;
@@ -1085,37 +1095,107 @@ function extractRichDoc(
   let firstRunProps: Partial<ISlideRichTextProps> = {};
   let capturedFirstRun = false;
 
-  for (const p of paras) {
-    const runs = toArray(findChild(p, 'a:r'));
-    const paraText: string[] = [];
+  // Extract the tag name from a preserveOrder child entry. Each
+  // entry has the shape `{ <tagName>: [children], ':@'?: attrs }`.
+  const orderedTagOf = (entry: unknown): string | null => {
+    if (!entry || typeof entry !== 'object') return null;
+    for (const k of Object.keys(entry as Record<string, unknown>)) {
+      if (k !== ':@') return k;
+    }
+    return null;
+  };
 
-    for (const r of runs) {
+  for (let paraIdx = 0; paraIdx < paras.length; paraIdx += 1) {
+    const p = paras[paraIdx];
+    const runs = toArray(findChild(p, 'a:r'));
+
+    // Paragraph-level style is computed once and shared across every
+    // segment produced by this source paragraph (segments only appear
+    // when `<a:br>` cuts a paragraph mid-flight).
+    const pPr = findChild(p, 'a:pPr');
+    const align = parseParagraphAlign(pPr);
+    const lineSpacing = parseLineSpacing(pPr);
+    const { indentStart, indentFirstLine } = parseIndent(pPr);
+    const level = parseLevel(pPr);
+    const bullet = parseBullet(pPr, elementId, level);
+    const spaceAbove = parseSpacePts(findChild(pPr, 'a:spcBef'));
+    const spaceBelow = parseSpacePts(findChild(pPr, 'a:spcAft'));
+
+    const rtl = (pPr as XmlNode | undefined)?.['@rtl'];
+    const isRtl = rtl === '1' || rtl === 1 || rtl === 'true';
+
+    const baseStyle: IParagraphStyle = {};
+    if (align !== null) baseStyle.horizontalAlign = align;
+    // Casual Slides — when `<a:lnSpc>` is absent on a paragraph,
+    // PowerPoint defaults to single (1.0x) line spacing. Univer's
+    // docs engine applies a much more generous default.
+    baseStyle.lineSpacing = lineSpacing !== null ? lineSpacing : 1;
+    if (indentStart !== undefined) baseStyle.indentStart = { v: indentStart };
+    if (indentFirstLine !== undefined) baseStyle.indentFirstLine = { v: indentFirstLine };
+    if (spaceAbove !== null) baseStyle.spaceAbove = { v: spaceAbove };
+    if (spaceBelow !== null) baseStyle.spaceBelow = { v: spaceBelow };
+    if (isRtl) baseStyle.direction = TextDirection.RIGHT_TO_LEFT;
+
+    // Build the walk order. With ordered info, interleave `<a:r>` and
+    // `<a:br>` faithfully; without it, treat every child as an `<a:r>`
+    // (legacy behaviour, drops `<a:br>` silently).
+    const orderedItems = orderedParaChildren?.[paraIdx];
+    type ItemTag = 'a:r' | 'a:br';
+    const items: ItemTag[] = orderedItems && orderedItems.length > 0
+      ? (orderedItems as unknown[])
+          .map((e) => orderedTagOf(e))
+          .filter((t): t is ItemTag => t === 'a:r' || t === 'a:br')
+      : runs.map(() => 'a:r' as const);
+
+    const segmentText: string[] = [];
+    let segmentIdx = 0;
+    let regularRunIdx = 0;
+
+    // Emit one paragraph entry + the closing `\r`. Used both at
+    // `<a:br>` boundaries and at the end of the source paragraph.
+    const flushSegment = () => {
+      const style: IParagraphStyle = { ...baseStyle };
+      if (segmentIdx > 0) {
+        // Continuation segment from `<a:br>` — drop spaceAbove so the
+        // soft break doesn't add a gap that PowerPoint wouldn't.
+        delete style.spaceAbove;
+      }
+      const paragraph: IParagraph = { startIndex: cursor };
+      if (Object.keys(style).length > 0) paragraph.paragraphStyle = style;
+      // Bullet attaches to the FIRST segment only — continuation lines
+      // sit under the bullet without repeating the marker.
+      if (segmentIdx === 0 && bullet) paragraph.bullet = bullet;
+      paragraphs.push(paragraph);
+      dataStream.push('\r');
+      lines.push(segmentText.join(''));
+      cursor += 1;
+      segmentText.length = 0;
+      segmentIdx += 1;
+    };
+
+    for (const tag of items) {
+      if (tag === 'a:br') {
+        flushSegment();
+        continue;
+      }
+      // `<a:r>` — consume the next regular run.
+      const r = runs[regularRunIdx];
+      regularRunIdx += 1;
+      if (!r) continue;
       const tNode = findChild(r, 'a:t');
       const txt = readT(tNode);
-      paraText.push(txt);
+      segmentText.push(txt);
+      dataStream.push(txt);
 
-      // Build the run's style: layout/master defaults < layout pPr
-      // defaults < this run's rPr.
       const rPr = findChild(r, 'a:rPr');
       const runStyle = parseRunProps(rPr, theme, isTitle);
-      // C13 — fontScale moved from import-time multiplication to
-      // render-time. The parsed `fontScale` is stored on
-      // `documentStyle.renderConfig.fontScale` (see below) and the
-      // engine-render's `getFontCreateConfig` multiplies textStyle.fs
-      // by it before computing the fontString. Result: re-importing
-      // our own exports no longer double-shrinks the text.
       const ts = { ...(fallbackProps ?? {}), ...runStyle };
 
       if (txt.length > 0) {
         textRuns.push({ st: cursor, ed: cursor + txt.length, ts });
       }
 
-      // B17 — `<a:rPr><a:hlinkClick r:id="rIdN"/></a:rPr>` resolves
-      // through the slide's rels file to either an http(s) URL or a
-      // slide-internal jump. We pass http(s) URLs through to Univer's
-      // hyperlink custom range; slide-internal jumps need the slide
-      // model's pageId, which we don't surface here, so they're
-      // skipped today (treated as plain text).
+      // B17 — hyperlinks.
       if (rPr && relMap && txt.length > 0) {
         const hlink = findChild(rPr, 'a:hlinkClick') as XmlNode | undefined;
         const rId = hlink?.['@r:id'] ?? hlink?.['@r:embed'];
@@ -1142,46 +1222,8 @@ function extractRichDoc(
       }
     }
 
-    // Paragraph-level (C2 + C3 + C4 + C5 + C6 + C7 + C8).
-    const pPr = findChild(p, 'a:pPr');
-    const align = parseParagraphAlign(pPr);
-    const lineSpacing = parseLineSpacing(pPr);
-    const { indentStart, indentFirstLine } = parseIndent(pPr);
-    const level = parseLevel(pPr);
-    const bullet = parseBullet(pPr, elementId, level);
-    const spaceAbove = parseSpacePts(findChild(pPr, 'a:spcBef'));
-    const spaceBelow = parseSpacePts(findChild(pPr, 'a:spcAft'));
-
-    // C9 — `<a:pPr rtl="1">` (or `"true"`) flips the paragraph to RTL.
-    // OOXML's default is LTR, matching Univer's renderer default; we
-    // only emit `direction` when the deck explicitly opts in so the
-    // produced IDocumentData stays minimal.
-    const rtl = (pPr as XmlNode | undefined)?.['@rtl'];
-    const isRtl = rtl === '1' || rtl === 1 || rtl === 'true';
-
-    const paragraphStyle: IParagraphStyle = {};
-    if (align !== null) paragraphStyle.horizontalAlign = align;
-    // Casual Slides — when `<a:lnSpc>` is absent on a paragraph, PowerPoint
-    // defaults to single (1.0x) line spacing. Univer's docs engine
-    // applies a much more generous default (visible as ~2-3x line height
-    // on imported slides — text wraps and second lines fall well below
-    // the authored frame's bottom). Forcing an explicit 1.0 here matches
-    // PowerPoint's authored intent. Decks that explicitly set lnSpc still
-    // win via the `lineSpacing !== null` branch.
-    paragraphStyle.lineSpacing = lineSpacing !== null ? lineSpacing : 1;
-    if (indentStart !== undefined) paragraphStyle.indentStart = { v: indentStart };
-    if (indentFirstLine !== undefined) paragraphStyle.indentFirstLine = { v: indentFirstLine };
-    if (spaceAbove !== null) paragraphStyle.spaceAbove = { v: spaceAbove };
-    if (spaceBelow !== null) paragraphStyle.spaceBelow = { v: spaceBelow };
-    if (isRtl) paragraphStyle.direction = TextDirection.RIGHT_TO_LEFT;
-
-    const paragraph: IParagraph = { startIndex: cursor };
-    if (Object.keys(paragraphStyle).length > 0) paragraph.paragraphStyle = paragraphStyle;
-    if (bullet) paragraph.bullet = bullet;
-    paragraphs.push(paragraph);
-    dataStream.push(...paraText, '\r');
-    cursor += 1;
-    lines.push(paraText.join(''));
+    // Close the source paragraph's final segment with its own \r.
+    flushSegment();
   }
 
   // Univer convention: the section-final `\n` sits past the last \r.
@@ -2213,6 +2255,14 @@ async function processSpTree(
       (out[i] as any)._sourceRank = composite;
     }
   };
+  // C16 — pre-build a list of `<p:sp>` ordered entries so each regular
+  // sp[i] can match orderedSpEntries[i] (fast-xml-parser preserves
+  // same-tag array order across both regular and ordered modes). From
+  // that, derive per-paragraph DOM-ordered children for the
+  // `<a:r>` / `<a:br>` interleaving extractRichDoc needs.
+  const orderedSpEntries: unknown[] = orderedChildren.filter(
+    (c) => c && typeof c === 'object' && 'p:sp' in (c as Record<string, unknown>),
+  );
   // <p:sp>
   let _spLoopIdx = 0;
   for (const sp of toArray(findChild(spTree, 'p:sp'))) {
@@ -2299,6 +2349,30 @@ async function processSpTree(
       const fallback = reg.deckDefaultRunProps || phInherited?.defaultRunProps
         ? { ...(reg.deckDefaultRunProps ?? {}), ...(phInherited?.defaultRunProps ?? {}) }
         : undefined;
+      // C16 — derive DOM-ordered child lists for each paragraph in
+      // this sp's txBody, so extractRichDoc can interleave `<a:r>` +
+      // `<a:br>` faithfully. Falls through quietly if the ordered
+      // entry shape doesn't match (e.g. when called from contexts
+      // without an ordered XML parse).
+      const orderedSp = orderedSpEntries[_myIdx] as Record<string, unknown> | undefined;
+      const _orderedParaChildren: unknown[][] = (() => {
+        if (!orderedSp || typeof orderedSp !== 'object') return [];
+        const spKids = orderedSp['p:sp'];
+        if (!Array.isArray(spKids)) return [];
+        const txBodyEntry = spKids.find(
+          (c) => c && typeof c === 'object' && 'p:txBody' in (c as Record<string, unknown>),
+        );
+        if (!txBodyEntry) return [];
+        const txBodyKids = (txBodyEntry as Record<string, unknown>)['p:txBody'];
+        if (!Array.isArray(txBodyKids)) return [];
+        const paraEntries = txBodyKids.filter(
+          (c) => c && typeof c === 'object' && 'a:p' in (c as Record<string, unknown>),
+        );
+        return paraEntries.map((pe) => {
+          const kids = (pe as Record<string, unknown>)['a:p'];
+          return Array.isArray(kids) ? kids : [];
+        });
+      })();
       const { text, props, rich } = extractRichDoc(
         txBody,
         elId,
@@ -2307,6 +2381,7 @@ async function processSpTree(
         reg.imageRelMap,
         fontScale,
         isTitle,
+        _orderedParaChildren,
       );
       const richText: ISlideRichTextProps = {
         text,
