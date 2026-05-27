@@ -7,6 +7,7 @@ import type {
   PptxRequest,
   PptxResult,
 } from './types';
+import { loadFontsForSnapshot } from './fonts-loader';
 
 // Main-thread client for the pptx Web Worker. Hides the request/response
 // correlation behind a Promise per call.
@@ -70,6 +71,39 @@ class PptxClient {
       // Transfer the buffer so we don't pay the copy cost on large decks.
       [file],
     );
+    // Font loading has to happen on the MAIN thread — `document` is
+    // not defined inside the pptx worker, so calling the loader inside
+    // importPptxToSlides was a silent no-op. Scan the returned
+    // snapshot for every distinct family, inject Google Fonts links,
+    // and BLOCK until the requested faces are actually loaded.
+    // Without this block, Univer's documentSkeleton lays out using
+    // whatever font is available at the moment (usually system Arial
+    // fallback); the canvas later repaints with the real face but the
+    // skeleton's line-wrap counts were computed with the wrong glyph
+    // widths, leaving text overflowing or under-filling the frame.
+    let requested: Set<string> = new Set();
+    try { requested = loadFontsForSnapshot(result.snapshot); } catch { /* ignore */ }
+    if (typeof document !== 'undefined' && (document as Document & { fonts?: FontFaceSet }).fonts && requested.size > 0) {
+      const fonts = (document as Document & { fonts: FontFaceSet }).fonts;
+      // Ask the FontFaceSet to actively load each family at 16 px in
+      // 400 + 700 weight. The set caches faces it has already pulled
+      // and otherwise downloads them, fulfilling once the bytes are
+      // ready. `fonts.ready` alone is unreliable because a freshly
+      // injected <link> doesn't transition the set into the
+      // 'loading' state until the CSS finishes parsing — racing the
+      // first paint.
+      const loaders: Promise<unknown>[] = [];
+      for (const family of requested) {
+        // CSS expects quoted family names that contain spaces.
+        const css = family.includes(' ') ? `"${family}"` : family;
+        loaders.push(fonts.load(`400 16px ${css}`).catch(() => null));
+        loaders.push(fonts.load(`700 16px ${css}`).catch(() => null));
+      }
+      await Promise.race([
+        Promise.all(loaders),
+        new Promise<void>((r) => setTimeout(r, 3_000)),
+      ]).catch(() => {});
+    }
     return result.snapshot;
   }
 

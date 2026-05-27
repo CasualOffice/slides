@@ -97,6 +97,8 @@ export function UniverSlide({ snapshot }: UniverSlideProps) {
       (globalThis as any).__casualSlides__ICommandService = ICommandService;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (globalThis as any).__casualSlides__IUniverInstanceService = IUniverInstanceService;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).__casualSlides__IRenderManagerService = IRenderManagerService;
 
       // Expose the pptx export client so e2e tests can call
       // `exportSlidesToPptx` directly on a hand-built snapshot — needed
