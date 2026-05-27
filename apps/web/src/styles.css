@@ -51,8 +51,19 @@ html, body, #root {
 
 #root {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--cs-titlebar-h) var(--cs-toolbar-h) 1fr auto var(--cs-statusbar-h);
   min-height: 0;
+  min-width: 0;
+}
+
+/* Grid items default to min-width: auto (= intrinsic content size), which
+   lets a wide flex row push the entire row track past the viewport. Clamp
+   every row child so the grid cell stays at the column width and inner
+   overflow handlers do their job. */
+#root > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 button {
@@ -79,14 +90,23 @@ button:disabled { cursor: not-allowed; }
 
 .cs-titlebar {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  /* `minmax(0, 1fr)` on the centre column lets it shrink below intrinsic
+     content size — without this, a long filename or wide menu strip would
+     push the auto-sized side columns past the viewport edge. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: stretch;
   gap: 12px;
   padding: 0 16px;
   background: var(--cs-surface);
   border-bottom: 1px solid var(--cs-border);
   user-select: none;
+  min-width: 0;
+  overflow: hidden;
 }
+
+/* Every direct child of the titlebar respects the grid cell width so a
+   wide actions cluster can't bleed past the right edge. */
+.cs-titlebar > * { min-width: 0; }
 
 .cs-titlebar__brand {
   display: inline-flex;
@@ -347,6 +367,11 @@ button:disabled { cursor: not-allowed; }
   position: relative;
   background: var(--cs-surface);
   border-bottom: 1px solid var(--cs-border);
+  /* Belt-and-braces: even with grid-cell clamping, an inner flex row with
+     nowrap can still report a wider scrollWidth than the cell. min-width: 0
+     lets the cell collapse to the column width regardless of content. */
+  min-width: 0;
+  overflow: hidden;
 }
 
 .cs-toolbar__row {
@@ -425,6 +450,7 @@ button:disabled { cursor: not-allowed; }
   position: relative;
   background: var(--cs-stage);
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
   display: flex;
 }
@@ -432,8 +458,10 @@ button:disabled { cursor: not-allowed; }
 .univer-mount {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   position: relative;
   background: var(--cs-stage);
+  overflow: hidden;
 }
 
 /* ============================================================= Notes panel */
@@ -520,20 +548,29 @@ button:disabled { cursor: not-allowed; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   height: var(--cs-statusbar-h);
   padding: 0 12px;
   background: var(--cs-surface);
   border-top: 1px solid var(--cs-border);
+  min-width: 0;
+  overflow: hidden;
   font-size: 11px;
   color: var(--cs-text-mute);
   user-select: none;
 }
+
+/* Statusbar children never grow past the bar — they clip rather than push.
+   Combined with overflow: hidden above, a narrow viewport drops the
+   rightmost zoom controls rather than horizontally scrolling the app. */
+.cs-statusbar > * { min-width: 0; }
 
 .cs-statusbar__left,
 .cs-statusbar__right {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 .cs-statusbar__sep {
@@ -1795,12 +1832,23 @@ button.cs-statusbar__zoom-value:focus-visible {
 .cs-toolbar2__row {
   display: flex;
   align-items: center;
+  width: 100%;
+  min-width: 0;
   height: var(--cs-toolbar-h);
   padding: 0 12px;
   gap: 2px;
-  /* No horizontal scroll — overflow falls into the "More" popover. */
+  /* No horizontal scroll — overflow falls into the "More" popover.
+     The flex row is clamped to its parent's width via min-width: 0 (otherwise
+     intrinsic content min-size lets children push it past the parent). */
   flex-wrap: nowrap;
   overflow: hidden;
+}
+
+/* Every direct flex child of the row keeps its natural width — no shrink.
+   Combined with overflow:hidden on the row, items that don't fit are
+   clipped from view; the ResizeObserver-driven More popover surfaces them. */
+.cs-toolbar2__row > * {
+  flex-shrink: 0;
 }
 
 .cs-toolbar2__btn {
@@ -2162,3 +2210,228 @@ button.cs-statusbar__zoom-value:focus-visible {
   max-width: 720px;
 }
 
+/* ================ Slideshow + presenter ================ */
+
+/* Cursor / counter auto-hide. The wrapper class is toggled by SlideShow
+   based on a debounced mousemove flag (2 s idle hides cursor + counter). */
+.cs-slideshow--cursor-hidden,
+.cs-slideshow--cursor-hidden .cs-slideshow__stage,
+.cs-slideshow--cursor-hidden .cs-slideshow__presenter {
+  cursor: none;
+}
+.cs-slideshow--cursor-hidden .cs-slideshow__toolbar {
+  /* Keep the toolbar pointer-usable; hovering near it re-shows the cursor
+     via the global mousemove handler anyway. */
+  cursor: default;
+}
+
+.cs-slideshow__counter {
+  transition: opacity 220ms ease;
+}
+.cs-slideshow__counter--hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Active state for toolbar toggles (presenter / blackscreen). */
+.cs-slideshow__btn--active {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--cs-accent);
+}
+.cs-slideshow__btn--active:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.24);
+}
+.cs-slideshow__btn--ghost {
+  width: auto;
+  height: 28px;
+  border-radius: 14px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Blackscreen / whitescreen overlay. Absolutely positioned above the
+   stage but stops short of the toolbar so navigation stays usable. */
+.cs-slideshow__blackscreen {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 56px;
+  z-index: 5;
+}
+
+/* Jump-to-slide floating input. */
+.cs-slideshow__jump {
+  position: absolute;
+  left: 50%;
+  bottom: 72px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(20, 22, 26, 0.92);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  font-size: 13px;
+}
+.cs-slideshow__jump-label {
+  color: #e8eaed;
+}
+.cs-slideshow__jump-input {
+  width: 72px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  padding: 0 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.cs-slideshow__jump-input:focus {
+  outline: 2px solid var(--cs-accent);
+  outline-offset: 1px;
+}
+.cs-slideshow__jump-hint {
+  color: rgba(232, 234, 237, 0.6);
+  font-size: 11px;
+}
+
+/* -- Presenter view layout -------------------------------------- */
+
+.cs-slideshow__presenter {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 60% 40%;
+  gap: 16px;
+  padding: 16px;
+  min-height: 0;
+  background: #14161a;
+}
+
+.cs-slideshow__presenter-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.cs-slideshow__presenter-side {
+  display: grid;
+  grid-template-rows: 40% 1fr auto;
+  gap: 12px;
+  min-height: 0;
+}
+
+.cs-slideshow__presenter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(232, 234, 237, 0.7);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cs-slideshow__presenter-tile {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+.cs-slideshow__presenter-tile .cs-slideshow__slide,
+.cs-slideshow__presenter-next-tile .cs-slideshow__slide {
+  /* Override the global cs-slideshow__slide sizes so the tile scales to
+     fit its presenter pane, not the whole viewport. */
+  max-width: 100%;
+  max-height: 100%;
+  width: 100%;
+  height: 100%;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.cs-slideshow__presenter-next {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+.cs-slideshow__presenter-next-tile {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0c10;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 0;
+}
+.cs-slideshow__presenter-next-empty {
+  color: rgba(232, 234, 237, 0.5);
+  font-size: 13px;
+}
+
+/* Notes panel - dark grey text on near-white background, > 4.5:1 contrast. */
+.cs-slideshow__presenter-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  background: #f7f8fa;
+  border-radius: 8px;
+  padding: 12px;
+  color: #1f2328;
+}
+.cs-slideshow__presenter-notes-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #5c636e;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.cs-slideshow__presenter-notes-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  font-size: 15px;
+  color: #1f2328;
+}
+.cs-slideshow__presenter-notes-empty {
+  color: #8a909a;
+  font-style: italic;
+}
+
+.cs-slideshow__presenter-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #1c1f24;
+  border-radius: 8px;
+  color: #e8eaed;
+}
+.cs-slideshow__presenter-timer-value {
+  font-variant-numeric: tabular-nums;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  flex: 1 1 auto;
+}
+
+@media (max-width: 900px) {
+  .cs-slideshow__presenter {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
