@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bda16d884d 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..b9f8c6ec161f2d693995455eb6adf5dec2f3fbbb 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -157,7 +157,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bd
  	}
  };
  var ImageAdaptorFactory = class {
-@@ -667,6 +783,195 @@ var ImageAdaptorFactory = class {
+@@ -667,6 +783,245 @@ var ImageAdaptorFactory = class {
  };
  CanvasObjectProviderRegistry.add(new ImageAdaptorFactory());
  
@@ -318,9 +318,10 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bd
 +// Same idea as the table adaptor: render the chart's bounding rect with
 +// a placeholder fill so it shows up. Real chart rendering needs to read
 +// the passthrough chart XML and draw it; deferred to a later wave.
-+var ChartAdaptor = class extends ObjectAdaptor {
-+	constructor(..._args) {
-+		super(..._args);
++let ChartAdaptor = class ChartAdaptor extends ObjectAdaptor {
++	constructor(_localeService) {
++		super();
++		this._localeService = _localeService;
 +		_defineProperty(this, "zIndex", 2);
 +		_defineProperty(this, "viewKey", 7);
 +	}
@@ -329,17 +330,66 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bd
 +		return this;
 +	}
 +	convert(pageElement) {
-+		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY } = pageElement;
-+		return new _univerjs_engine_render.Rect(id, {
++		// Wave 13 — ChartAdaptor now renders a Group of (placeholder Rect
++		// + informational RichText overlay) so the user can SEE what kind
++		// of chart sits there at a glance, even though we don't render
++		// the chart geometry yet. Pulls chartType / series / categories
++		// from the structured IChart fields populated by wave 9d.
++		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY, chart } = pageElement;
++		const w = width || 0;
++		const h = height || 0;
++		const bg = new _univerjs_engine_render.Rect(`${id}-bg`, {
 +			fill: "rgba(239, 246, 255, 1)",
 +			stroke: "rgba(59, 130, 246, 1)",
 +			strokeWidth: 1,
-+			top, left, width, height, zIndex,
-+			angle, scaleX, scaleY, skewX, skewY, flipX, flipY,
++			left, top, width: w, height: h,
++			zIndex: 0,
 +			forceRender: true
 +		});
++		const children = [bg];
++		const chartType = chart && typeof chart.chartType === "string" ? chart.chartType : null;
++		const seriesCount = chart && Array.isArray(chart.series) ? chart.series.length : 0;
++		const catCount = chart && Array.isArray(chart.categories) ? chart.categories.length : 0;
++		const niceType = chartType
++			? chartType.charAt(0).toUpperCase() + chartType.slice(1) + " chart"
++			: "Chart";
++		const summary = [niceType];
++		if (seriesCount > 0) summary.push(`${seriesCount} ${seriesCount === 1 ? "series" : "series"}`);
++		if (catCount > 0) summary.push(`${catCount} ${catCount === 1 ? "category" : "categories"}`);
++		const label = "📊 " + summary.join(" · ");
++		const labelTop = top + Math.max(0, h / 2 - 14);
++		const labelDoc = {
++			id: `${id}-label-doc`,
++			body: {
++				dataStream: label + "\r\n",
++				textRuns: [{ st: 0, ed: label.length, ts: { fs: 12, cl: { rgb: "#1d4ed8" }, bl: 1 } }],
++				paragraphs: [{ startIndex: label.length, paragraphStyle: { horizontalAlign: 2 } }]
++			},
++			documentStyle: { renderConfig: { verticalAlign: 1 } }
++		};
++		children.push(new _univerjs_engine_render.RichText(this._localeService, `${id}-label`, {
++			left,
++			top: labelTop,
++			width: w,
++			height: 28,
++			zIndex: 1,
++			richText: labelDoc,
++			forceRender: true
++		}));
++		const group = new _univerjs_engine_render.Group(id, ...children);
++		group.zIndex = zIndex;
++		if (typeof angle === "number") group.angle = angle;
++		if (typeof scaleX === "number") group.scaleX = scaleX;
++		if (typeof scaleY === "number") group.scaleY = scaleY;
++		if (typeof skewX === "number") group.skewX = skewX;
++		if (typeof skewY === "number") group.skewY = skewY;
++		if (typeof flipX === "boolean") group.flipX = flipX;
++		if (typeof flipY === "boolean") group.flipY = flipY;
++		group.reCalculateObjects && group.reCalculateObjects();
++		return group;
 +	}
 +};
++ChartAdaptor = __decorate([__decorateParam(0, (0, _univerjs_core.Inject)(_univerjs_core.LocaleService))], ChartAdaptor);
 +var ChartAdaptorFactory = class {
 +	constructor() {
 +		_defineProperty(this, "zIndex", 5);
@@ -353,7 +403,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bd
  //#endregion
  //#region src/views/render/adaptors/rich-text-adaptor.ts
  let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
-@@ -699,7 +1004,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -699,7 +1054,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  			forceRender: true
  		};
  		let isNotNull = false;
@@ -368,7 +418,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bd
  			config = {
  				...config,
  				text,
-@@ -715,12 +1026,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -715,12 +1076,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  				cl
  			};
  			isNotNull = true;
@@ -381,7 +431,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bd
  		}
  		if (isNotNull === false) return;
  		return new _univerjs_engine_render.RichText(this._localeService, id, config);
-@@ -756,10 +1061,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -756,10 +1111,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -426,7 +476,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bd
 +			} else if (cap === "flat") {
 +				strokeStyle.strokeLineCap = "butt";
 +			}
- 		}
++		}
 +		// Casual Slides patch — outerShdw (drop shadow) via the canvas
 +		// shadow* shape props. effectLst.outerShdw carries `color,
 +		// blurRad, dist, dir` where dist is in EMU and dir is in
@@ -480,7 +530,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bd
 +			shadowStyle.shadowBlur = radPx;
 +			shadowStyle.shadowOpacity = 0.6;
 +			shadowStyle.shadowForStrokeEnabled = true;
-+		}
+ 		}
 +		// Casual Slides patch — innerShdw / reflection / blur TODOs.
 +		// innerShdw: parsed identically to outerShdw but the shadow goes
 +		//   inside the shape's outline. Canvas has no native inner-shadow
@@ -499,7 +549,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bd
  		if (shapeType === "rect") return new _univerjs_engine_render.Rect(id, {
  			fill,
  			top,
-@@ -775,7 +1186,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -775,7 +1236,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipX,
  			flipY,
  			forceRender: true,
@@ -509,7 +559,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bd
  		});
  		if (shapeType === "roundRect") return new _univerjs_engine_render.Rect(id, {
  			fill,
-@@ -793,10 +1205,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -793,10 +1255,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipY,
  			forceRender: true,
  			radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -522,7 +572,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bd
  			return new _univerjs_engine_render.Circle(id, {
  				fill,
  				top,
-@@ -813,9 +1225,132 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -813,9 +1275,132 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -657,7 +707,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..69f001d3cfd24210038cc1a4ab7638bd
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b927e330b 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..e9df76c10d44d35d27e538ea7c4e87b5f14b442c 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
@@ -823,7 +873,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b
  	}
  };
  var ImageAdaptorFactory = class {
-@@ -666,6 +782,212 @@ var ImageAdaptorFactory = class {
+@@ -666,6 +782,266 @@ var ImageAdaptorFactory = class {
  };
  CanvasObjectProviderRegistry.add(new ImageAdaptorFactory());
  
@@ -1001,9 +1051,10 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b
 +// Same idea as the table adaptor: render the chart's bounding rect with
 +// a placeholder fill so it shows up. Real chart rendering needs to read
 +// the passthrough chart XML and draw it; deferred to a later wave.
-+var ChartAdaptor = class extends ObjectAdaptor {
-+	constructor(..._args) {
-+		super(..._args);
++let ChartAdaptor = class ChartAdaptor extends ObjectAdaptor {
++	constructor(_localeService) {
++		super();
++		this._localeService = _localeService;
 +		_defineProperty(this, "zIndex", 2);
 +		_defineProperty(this, "viewKey", 7);
 +	}
@@ -1012,17 +1063,70 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b
 +		return this;
 +	}
 +	convert(pageElement) {
-+		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY } = pageElement;
-+		return new Rect(id, {
++		// Wave 13 — ChartAdaptor now renders a Group of (placeholder Rect
++		// + informational RichText overlay) so the user can SEE what kind
++		// of chart sits there at a glance, even though we don't render the
++		// chart geometry yet. Pulls chartType / series / categories from
++		// the structured IChart fields populated by wave 9d's parseChartXml.
++		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY, chart } = pageElement;
++		const w = width || 0;
++		const h = height || 0;
++		const bg = new Rect(`${id}-bg`, {
 +			fill: "rgba(239, 246, 255, 1)",
 +			stroke: "rgba(59, 130, 246, 1)",
 +			strokeWidth: 1,
-+			top, left, width, height, zIndex,
-+			angle, scaleX, scaleY, skewX, skewY, flipX, flipY,
++			left, top, width: w, height: h,
++			zIndex: 0,
 +			forceRender: true
 +		});
++		const children = [bg];
++		const chartType = chart && typeof chart.chartType === "string" ? chart.chartType : null;
++		const seriesCount = chart && Array.isArray(chart.series) ? chart.series.length : 0;
++		const catCount = chart && Array.isArray(chart.categories) ? chart.categories.length : 0;
++		const summary = [];
++		const niceType = chartType
++			? chartType.charAt(0).toUpperCase() + chartType.slice(1) + " chart"
++			: "Chart";
++		summary.push(niceType);
++		if (seriesCount > 0) summary.push(`${seriesCount} ${seriesCount === 1 ? "series" : "series"}`);
++		if (catCount > 0) summary.push(`${catCount} ${catCount === 1 ? "category" : "categories"}`);
++		const label = "📊 " + summary.join(" · ");
++		// Centre the label vertically inside the placeholder rect via a
++		// nested RichText. The docs-engine handles wrap + alignment from
++		// the IDocumentData renderConfig.
++		const labelTop = top + Math.max(0, h / 2 - 14);
++		const labelDoc = {
++			id: `${id}-label-doc`,
++			body: {
++				dataStream: label + "\r\n",
++				textRuns: [{ st: 0, ed: label.length, ts: { fs: 12, cl: { rgb: "#1d4ed8" }, bl: 1 } }],
++				paragraphs: [{ startIndex: label.length, paragraphStyle: { horizontalAlign: 2 } }]
++			},
++			documentStyle: { renderConfig: { verticalAlign: 1 } }
++		};
++		children.push(new RichText(this._localeService, `${id}-label`, {
++			left,
++			top: labelTop,
++			width: w,
++			height: 28,
++			zIndex: 1,
++			richText: labelDoc,
++			forceRender: true
++		}));
++		const group = new Group(id, ...children);
++		group.zIndex = zIndex;
++		if (typeof angle === "number") group.angle = angle;
++		if (typeof scaleX === "number") group.scaleX = scaleX;
++		if (typeof scaleY === "number") group.scaleY = scaleY;
++		if (typeof skewX === "number") group.skewX = skewX;
++		if (typeof skewY === "number") group.skewY = skewY;
++		if (typeof flipX === "boolean") group.flipX = flipX;
++		if (typeof flipY === "boolean") group.flipY = flipY;
++		group.reCalculateObjects && group.reCalculateObjects();
++		return group;
 +	}
 +};
++ChartAdaptor = __decorate([__decorateParam(0, Inject(LocaleService))], ChartAdaptor);
 +var ChartAdaptorFactory = class {
 +	constructor() {
 +		_defineProperty(this, "zIndex", 5);
@@ -1036,7 +1140,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b
  //#endregion
  //#region src/views/render/adaptors/rich-text-adaptor.ts
  let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
-@@ -698,7 +1020,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -698,7 +1074,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  			forceRender: true
  		};
  		let isNotNull = false;
@@ -1051,7 +1155,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b
  			config = {
  				...config,
  				text,
-@@ -714,12 +1042,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -714,12 +1096,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  				cl
  			};
  			isNotNull = true;
@@ -1064,7 +1168,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b
  		}
  		if (isNotNull === false) return;
  		return new RichText(this._localeService, id, config);
-@@ -755,10 +1077,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -755,10 +1131,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -1109,7 +1213,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b
 +			} else if (cap === "flat") {
 +				strokeStyle.strokeLineCap = "butt";
 +			}
- 		}
++		}
 +		// Casual Slides patch — outerShdw (drop shadow) via the canvas
 +		// shadow* shape props. effectLst.outerShdw carries `color,
 +		// blurRad, dist, dir` where dist is in EMU and dir is in
@@ -1163,7 +1267,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b
 +			shadowStyle.shadowBlur = radPx;
 +			shadowStyle.shadowOpacity = 0.6;
 +			shadowStyle.shadowForStrokeEnabled = true;
-+		}
+ 		}
 +		// Casual Slides patch — innerShdw / reflection / blur TODOs.
 +		// innerShdw: parsed identically to outerShdw but the shadow goes
 +		//   inside the shape's outline. Canvas has no native inner-shadow
@@ -1182,7 +1286,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b
  		if (shapeType === "rect") return new Rect(id, {
  			fill,
  			top,
-@@ -774,7 +1202,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -774,7 +1256,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipX,
  			flipY,
  			forceRender: true,
@@ -1192,7 +1296,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b
  		});
  		if (shapeType === "roundRect") return new Rect(id, {
  			fill,
-@@ -792,10 +1221,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -792,10 +1275,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipY,
  			forceRender: true,
  			radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -1205,7 +1309,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..3c4b27ac0f29311a7088b26227f8cf1b
  			return new Circle(id, {
  				fill,
  				top,
-@@ -812,9 +1241,136 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -812,9 +1295,136 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
