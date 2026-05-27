@@ -16,8 +16,8 @@ For every ✅ row in `FIDELITY_TRACKER.md`, the audit traced: parser → model �
 | Tag | Item | Where the chain breaks | Severity | Fix complexity |
 |---|---|---|---|---|
 | ~~D6~~ | ~~custGeom (custom shapes)~~ | ~~Adaptor ignored `shapeProperties.pathData`; fell through to Rect.~~ **Fixed `71a894e`** — scale-and-pass to engine-render Path. | — | — |
-| **D17** | **Arrowheads** (`<a:headEnd>` / `<a:tailEnd>`) | Parser writes `outline.headEnd` / `tailEnd`; ShapeAdaptor destructures `{outlineFill, weight, dashStyle, cap}` and drops the arrowhead fields. No endpoint-marker draw exists. | 🔴 high — lines with arrows render as plain lines | Med — need to compute Path endpoint tangents + draw triangle / diamond / stealth marker geometry. ~80 LOC in ShapeAdaptor. |
-| **C10** | **Right / bottom body insets** | Parser writes `documentStyle.marginRight` / `marginBottom` (parseBodyPr). Engine-render RichText patch only reads `marginLeft` / `marginTop`. Right/bottom values drop silently. | 🟡 med — text frames with non-default `<a:bodyPr rIns/bIns>` render without right/bottom padding | Low — extend the engine-render RichText patch's bodyPr-inset block to thread rIns/bIns through to the Documents constructor. ~10 LOC. |
+| ~~D17~~ | ~~Arrowheads~~ | ~~Parser wrote outline.headEnd / tailEnd; adaptor dropped them.~~ **Fixed `d578c93`** — line-family prsts append a V-shaped marker (strokes-only) at each endpoint sized by `w`/`len`. Proper filled triangle / stealth / diamond / oval shapes still pending. | — | — |
+| ~~C10~~ | ~~Right / bottom body insets~~ | ~~Engine-render RichText patch only read marginLeft / marginTop.~~ **Fixed `13fcbbb`** — shrink docs pageSize.width by lIns + rIns at all three updateDocumentDataPageSize call sites (`_initialProps`, resize handler, `refreshDocumentByDocData`). Bottom inset is implicit via the Infinity-height single-page layout. | — | — |
 | **A3 / D9** | **Multi-stop gradient fill** | Parser harvests every `<a:gs>` stop into `gradientFill.stops[]`. Adaptor reads only the first stop (degraded fallback). engine-render has no multi-stop canvas pipe — Rect/Path's `fill` is a single colour string. | 🟠 visible but low-frequency — solid-color shapes are unaffected; only gradient-filled shapes look flat | High — needs canvas gradient API plumbing (Rect/Path need a `fill` that accepts `CanvasGradient`). Larger fork patch with renderer-API widening. |
 
 ### Other render observations (not in the 4 critical, but worth noting)
@@ -74,15 +74,17 @@ Ranked by impact ÷ complexity. Each row: estimated diff size + scope.
 
 | Order | Item | Why it's first | Estimated scope |
 |---|---|---|---|
-| 1 | D17 arrowheads | Lines with arrows are common in diagrams; renders incomplete today | Med (~80 LOC ShapeAdaptor) |
-| 2 | C10 right/bottom insets | Text positioning off in real-world decks; easy fix | Low (~10 LOC engine-render patch) |
-| 3 | UX P0 #4 — Image insert | "Cannot add images" is a critical workflow block | Med — file picker dialog + `slide.command.insert-float-image` wiring |
-| 4 | UX P0 #3 — Line + arrow shape menu items | Currently disabled in toolbar; underlying Path support already there | Low — Toolbar.tsx menu + icons |
-| 5 | UX P0 #5 — Selection feedback | The most visually-jarring gap when actually editing | High — selection overlay + handle UI |
-| 6 | UX P0 #1 — Text formatting toolbar | Foundation for #2 alignment; requires selection observable | High — new component + selection plumbing |
-| 7 | UX P0 #2 — Alignment / paragraph controls | Sits on top of #1 + #5 | Med (~150 LOC, depends on #6) |
-| 8 | UX P0 #6 — Undo/Redo state | One-liner if `IUndoRedoService` has the right observables | Low |
-| 9 | A3 / D9 multi-stop gradients | Visual depth; lower frequency than arrows / text | High — renderer-API widening |
+| ~~1~~ | ~~D6 custGeom~~ | — | **Fixed `71a894e`** |
+| ~~2~~ | ~~D17 arrowheads~~ | — | **Fixed `d578c93`** (V-marker; filled-triangle variant TODO) |
+| ~~3~~ | ~~C10 right/bottom insets~~ | — | **Fixed `13fcbbb`** |
+| 4 | UX P0 #4 — Image insert | "Cannot add images" is a critical workflow block | Med — file picker dialog + `slide.command.insert-float-image` wiring |
+| 5 | UX P0 #3 — Line + arrow shape menu items | Currently disabled in toolbar; underlying Path support already there | Low — Toolbar.tsx menu + icons |
+| 6 | UX P0 #5 — Selection feedback | The most visually-jarring gap when actually editing | High — selection overlay + handle UI |
+| 7 | UX P0 #1 — Text formatting toolbar | Foundation for #2 alignment; requires selection observable | High — new component + selection plumbing |
+| 8 | UX P0 #2 — Alignment / paragraph controls | Sits on top of #1 + #5 | Med (~150 LOC, depends on #6) |
+| 9 | UX P0 #6 — Undo/Redo state | One-liner if `IUndoRedoService` has the right observables | Low |
+| 10 | A3 / D9 multi-stop gradients | Visual depth; lower frequency than arrows / text | High — renderer-API widening |
+| 11 | D17 proper filled triangle / stealth / diamond / oval | Replace the V-marker with PowerPoint-shaped arrowheads | Med — Group with fill+stroke paths |
 
 ---
 
