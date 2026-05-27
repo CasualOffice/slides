@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index fafb8476bdd10d7a5224234dc0d7494756933de3..cb5930110a8093d2c93ec0e4ebc9a79e2ae57fb6 100644
+index fafb8476bdd10d7a5224234dc0d7494756933de3..e7bd7f09d67b7354eddb06dc1e5d8a4f4ff05a28 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -12648,6 +12648,12 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -55,7 +55,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..cb5930110a8093d2c93ec0e4ebc9a79e
  		this._draw(mainCtx, void 0, realWidth, realHeight);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20633,9 +20665,16 @@ var RichText = class extends BaseObject {
+@@ -20633,19 +20665,38 @@ var RichText = class extends BaseObject {
  		const docModel = this.documentModel = new _univerjs_core.DocumentDataModel(this._documentData);
  		const docViewModel = new DocumentViewModel(docModel);
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -74,8 +74,15 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..cb5930110a8093d2c93ec0e4ebc9a79e
  		});
  		this._initialProps(props);
  		this.onTransformChange$.subscribeEvent((changeState) => {
-@@ -20644,8 +20683,15 @@ var RichText = class extends BaseObject {
- 				docModel.updateDocumentDataPageSize(this.width);
+ 			const { type } = changeState;
+ 			if (type === 1 || type === 5) {
+-				docModel.updateDocumentDataPageSize(this.width);
++				// C10 — shrink page width by lIns + rIns so right inset is implicit.
++				const _c10StyleR = (this._documentData && this._documentData.documentStyle) || {};
++				const _c10MLR = _c10StyleR.marginLeft || 0;
++				const _c10MRR = _c10StyleR.marginRight || 0;
++				const _c10InnerWR = Math.max(0, this.width - _c10MLR - _c10MRR);
++				docModel.updateDocumentDataPageSize(_c10InnerWR);
  				this._documentSkeleton.makeDirty(true);
  				this._documentSkeleton.calculate();
 -				const size = this.getDocsSkeletonPageSize();
@@ -92,7 +99,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..cb5930110a8093d2c93ec0e4ebc9a79e
  				this._setTransForm();
  				this.refreshDocumentByDocData();
  			}
-@@ -20709,6 +20755,27 @@ var RichText = class extends BaseObject {
+@@ -20709,6 +20760,27 @@ var RichText = class extends BaseObject {
  		const m = this.transform.getMatrix();
  		mainCtx.save();
  		mainCtx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
@@ -120,7 +127,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..cb5930110a8093d2c93ec0e4ebc9a79e
  		this._draw(mainCtx);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20757,12 +20824,18 @@ var RichText = class extends BaseObject {
+@@ -20757,12 +20829,24 @@ var RichText = class extends BaseObject {
  		};
  	}
  	_initialProps(props) {
@@ -128,7 +135,13 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..cb5930110a8093d2c93ec0e4ebc9a79e
 +		// Casual Slides patch — use Infinity for the docs page-height so
 +		// the docs engine lays out all text on a SINGLE page rather than
 +		// paginating. See es/index.js for rationale.
-+		this._documentSkeleton.getViewModel().getDataModel().updateDocumentDataPageSize(props === null || props === void 0 ? void 0 : props.width, Infinity);
++		// C10 — shrink page width by lIns + rIns so right inset is implicit.
++		const _c10Style = (this._documentData && this._documentData.documentStyle) || {};
++		const _c10ML = _c10Style.marginLeft || 0;
++		const _c10MR = _c10Style.marginRight || 0;
++		const _c10PropsW = (props === null || props === void 0 ? void 0 : props.width) || 0;
++		const _c10InnerW = Math.max(0, _c10PropsW - _c10ML - _c10MR);
++		this._documentSkeleton.getViewModel().getDataModel().updateDocumentDataPageSize(_c10PropsW > 0 ? _c10InnerW : (props === null || props === void 0 ? void 0 : props.width), Infinity);
  		this._documentSkeleton.calculate();
  		const contentSize = this.getDocsSkeletonPageSize();
 +		// Casual Slides patch — respect caller's authored width / height
@@ -142,7 +155,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..cb5930110a8093d2c93ec0e4ebc9a79e
  			left: (props === null || props === void 0 ? void 0 : props.left) || 0,
  			top: (props === null || props === void 0 ? void 0 : props.top) || 0,
  			angle: props === null || props === void 0 ? void 0 : props.angle
-@@ -20776,9 +20849,11 @@ var RichText = class extends BaseObject {
+@@ -20776,11 +20860,17 @@ var RichText = class extends BaseObject {
  	refreshDocumentByDocData() {
  		const docViewModel = new DocumentViewModel(this.documentModel = new _univerjs_core.DocumentDataModel(this._documentData));
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -154,9 +167,16 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..cb5930110a8093d2c93ec0e4ebc9a79e
 +			pageMarginLeft: _csDocStyle.marginLeft || 0,
 +			pageMarginTop: _csDocStyle.marginTop || 0
  		});
- 		this._documentSkeleton.getViewModel().getDataModel().updateDocumentDataPageSize(this.width, Infinity);
+-		this._documentSkeleton.getViewModel().getDataModel().updateDocumentDataPageSize(this.width, Infinity);
++		// C10 — shrink page width by lIns + rIns (same trick as _initialProps).
++		const _c10MLF = _csDocStyle.marginLeft || 0;
++		const _c10MRF = _csDocStyle.marginRight || 0;
++		const _c10InnerWF = Math.max(0, this.width - _c10MLF - _c10MRF);
++		this._documentSkeleton.getViewModel().getDataModel().updateDocumentDataPageSize(_c10InnerWF, Infinity);
  		this._documentSkeleton.calculate();
-@@ -21330,6 +21405,15 @@ var FontAndBaseLine = class extends docExtension {
+ 	}
+ 	/**
+@@ -21330,6 +21420,15 @@ var FontAndBaseLine = class extends docExtension {
  			ctx.rotate(Math.PI / 2);
  			ctx.translate(-width / 2, (aba + abd) / 2 - abd);
  			ctx.fillText(content, 0, 0);
@@ -172,7 +192,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..cb5930110a8093d2c93ec0e4ebc9a79e
  			ctx.restore();
  		} else {
  			const CHECKED_GLYPH = "☑";
-@@ -21360,6 +21444,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21360,6 +21459,15 @@ var FontAndBaseLine = class extends docExtension {
  					y_offset = -(glyph.width - fontHeight) / 2;
  				}
  				ctx.fillText(content, spanPointWithFont.x + x_offset, spanPointWithFont.y + y_offset);
@@ -188,7 +208,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..cb5930110a8093d2c93ec0e4ebc9a79e
  			}
  		}
  	}
-@@ -24644,7 +24737,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
+@@ -24644,7 +24752,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
@@ -199,7 +219,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..cb5930110a8093d2c93ec0e4ebc9a79e
  	}
  	_onKeyDown(evt) {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..cd086aecae1989dfa9b8c2cc28e85194be9554f4 100644
+index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8fd0991b6380fe3c5754e25d43bb86cae0124d5a 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -12619,6 +12619,13 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -259,7 +279,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..cd086aecae1989dfa9b8c2cc28e85194
  		this._draw(mainCtx, void 0, realWidth, realHeight);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20604,9 +20640,16 @@ var RichText = class extends BaseObject {
+@@ -20604,19 +20640,39 @@ var RichText = class extends BaseObject {
  		const docModel = this.documentModel = new DocumentDataModel(this._documentData);
  		const docViewModel = new DocumentViewModel(docModel);
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -278,8 +298,16 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..cd086aecae1989dfa9b8c2cc28e85194
  		});
  		this._initialProps(props);
  		this.onTransformChange$.subscribeEvent((changeState) => {
-@@ -20615,8 +20658,15 @@ var RichText = class extends BaseObject {
- 				docModel.updateDocumentDataPageSize(this.width);
+ 			const { type } = changeState;
+ 			if (type === 1 || type === 5) {
+-				docModel.updateDocumentDataPageSize(this.width);
++				// C10 — shrink page width by lIns + rIns so right inset
++				// is implicit (same trick as _initialProps).
++				const _c10StyleR = (this._documentData && this._documentData.documentStyle) || {};
++				const _c10MLR = _c10StyleR.marginLeft || 0;
++				const _c10MRR = _c10StyleR.marginRight || 0;
++				const _c10InnerWR = Math.max(0, this.width - _c10MLR - _c10MRR);
++				docModel.updateDocumentDataPageSize(_c10InnerWR);
  				this._documentSkeleton.makeDirty(true);
  				this._documentSkeleton.calculate();
 -				const size = this.getDocsSkeletonPageSize();
@@ -296,7 +324,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..cd086aecae1989dfa9b8c2cc28e85194
  				this._setTransForm();
  				this.refreshDocumentByDocData();
  			}
-@@ -20680,6 +20730,27 @@ var RichText = class extends BaseObject {
+@@ -20680,6 +20736,27 @@ var RichText = class extends BaseObject {
  		const m = this.transform.getMatrix();
  		mainCtx.save();
  		mainCtx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
@@ -324,7 +352,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..cd086aecae1989dfa9b8c2cc28e85194
  		this._draw(mainCtx);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20728,12 +20799,26 @@ var RichText = class extends BaseObject {
+@@ -20728,12 +20805,39 @@ var RichText = class extends BaseObject {
  		};
  	}
  	_initialProps(props) {
@@ -337,7 +365,20 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..cd086aecae1989dfa9b8c2cc28e85194
 +		// Infinity, lines stay tightly spaced; any frame-height overflow
 +		// is the renderer's responsibility (clip / autofit) rather than
 +		// the docs engine artificially spreading lines.
-+		this._documentSkeleton.getViewModel().getDataModel().updateDocumentDataPageSize(props === null || props === void 0 ? void 0 : props.width, Infinity);
++		//
++		// C10 right inset — IPageMarginLayout in the docs engine only
++		// supports pageMarginLeft / pageMarginTop. To honour
++		// `<a:bodyPr rIns>` we SHRINK the docs page width by lIns + rIns
++		// so the inset is implicit (content lays out in the inner box).
++		// bIns gets the same treatment indirectly because we already use
++		// Infinity for height + don't extend the canvas paint beyond the
++		// frame bbox.
++		const _c10Style = (this._documentData && this._documentData.documentStyle) || {};
++		const _c10ML = _c10Style.marginLeft || 0;
++		const _c10MR = _c10Style.marginRight || 0;
++		const _c10PropsW = (props === null || props === void 0 ? void 0 : props.width) || 0;
++		const _c10InnerW = Math.max(0, _c10PropsW - _c10ML - _c10MR);
++		this._documentSkeleton.getViewModel().getDataModel().updateDocumentDataPageSize(_c10PropsW > 0 ? _c10InnerW : (props === null || props === void 0 ? void 0 : props.width), Infinity);
  		this._documentSkeleton.calculate();
  		const contentSize = this.getDocsSkeletonPageSize();
 +		// Casual Slides patch — respect the caller's authored width / height
@@ -354,7 +395,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..cd086aecae1989dfa9b8c2cc28e85194
  			left: (props === null || props === void 0 ? void 0 : props.left) || 0,
  			top: (props === null || props === void 0 ? void 0 : props.top) || 0,
  			angle: props === null || props === void 0 ? void 0 : props.angle
-@@ -20747,9 +20832,11 @@ var RichText = class extends BaseObject {
+@@ -20747,11 +20851,17 @@ var RichText = class extends BaseObject {
  	refreshDocumentByDocData() {
  		const docViewModel = new DocumentViewModel(this.documentModel = new DocumentDataModel(this._documentData));
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -366,9 +407,16 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..cd086aecae1989dfa9b8c2cc28e85194
 +			pageMarginLeft: _csDocStyle.marginLeft || 0,
 +			pageMarginTop: _csDocStyle.marginTop || 0
  		});
- 		this._documentSkeleton.getViewModel().getDataModel().updateDocumentDataPageSize(this.width, Infinity);
+-		this._documentSkeleton.getViewModel().getDataModel().updateDocumentDataPageSize(this.width, Infinity);
++		// C10 — shrink page width by lIns + rIns (same trick as _initialProps).
++		const _c10MLF = _csDocStyle.marginLeft || 0;
++		const _c10MRF = _csDocStyle.marginRight || 0;
++		const _c10InnerWF = Math.max(0, this.width - _c10MLF - _c10MRF);
++		this._documentSkeleton.getViewModel().getDataModel().updateDocumentDataPageSize(_c10InnerWF, Infinity);
  		this._documentSkeleton.calculate();
-@@ -21301,6 +21388,15 @@ var FontAndBaseLine = class extends docExtension {
+ 	}
+ 	/**
+@@ -21301,6 +21411,15 @@ var FontAndBaseLine = class extends docExtension {
  			ctx.rotate(Math.PI / 2);
  			ctx.translate(-width / 2, (aba + abd) / 2 - abd);
  			ctx.fillText(content, 0, 0);
@@ -384,7 +432,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..cd086aecae1989dfa9b8c2cc28e85194
  			ctx.restore();
  		} else {
  			const CHECKED_GLYPH = "☑";
-@@ -21331,6 +21427,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21331,6 +21450,15 @@ var FontAndBaseLine = class extends docExtension {
  					y_offset = -(glyph.width - fontHeight) / 2;
  				}
  				ctx.fillText(content, spanPointWithFont.x + x_offset, spanPointWithFont.y + y_offset);
@@ -400,7 +448,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..cd086aecae1989dfa9b8c2cc28e85194
  			}
  		}
  	}
-@@ -24615,7 +24720,8 @@ var InputManager = class InputManager extends Disposable {
+@@ -24615,7 +24743,8 @@ var InputManager = class InputManager extends Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
