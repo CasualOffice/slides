@@ -433,7 +433,7 @@ export function Toolbar() {
         aria-pressed={format.bold}
         onClick={() => toggleFormat('bold', 'doc.command.set-inline-format-bold')}
       >
-        <Icon name="bold" size={16} />
+        <Icon name="bold" size={16} filled={format.bold} />
       </button>
       <button
         type="button"
@@ -443,7 +443,7 @@ export function Toolbar() {
         aria-pressed={format.italic}
         onClick={() => toggleFormat('italic', 'doc.command.set-inline-format-italic')}
       >
-        <Icon name="italic" size={16} />
+        <Icon name="italic" size={16} filled={format.italic} />
       </button>
       <button
         type="button"
@@ -453,7 +453,7 @@ export function Toolbar() {
         aria-pressed={format.underline}
         onClick={() => toggleFormat('underline', 'doc.command.set-inline-format-underline')}
       >
-        <Icon name="underline" size={16} />
+        <Icon name="underline" size={16} filled={format.underline} />
       </button>
       <button
         type="button"
@@ -463,7 +463,7 @@ export function Toolbar() {
         aria-pressed={format.strikethrough}
         onClick={() => toggleFormat('strikethrough', 'doc.command.set-inline-format-strikethrough')}
       >
-        <Icon name="strikethrough" size={16} />
+        <Icon name="strikethrough" size={16} filled={format.strikethrough} />
       </button>
       <ColorPicker
         scope="text"
