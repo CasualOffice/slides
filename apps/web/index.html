@@ -147,72 +147,14 @@
     />
 
     <!--
-      ALIAS @font-face DECLARATIONS — make Microsoft-proprietary deck
-      font names resolve to their metric-compatible open-source twins
-      via Google Fonts. `local()` first respects an installed copy on
-      Windows; the `url()` falls back to Carlito / Caladea served by
-      Google. Same approach LibreOffice + many web SaaS apps use.
-      Carlito ≈ Calibri (designed metric-identical by tyPoland).
-      Caladea ≈ Cambria (designed metric-identical by Huerta Tipográfica).
+      MS-proprietary deck-font aliasing happens at the *model* level in
+      pptx-import (FONT_SUBSTITUTION_MAP): Calibri → Carlito,
+      Cambria → Caladea, etc. We load the open-source replacements via
+      the Google Fonts <link> above; the parser rewrites the run's
+      `ff` so canvas resolves the font correctly without needing
+      fragile @font-face URL aliasing (Google's gstatic version paths
+      rotate and break direct hardcoded URLs).
     -->
-    <style>
-      @font-face {
-        font-family: 'Calibri';
-        font-weight: 400;
-        font-style: normal;
-        src: local('Calibri'),
-             url('https://fonts.gstatic.com/s/carlito/v3/3Jn9SDPw3m-pk039PDCLTXUETuE.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Calibri';
-        font-weight: 700;
-        font-style: normal;
-        src: local('Calibri Bold'),
-             url('https://fonts.gstatic.com/s/carlito/v3/3Jn4SDPw3m-pk039BIykaX0vSlIBSg.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Calibri';
-        font-weight: 400;
-        font-style: italic;
-        src: local('Calibri Italic'),
-             url('https://fonts.gstatic.com/s/carlito/v3/3Jn4SDPw3m-pk039AYykaX0vSnEJSg.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Calibri';
-        font-weight: 700;
-        font-style: italic;
-        src: local('Calibri Bold Italic'),
-             url('https://fonts.gstatic.com/s/carlito/v3/3Jn5SDPw3m-pk039DIymRl8DI4Mw3w.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cambria';
-        font-weight: 400;
-        font-style: normal;
-        src: local('Cambria'),
-             url('https://fonts.gstatic.com/s/caladea/v7/kJEzBugZ7AAjhybUjR93-9IztOc.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cambria';
-        font-weight: 700;
-        font-style: normal;
-        src: local('Cambria Bold'),
-             url('https://fonts.gstatic.com/s/caladea/v7/kJExBugZ7AAjhybUvR19__A3I80wuQ.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cambria';
-        font-weight: 400;
-        font-style: italic;
-        src: local('Cambria Italic'),
-             url('https://fonts.gstatic.com/s/caladea/v7/kJExBugZ7AAjhybUvR15__A3I80wuQ.woff2') format('woff2');
-      }
-      @font-face {
-        font-family: 'Cambria';
-        font-weight: 700;
-        font-style: italic;
-        src: local('Cambria Bold Italic'),
-             url('https://fonts.gstatic.com/s/caladea/v7/kJEyBugZ7AAjhybUvR1FQ98S1yEwsi8.woff2') format('woff2');
-      }
-    </style>
   </head>
   <body>
     <div id="root"></div>

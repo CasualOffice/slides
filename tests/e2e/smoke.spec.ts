@@ -951,7 +951,11 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // colour, font family.
     expect(title.richText?.fs, 'fs inherited from layout defRPr').toBe(44);
     expect(title.richText?.bl, 'bold inherited from layout defRPr').toBe(1);
-    expect(title.richText?.ff, 'font family inherited from layout defRPr').toBe('Calibri Light');
+    // Calibri family is substituted to Carlito at parse time so the
+    // canvas can actually resolve a webfont (otherwise non-Windows
+    // machines silently fall back to Arial). See FONT_SUBSTITUTION_MAP
+    // in pptx-import.ts.
+    expect(title.richText?.ff, 'font family inherited from layout defRPr (Calibri → Carlito sub)').toBe('Carlito');
     const colorHex = (title.richText?.cl?.rgb ?? '').toUpperCase().replace('#', '');
     expect(colorHex, 'color inherited from layout defRPr').toBe('FF8800');
   });

@@ -764,13 +764,32 @@ function parseRunProps(
     resolveThemeSentinel(typeof cs?.['@typeface'] === 'string' && cs['@typeface']) ||
     '';
   if (typeof typeface === 'string' && typeface.length > 0) {
-    out.ff = typeface;
+    out.ff = substituteFontFamily(typeface);
   } else if (theme) {
     const themeFont = isTitle ? theme.get(FONT_MAJOR_KEY) : theme.get(FONT_MINOR_KEY);
-    if (themeFont) out.ff = themeFont;
+    if (themeFont) out.ff = substituteFontFamily(themeFont);
   }
 
   return out;
+}
+
+// MS-proprietary deck fonts → metric-compatible open-source replacements
+// loaded by index.html via Google Fonts. Without this rewrite, canvas
+// `ctx.font = "Calibri"` resolves to the system fallback chain on every
+// non-Windows machine (everything collapses to Arial). Carlito is
+// designed metric-identical to Calibri by tyPoland; Caladea is the
+// same for Cambria by Huerta Tipográfica.
+const FONT_SUBSTITUTION_MAP: Record<string, string> = {
+  'Calibri': 'Carlito',
+  'Calibri Light': 'Carlito',
+  'Calibri Bold': 'Carlito',
+  'Cambria': 'Caladea',
+  'Cambria Math': 'Caladea',
+};
+
+function substituteFontFamily(family: string): string {
+  const sub = FONT_SUBSTITUTION_MAP[family];
+  return sub ?? family;
 }
 
 // Extract text + first-run formatting from a <p:txBody>.
