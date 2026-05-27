@@ -833,28 +833,74 @@ function parseParagraphAlign(pPr: unknown): HorizontalAlign | null {
 // textStyle for the bullet glyph. We synth a listId per element so
 // numbering restarts at the start of every text frame — matches
 // PowerPoint's per-frame numbering scope.
-function parseBullet(pPr: unknown, listIdSeed: string, level: number): IBullet | null {
+// Bullet info — the IBullet block that lands on the paragraph PLUS
+// any custom glyph metadata the importer can plug into a per-document
+// `lists` map. When `customGlyph` is set, the caller must synthesise
+// an entry in `IDocumentData.lists` keyed by `listType` so the
+// renderer pulls the right character instead of falling back to the
+// PRESET_LIST_TYPE preset glyph.
+interface ParsedBullet {
+  bullet: IBullet;
+  customGlyph?: string;
+  // `<a:buSzPts val="N">` is the bullet font size in 1/100 pt.
+  customFontSize?: number;
+  // `<a:buFont typeface="...">` — font to render the bullet glyph in.
+  customFontFamily?: string;
+}
+
+function parseBullet(pPr: unknown, listIdSeed: string, level: number, theme: ThemeMap | null = null): ParsedBullet | null {
   if (!pPr || typeof pPr !== 'object') return null;
   const node = pPr as XmlNode;
   if (findChild(node, 'a:buNone') !== undefined) {
     // Explicit "no bullet" — caller treats null as "no override", so
-    // we distinguish via a sentinel `none` flag. Today bullet
-    // inheritance isn't implemented anyway, so null is functionally
-    // equivalent for now.
+    // we distinguish via a sentinel `none` flag.
     return null;
   }
   const buChar = findChild(node, 'a:buChar') as XmlNode | undefined;
   if (buChar) {
-    // For unordered lists Univer's preset family `BULLET_LIST_n`
-    // matches the visual treatment at each nesting level; the actual
-    // glyph isn't read from `@char` today (Univer's bullet renderer
-    // uses its own glyph set). Recording the listType is what makes
-    // the indent + glyph appear.
-    return { listType: PresetListType.BULLET_LIST, listId: `${listIdSeed}-bul`, nestingLevel: level };
+    const rawChar = buChar['@char'];
+    const customGlyph = typeof rawChar === 'string' && rawChar.length > 0 ? rawChar : undefined;
+    // C17 — read companion `<a:buFont typeface="...">` and
+    // `<a:buSzPts val="...">` so the bullet glyph matches the
+    // authored size/typeface (an ➔ rendered in Wingdings looks
+    // nothing like an ➔ in Raleway).
+    const buFont = findChild(node, 'a:buFont') as XmlNode | undefined;
+    let customFontFamily: string | undefined;
+    if (buFont) {
+      const raw = buFont['@typeface'];
+      if (typeof raw === 'string' && raw.length > 0) {
+        // Resolve the same theme sentinels (`+mj-lt` / `+mn-lt`) that
+        // parseRunProps handles.
+        if (raw === '+mj-lt') customFontFamily = theme?.get(FONT_MAJOR_KEY) ?? undefined;
+        else if (raw === '+mn-lt') customFontFamily = theme?.get(FONT_MINOR_KEY) ?? undefined;
+        else customFontFamily = raw;
+      }
+    }
+    const buSzPts = findChild(node, 'a:buSzPts') as XmlNode | undefined;
+    let customFontSize: number | undefined;
+    if (buSzPts) {
+      const raw = buSzPts['@val'];
+      if (typeof raw === 'string' || typeof raw === 'number') {
+        const n = parseInt(String(raw), 10);
+        if (Number.isFinite(n)) customFontSize = n / 100;
+      }
+    }
+    // Custom listType when we have a char so it doesn't collide with
+    // the global PRESET_LIST_TYPE entry. Each element-seed gets its
+    // own listType so the lists map stays scoped to this text frame.
+    const listType = customGlyph ? `${listIdSeed}-bul` : PresetListType.BULLET_LIST;
+    return {
+      bullet: { listType, listId: `${listIdSeed}-bul`, nestingLevel: level },
+      customGlyph,
+      customFontSize,
+      customFontFamily,
+    };
   }
   const buAutoNum = findChild(node, 'a:buAutoNum') as XmlNode | undefined;
   if (buAutoNum) {
-    return { listType: PresetListType.ORDER_LIST, listId: `${listIdSeed}-ord`, nestingLevel: level };
+    return {
+      bullet: { listType: PresetListType.ORDER_LIST, listId: `${listIdSeed}-ord`, nestingLevel: level },
+    };
   }
   return null;
 }
@@ -1094,6 +1140,12 @@ function extractRichDoc(
   let cursor = 0;
   let firstRunProps: Partial<ISlideRichTextProps> = {};
   let capturedFirstRun = false;
+  // C17 — custom bullet list types accumulated across paragraphs.
+  // Each entry is keyed by `bullet.listType` and carries the glyph
+  // string + optional textStyle the renderer should use. Built into
+  // `documentStyle.lists` at the end so the docs engine can resolve
+  // the bullet correctly instead of falling back to PRESET_LIST_TYPE.
+  const customLists: Record<string, { glyph: string; level: number; fs?: number; ff?: string }> = {};
 
   // Extract the tag name from a preserveOrder child entry. Each
   // entry has the shape `{ <tagName>: [children], ':@'?: attrs }`.
@@ -1117,7 +1169,18 @@ function extractRichDoc(
     const lineSpacing = parseLineSpacing(pPr);
     const { indentStart, indentFirstLine } = parseIndent(pPr);
     const level = parseLevel(pPr);
-    const bullet = parseBullet(pPr, elementId, level);
+    const parsedBullet = parseBullet(pPr, elementId, level, theme);
+    const bullet = parsedBullet?.bullet ?? null;
+    // C17 — stash any custom glyph metadata so we can synthesise the
+    // matching `IListData` entry on the document below.
+    if (parsedBullet?.customGlyph) {
+      customLists[parsedBullet.bullet.listType] = {
+        glyph: parsedBullet.customGlyph,
+        level,
+        fs: parsedBullet.customFontSize,
+        ff: parsedBullet.customFontFamily,
+      };
+    }
     const spaceAbove = parseSpacePts(findChild(pPr, 'a:spcBef'));
     const spaceBelow = parseSpacePts(findChild(pPr, 'a:spcAft'));
 
@@ -1244,6 +1307,33 @@ function extractRichDoc(
     };
   }
 
+  // C17 — synthesise `lists` entries for any paragraphs that asked
+  // for a custom bullet glyph (e.g. `<a:buChar char="➔"/>`). Each
+  // entry mirrors the PRESET_LIST_TYPE shape — a 9-level array (one
+  // per nesting depth) all using the same glyph at the authored
+  // depth, with passthrough glyphs at others. The nesting level the
+  // paragraph references is stored on the bullet itself.
+  const lists: Record<string, unknown> = {};
+  for (const [listType, info] of Object.entries(customLists)) {
+    // Univer's bullet renderer indexes into `nestingLevel[paragraph.bullet.nestingLevel]`.
+    // We fill 9 slots so unexpected deeper nesting still resolves.
+    const nestingLevel = Array.from({ length: 9 }, () => ({
+      glyphFormat: ` %${1}`,
+      glyphSymbol: info.glyph,
+      bulletAlignment: 0, // BulletAlignment.START
+      startNumber: 0,
+      paragraphProperties: {
+        hanging: { v: 21 },
+        indentStart: { v: 21 * info.level },
+      },
+      textStyle: {
+        ...(typeof info.fs === 'number' ? { fs: info.fs } : {}),
+        ...(typeof info.ff === 'string' ? { ff: info.ff } : {}),
+      },
+    }));
+    lists[listType] = { listType, nestingLevel };
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rich: IDocumentData = {
     id: `${elementId}-doc`,
@@ -1253,6 +1343,7 @@ function extractRichDoc(
       paragraphs,
       ...(customRanges.length > 0 ? { customRanges } : {}),
     },
+    ...(Object.keys(lists).length > 0 ? { lists } : {}),
     documentStyle: docStyle,
   } as any;
 
