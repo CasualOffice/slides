@@ -2177,6 +2177,13 @@ async function processSpTree(
   // <p:grpSp> threads the group's own ordered children.
   orderedChildren: unknown[] = [],
   parentRankPrefix: number[] = [],
+  // When true, skip any `<p:sp>` / `<p:pic>` carrying a `<p:ph>` — used
+  // when extracting layout/master background shapes so we don't double-
+  // emit placeholders that are already inherited via I3 / I4. Non-
+  // placeholder shapes (like the orange right-half rectangle on
+  // slide-16's layout) become slide-bg elements that paint BELOW the
+  // slide's own content.
+  skipPlaceholders: boolean = false,
 ): Promise<void> {
   // Build DOM-rank lookup: for each tag we care about, an array where
   // domRanks[tag][nthOccurrence] = position-in-spTree-children.
@@ -2212,6 +2219,14 @@ async function processSpTree(
     const _myIdx = _spLoopIdx++;
     const _lenBefore = out.length;
     if (!sp || typeof sp !== 'object') continue;
+    if (skipPlaceholders) {
+      // Skip any sp tagged as a placeholder — its content is inherited
+      // separately via the placeholder map. Non-placeholder shapes
+      // (layout background rectangles, decorative shapes) flow through.
+      const _nvSpPr = findChild(sp, 'p:nvSpPr');
+      const _nvPr = findChild(_nvSpPr, 'p:nvPr');
+      if (findChild(_nvPr, 'p:ph') !== undefined) continue;
+    }
     const spPr = findChild(sp, 'p:spPr');
     const xfrm = findChild(spPr, 'a:xfrm');
     const off = findChild(xfrm, 'a:off') as XmlNode | undefined;
@@ -2244,7 +2259,26 @@ async function processSpTree(
     z.next += 1;
 
     const txBody = findChild(sp, 'p:txBody');
-    if (txBody) {
+    // Casual Slides — `<p:sp>` with an EMPTY `<p:txBody>` is a SHAPE
+    // (e.g. a layout's decorative rectangle that happens to declare an
+    // empty placeholder text body for authoring affordance). We should
+    // fall through to the shape branch so its fill / outline render
+    // instead of emitting a transparent zero-text TEXT element that
+    // drops the shape's fill colour. Detect "actual text content"
+    // via any non-empty `<a:t>` in the body.
+    const hasRealText = (() => {
+      if (!txBody) return false;
+      const ps = toArray(findChild(txBody, 'a:p'));
+      for (const p of ps) {
+        for (const r of toArray(findChild(p, 'a:r'))) {
+          const t = findChild(r, 'a:t');
+          if (typeof t === 'string' && t.length > 0) return true;
+          if (t && typeof t === 'object' && typeof (t as XmlNode)['#text'] === 'string' && ((t as XmlNode)['#text'] as string).length > 0) return true;
+        }
+      }
+      return false;
+    })();
+    if (txBody && hasRealText) {
       const elId = `s${pageOrdinal}-el-${zIndex}`;
       // C13 — read `<a:bodyPr><a:normAutofit fontScale="…"/></a:bodyPr>`
       // before walking runs so the autofit shrink applies to every per-run
@@ -2408,6 +2442,11 @@ async function processSpTree(
     const _myIdx = _picLoopIdx++;
     const _lenBefore = out.length;
     if (!pic || typeof pic !== 'object') continue;
+    if (skipPlaceholders) {
+      const _nvPicPr = findChild(pic, 'p:nvPicPr');
+      const _nvPr = findChild(_nvPicPr, 'p:nvPr');
+      if (findChild(_nvPr, 'p:ph') !== undefined) continue;
+    }
     const result = await processPicNode(pic, reg, groupXfrm, pageOrdinal, z);
     if (result) out.push(result);
     stampPushed(_lenBefore, 'p:pic', _myIdx);
@@ -2457,7 +2496,7 @@ async function processSpTree(
     // IPageElements. Univer has no native "group" page-element type in
     // the OSS model (Gap 3 candidate), so we flatten and let z-order
     // preserve the visual stack.
-    await processSpTree(grp, reg, pageOrdinal, childXfrm, z, out, grpOrdered, newPrefix);
+    await processSpTree(grp, reg, pageOrdinal, childXfrm, z, out, grpOrdered, newPrefix, skipPlaceholders);
   }
 }
 
@@ -3025,6 +3064,125 @@ async function processPicNode(
   };
 }
 
+// Extract NON-placeholder shapes from a slideLayout or slideMaster XML
+// as background-layer page elements. Placeholders are inherited via
+// the I3/I4 path; this picks up decorative shapes (e.g. the orange
+// right-half rectangle on Google Slides' SECTION_TITLE layout that
+// makes layout-driven backdrops appear).
+//
+// Returns elements with their own sort scope (already sorted by source
+// XML order); caller stacks them BELOW the slide's own elements.
+async function extractBgShapesFromXml(
+  xml: string,
+  zip: JSZip,
+  xmlPath: string,
+  baseReg: ImageRegistry,
+  pageOrdinal: number,
+  rootTag: 'p:sldLayout' | 'p:sldMaster',
+  idPrefix: string,
+): Promise<IPageElement[]> {
+  // Build a per-source ImageRegistry — same zip / theme / caches but
+  // with the layout's (or master's) own image rels, since `<p:pic>`
+  // r:embed refs point at this part's rels file, not the slide's.
+  const dir = xmlPath.slice(0, xmlPath.lastIndexOf('/') + 1);
+  const name = xmlPath.split('/').pop() ?? '';
+  const relsPath = `${dir}_rels/${name}.rels`;
+  const relsXml = await zip.file(relsPath)?.async('string');
+  const imageRelMap = relsXml ? extractRelMap(relsXml) : new Map<string, string>();
+  const bgReg: ImageRegistry = { ...baseReg, imageRelMap };
+
+  const parsed = parser.parse(xml) as XmlNode;
+  const spTree = findChild(findChild(findChild(parsed, rootTag), 'p:cSld'), 'p:spTree');
+  const elements: IPageElement[] = [];
+  const z: ZCounter = { next: 1 };
+
+  let spTreeOrderedChildren: unknown[] = [];
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ordered = orderedParser.parse(xml) as unknown as Array<Record<string, unknown>>;
+    const root = ordered.find((c) => c && rootTag in (c as Record<string, unknown>)) as Record<string, unknown> | undefined;
+    const rootChildren = root ? (root[rootTag] as unknown[]) : [];
+    const cSld = rootChildren.find((c) => c && typeof c === 'object' && 'p:cSld' in (c as Record<string, unknown>)) as Record<string, unknown> | undefined;
+    const cSldChildren = cSld ? (cSld['p:cSld'] as unknown[]) : [];
+    const spTreeNode = cSldChildren.find((c) => c && typeof c === 'object' && 'p:spTree' in (c as Record<string, unknown>)) as Record<string, unknown> | undefined;
+    if (spTreeNode) {
+      const v = spTreeNode['p:spTree'];
+      if (Array.isArray(v)) spTreeOrderedChildren = v as unknown[];
+    }
+  } catch { /* fallback to legacy order */ }
+
+  await processSpTree(spTree, bgReg, pageOrdinal, IDENTITY_XFRM, z, elements, spTreeOrderedChildren, [], /* skipPlaceholders */ true);
+
+  // Sort + strip _sourceRank like extractElementsFromSlideXml does, but
+  // KEEP zIndex unstamped — caller will renumber across both bg and
+  // slide elements.
+  const lexCompare = (a: number[], b: number[]) => {
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) {
+      if (a[i] !== b[i]) return a[i] - b[i];
+    }
+    return a.length - b.length;
+  };
+  elements.sort((a, b) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ra = ((a as any)._sourceRank as number[] | undefined) ?? [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rb = ((b as any)._sourceRank as number[] | undefined) ?? [];
+    return lexCompare(ra, rb);
+  });
+  elements.forEach((el) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (el as any)._sourceRank;
+    // Re-stamp the id with the bg prefix so debugging / dedup tools
+    // can tell layout / master shapes apart from slide-authored ones.
+    el.id = `${idPrefix}-${el.id}`;
+  });
+
+  return elements;
+}
+
+// Walk slide → layout (and master) rels to extract decorative shapes
+// from each level. Returned elements are stacked layout-shapes-first,
+// then master-shapes (master shapes paint OVER layout if both have
+// content — matches PowerPoint's inheritance: layout overrides master).
+// Wait — PowerPoint actually paints master FIRST (bottom-most), then
+// layout on top of master. We honour that.
+async function extractInheritedBgShapes(
+  slideRelsXml: string | null,
+  zip: JSZip,
+  baseReg: ImageRegistry,
+  pageOrdinal: number,
+): Promise<IPageElement[]> {
+  if (!slideRelsXml) return [];
+  const result: IPageElement[] = [];
+
+  const layoutTarget = findRelTargetByType(slideRelsXml, '/slideLayout');
+  if (!layoutTarget) return result;
+  const layoutPath = resolveRelTarget(layoutTarget, 'ppt/slides/');
+  const layoutXml = await zip.file(layoutPath)?.async('string');
+  if (!layoutXml) return result;
+
+  // Layout rels → master path
+  const layoutDir = layoutPath.slice(0, layoutPath.lastIndexOf('/') + 1);
+  const layoutName = layoutPath.split('/').pop() ?? '';
+  const layoutRelsXml = await zip.file(`${layoutDir}_rels/${layoutName}.rels`)?.async('string');
+  let masterShapes: IPageElement[] = [];
+  if (layoutRelsXml) {
+    const masterTarget = findRelTargetByType(layoutRelsXml, '/slideMaster');
+    if (masterTarget) {
+      const masterPath = resolveRelTarget(masterTarget, layoutDir);
+      const masterXml = await zip.file(masterPath)?.async('string');
+      if (masterXml) {
+        masterShapes = await extractBgShapesFromXml(masterXml, zip, masterPath, baseReg, pageOrdinal, 'p:sldMaster', 'master');
+      }
+    }
+  }
+  const layoutShapes = await extractBgShapesFromXml(layoutXml, zip, layoutPath, baseReg, pageOrdinal, 'p:sldLayout', 'layout');
+
+  // Master first (lowest z), then layout on top of master.
+  return [...masterShapes, ...layoutShapes];
+}
+
 async function extractElementsFromSlideXml(
   slideXml: string,
   reg: ImageRegistry,
@@ -3547,9 +3705,20 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip, placeholderRects, theme, deckDefaultRunProps };
     const pageOrdinal = i + 1;
     const pageId = `page-${pageOrdinal}`;
+    // Layout / master decorative shapes (non-placeholder) inherit as a
+    // background layer painted UNDER slide-authored content. Without
+    // this, slides built on themed layouts (e.g. Google Slides
+    // SECTION_TITLE layout with an orange right-half rectangle) come
+    // out with a plain white right half and the silhouette images
+    // floating against nothing.
+    const bgShapes = await extractInheritedBgShapes(slideRelsXml, zip, reg, pageOrdinal);
     const elements = await extractElementsFromSlideXml(slideXml, reg, pageOrdinal);
+    // Concatenate bg + slide; reassign zIndex monotonically so bg
+    // paints first (lowest z) and slide paints on top.
+    const allElements = [...bgShapes, ...elements];
+    allElements.forEach((el, idx) => { el.zIndex = idx + 1; });
     const elementMap: Record<string, IPageElement> = {};
-    for (const el of elements) elementMap[el.id] = el;
+    for (const el of allElements) elementMap[el.id] = el;
 
     // I5 — synthesise footer / date / slide-number placeholders from the
     // layout / master when the slide doesn't declare them. K4 — honour
