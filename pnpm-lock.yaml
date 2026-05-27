@@ -9,7 +9,7 @@ patchedDependencies:
     hash: c39d6c5b6f04ba21d13bb8b0640d0de60a03bc947b9e53f3d6a9c64d881dd69a
     path: patches/@univerjs__core@0.24.0.patch
   '@univerjs/engine-render@0.24.0':
-    hash: cc4ad4348ece79ceaeecbaf97ab1e562b3ed2e2453f997c70d000c42c4be8e5b
+    hash: a1f92b7d96e354a3f8f09db8f802cfb127bb0aab55a9475741372769039e5bf4
     path: patches/@univerjs__engine-render@0.24.0.patch
   '@univerjs/slides-ui@0.24.0':
     hash: dc4e427f760010fb7dcaec71ce94ded097278a99ea9c77d4abfc5cf08e3a9428
@@ -76,7 +76,7 @@ importers:
         version: 0.24.0(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/engine-render':
         specifier: 0.24.0
-        version: 0.24.0(patch_hash=cc4ad4348ece79ceaeecbaf97ab1e562b3ed2e2453f997c70d000c42c4be8e5b)(react@18.3.1)(rxjs@7.8.2)
+        version: 0.24.0(patch_hash=a1f92b7d96e354a3f8f09db8f802cfb127bb0aab55a9475741372769039e5bf4)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/slides':
         specifier: 0.24.0
         version: 0.24.0(patch_hash=badd3d74b96bf7ea0419371ccb55b06600e9173f3169c2d969263e592c3ae424)(react@18.3.1)(rxjs@7.8.2)
@@ -2546,7 +2546,7 @@ snapshots:
       '@univerjs/design': 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@univerjs/docs': 0.24.0(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/drawing': 0.24.0(react@18.3.1)(rxjs@7.8.2)
-      '@univerjs/engine-render': 0.24.0(patch_hash=cc4ad4348ece79ceaeecbaf97ab1e562b3ed2e2453f997c70d000c42c4be8e5b)(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/engine-render': 0.24.0(patch_hash=a1f92b7d96e354a3f8f09db8f802cfb127bb0aab55a9475741372769039e5bf4)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/icons': 1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@univerjs/ui': 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
       react: 18.3.1
@@ -2559,7 +2559,7 @@ snapshots:
   '@univerjs/docs@0.24.0(react@18.3.1)(rxjs@7.8.2)':
     dependencies:
       '@univerjs/core': 0.24.0(patch_hash=c39d6c5b6f04ba21d13bb8b0640d0de60a03bc947b9e53f3d6a9c64d881dd69a)(react@18.3.1)(rxjs@7.8.2)
-      '@univerjs/engine-render': 0.24.0(patch_hash=cc4ad4348ece79ceaeecbaf97ab1e562b3ed2e2453f997c70d000c42c4be8e5b)(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/engine-render': 0.24.0(patch_hash=a1f92b7d96e354a3f8f09db8f802cfb127bb0aab55a9475741372769039e5bf4)(react@18.3.1)(rxjs@7.8.2)
       rxjs: 7.8.2
     transitivePeerDependencies:
       - react
@@ -2582,7 +2582,7 @@ snapshots:
     transitivePeerDependencies:
       - react
 
-  '@univerjs/engine-render@0.24.0(patch_hash=cc4ad4348ece79ceaeecbaf97ab1e562b3ed2e2453f997c70d000c42c4be8e5b)(react@18.3.1)(rxjs@7.8.2)':
+  '@univerjs/engine-render@0.24.0(patch_hash=a1f92b7d96e354a3f8f09db8f802cfb127bb0aab55a9475741372769039e5bf4)(react@18.3.1)(rxjs@7.8.2)':
     dependencies:
       '@floating-ui/dom': 1.7.6
       '@floating-ui/utils': 0.2.11
@@ -2617,7 +2617,7 @@ snapshots:
       '@univerjs/docs': 0.24.0(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/docs-ui': 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/drawing': 0.24.0(react@18.3.1)(rxjs@7.8.2)
-      '@univerjs/engine-render': 0.24.0(patch_hash=cc4ad4348ece79ceaeecbaf97ab1e562b3ed2e2453f997c70d000c42c4be8e5b)(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/engine-render': 0.24.0(patch_hash=a1f92b7d96e354a3f8f09db8f802cfb127bb0aab55a9475741372769039e5bf4)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/icons': 1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@univerjs/slides': 0.24.0(patch_hash=badd3d74b96bf7ea0419371ccb55b06600e9173f3169c2d969263e592c3ae424)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/ui': 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
@@ -2631,7 +2631,7 @@ snapshots:
   '@univerjs/slides@0.24.0(patch_hash=badd3d74b96bf7ea0419371ccb55b06600e9173f3169c2d969263e592c3ae424)(react@18.3.1)(rxjs@7.8.2)':
     dependencies:
       '@univerjs/core': 0.24.0(patch_hash=c39d6c5b6f04ba21d13bb8b0640d0de60a03bc947b9e53f3d6a9c64d881dd69a)(react@18.3.1)(rxjs@7.8.2)
-      '@univerjs/engine-render': 0.24.0(patch_hash=cc4ad4348ece79ceaeecbaf97ab1e562b3ed2e2453f997c70d000c42c4be8e5b)(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/engine-render': 0.24.0(patch_hash=a1f92b7d96e354a3f8f09db8f802cfb127bb0aab55a9475741372769039e5bf4)(react@18.3.1)(rxjs@7.8.2)
       rxjs: 7.8.2
     transitivePeerDependencies:
       - react
@@ -2642,7 +2642,7 @@ snapshots:
     dependencies:
       '@univerjs/core': 0.24.0(patch_hash=c39d6c5b6f04ba21d13bb8b0640d0de60a03bc947b9e53f3d6a9c64d881dd69a)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/design': 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@univerjs/engine-render': 0.24.0(patch_hash=cc4ad4348ece79ceaeecbaf97ab1e562b3ed2e2453f997c70d000c42c4be8e5b)(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/engine-render': 0.24.0(patch_hash=a1f92b7d96e354a3f8f09db8f802cfb127bb0aab55a9475741372769039e5bf4)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/icons': 1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@wendellhu/redi': 1.1.1(react@18.3.1)
       localforage: 1.10.0
