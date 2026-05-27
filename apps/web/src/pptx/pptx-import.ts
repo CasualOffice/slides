@@ -38,6 +38,19 @@ const parser = new XMLParser({
   trimValues: false,
 });
 
+// Casual Slides — order-preserving parser used ONLY to recover the
+// source DOM order of `<p:spTree>` children. Regular fast-xml-parser
+// groups same-tag children into arrays but LOSES cross-tag order, which
+// caused z-stacking bugs (text frames painting BELOW images that should
+// have been beneath them per the source XML order).
+const orderedParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '@',
+  removeNSPrefix: false,
+  trimValues: false,
+  preserveOrder: true,
+});
+
 interface XmlNode { [key: string]: unknown; }
 
 function toArray<T>(v: T | T[] | undefined): T[] {
@@ -2129,9 +2142,6 @@ interface ZCounter {
   next: number;
 }
 
-// Recursively process a <p:spTree> (or nested <p:grpSp>) into
-// IPageElements. `groupXfrm` is the accumulated group transform that
-// maps from the current node's child-coordinate-space into slide space.
 async function processSpTree(
   spTree: unknown,
   reg: ImageRegistry,
@@ -2139,9 +2149,48 @@ async function processSpTree(
   groupXfrm: GroupXfrm,
   z: ZCounter,
   out: IPageElement[],
+  // Casual Slides — preserveOrder representation of THIS spTree's
+  // children. Used to compute each element's source-XML DOM rank so a
+  // post-pass in extractElementsFromSlideXml can sort the output by
+  // DOM order (matching PowerPoint's z-stacking rules) instead of by
+  // the type-grouped order the loops below produce. Recursion through
+  // <p:grpSp> threads the group's own ordered children.
+  orderedChildren: unknown[] = [],
+  parentRankPrefix: number[] = [],
 ): Promise<void> {
+  // Build DOM-rank lookup: for each tag we care about, an array where
+  // domRanks[tag][nthOccurrence] = position-in-spTree-children.
+  const domRanks: Record<string, number[]> = {
+    'p:sp': [], 'p:cxnSp': [], 'p:pic': [], 'p:graphicFrame': [], 'p:grpSp': [],
+  };
+  {
+    const perTag = new Map<string, number>();
+    orderedChildren.forEach((child, position) => {
+      if (!child || typeof child !== 'object') return;
+      const tag = Object.keys(child as Record<string, unknown>).find((k) => k !== ':@');
+      if (!tag) return;
+      const count = perTag.get(tag) ?? 0;
+      perTag.set(tag, count + 1);
+      if (tag in domRanks) domRanks[tag][count] = position;
+    });
+  }
+  // After each per-tag loop iteration we stamp every element pushed
+  // during that iteration with its `_sourceRank` — the composite
+  // [parent...,thisRank] tuple. extractElementsFromSlideXml sorts by
+  // these and re-stamps zIndex.
+  const stampPushed = (lenBefore: number, tag: string, idxWithinTag: number) => {
+    const myRank = domRanks[tag]?.[idxWithinTag] ?? idxWithinTag;
+    const composite = [...parentRankPrefix, myRank];
+    for (let i = lenBefore; i < out.length; i++) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (out[i] as any)._sourceRank = composite;
+    }
+  };
   // <p:sp>
+  let _spLoopIdx = 0;
   for (const sp of toArray(findChild(spTree, 'p:sp'))) {
+    const _myIdx = _spLoopIdx++;
+    const _lenBefore = out.length;
     if (!sp || typeof sp !== 'object') continue;
     const spPr = findChild(sp, 'p:spPr');
     const xfrm = findChild(spPr, 'a:xfrm');
@@ -2225,6 +2274,7 @@ async function processSpTree(
         type: PageElementType.TEXT,
         richText,
       });
+      stampPushed(_lenBefore, 'p:sp', _myIdx);
       continue;
     }
 
@@ -2267,6 +2317,7 @@ async function processSpTree(
         shape: { shapeType: shapeType as never, text: '', shapeProperties },
       });
     }
+    stampPushed(_lenBefore, 'p:sp', _myIdx);
   }
 
   // F3 — `<p:cxnSp>` connectors. Same geometry shape as `<p:sp>` minus
@@ -2274,7 +2325,10 @@ async function processSpTree(
   // `"bentConnector3"`, etc. — pass through to Univer's shapeType so
   // future renderer work picks them up. Position + outline + flips all
   // flow through the same branches as a regular shape.
+  let _cxnLoopIdx = 0;
   for (const cxn of toArray(findChild(spTree, 'p:cxnSp'))) {
+    const _myIdx = _cxnLoopIdx++;
+    const _lenBefore = out.length;
     if (!cxn || typeof cxn !== 'object') continue;
     const spPr = findChild(cxn, 'p:spPr');
     if (!spPr) continue;
@@ -2325,37 +2379,65 @@ async function processSpTree(
       type: PageElementType.SHAPE,
       shape: { shapeType: shapeType as never, text: '', shapeProperties },
     });
+    stampPushed(_lenBefore, 'p:cxnSp', _myIdx);
   }
 
   // <p:pic>
+  let _picLoopIdx = 0;
   for (const pic of toArray(findChild(spTree, 'p:pic'))) {
+    const _myIdx = _picLoopIdx++;
+    const _lenBefore = out.length;
     if (!pic || typeof pic !== 'object') continue;
     const result = await processPicNode(pic, reg, groupXfrm, pageOrdinal, z);
     if (result) out.push(result);
+    stampPushed(_lenBefore, 'p:pic', _myIdx);
   }
 
   // G1-G4 + H1 — `<p:graphicFrame>` wraps tables (via `<a:tbl>`) and
   // charts (via `<c:chart>`). Both share the graphicFrame xfrm + a
   // `<a:graphicData>` with a uri discriminator. Walk once and dispatch
   // per uri.
+  let _gfLoopIdx = 0;
   for (const gf of toArray(findChild(spTree, 'p:graphicFrame'))) {
+    const _myIdx = _gfLoopIdx++;
+    const _lenBefore = out.length;
     if (!gf || typeof gf !== 'object') continue;
     const result = await processGraphicFrame(gf, reg, groupXfrm, pageOrdinal, z);
     if (result) out.push(result);
+    stampPushed(_lenBefore, 'p:graphicFrame', _myIdx);
   }
 
   // <p:grpSp> — recurse. Compose this group's xfrm with the inherited
-  // group transform so nested groups stack correctly.
+  // group transform so nested groups stack correctly. The group's own
+  // children get a composite rank prefix so the post-sort places them
+  // exactly where the group was in source XML.
+  let _grpLoopIdx = 0;
   for (const grp of toArray(findChild(spTree, 'p:grpSp'))) {
+    const _myIdx = _grpLoopIdx++;
     if (!grp || typeof grp !== 'object') continue;
     const grpSpPr = findChild(grp, 'p:grpSpPr');
     const innerXfrm = readGroupXfrm(grpSpPr);
     const childXfrm = composeXfrm(groupXfrm, innerXfrm);
+    // Find THIS group's preserveOrder children to thread into the
+    // recursive call.
+    let nthSeen = 0;
+    let grpOrdered: unknown[] = [];
+    for (const c of orderedChildren) {
+      if (c && typeof c === 'object' && 'p:grpSp' in (c as Record<string, unknown>)) {
+        if (nthSeen === _myIdx) {
+          const v = (c as Record<string, unknown>)['p:grpSp'];
+          if (Array.isArray(v)) grpOrdered = v;
+          break;
+        }
+        nthSeen++;
+      }
+    }
+    const newPrefix = [...parentRankPrefix, domRanks['p:grpSp']?.[_myIdx] ?? _myIdx];
     // The group itself is structural — only its children produce
     // IPageElements. Univer has no native "group" page-element type in
     // the OSS model (Gap 3 candidate), so we flatten and let z-order
     // preserve the visual stack.
-    await processSpTree(grp, reg, pageOrdinal, childXfrm, z, out);
+    await processSpTree(grp, reg, pageOrdinal, childXfrm, z, out, grpOrdered, newPrefix);
   }
 }
 
@@ -2932,7 +3014,58 @@ async function extractElementsFromSlideXml(
   const spTree = findChild(findChild(findChild(parsed, 'p:sld'), 'p:cSld'), 'p:spTree');
   const elements: IPageElement[] = [];
   const z: ZCounter = { next: 1 };
-  await processSpTree(spTree, reg, pageOrdinal, IDENTITY_XFRM, z, elements);
+
+  // Pull spTree's preserveOrder children so processSpTree can stamp
+  // each pushed element with its source-XML DOM rank. OOXML's z-order
+  // is determined by child order within spTree (later child = painted
+  // on top); our previous type-grouped loops collapsed that order, so
+  // text frames painted under images that appeared LATER in the source.
+  let spTreeOrderedChildren: unknown[] = [];
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ordered = orderedParser.parse(slideXml) as unknown as Array<Record<string, unknown>>;
+    const sld = ordered.find((c) => c && 'p:sld' in c);
+    const sldChildren = sld ? (sld['p:sld'] as unknown[]) : [];
+    const cSld = sldChildren.find((c) => c && typeof c === 'object' && 'p:cSld' in (c as Record<string, unknown>)) as Record<string, unknown> | undefined;
+    const cSldChildren = cSld ? (cSld['p:cSld'] as unknown[]) : [];
+    const spTreeNode = cSldChildren.find((c) => c && typeof c === 'object' && 'p:spTree' in (c as Record<string, unknown>)) as Record<string, unknown> | undefined;
+    if (spTreeNode) {
+      const v = spTreeNode['p:spTree'];
+      if (Array.isArray(v)) spTreeOrderedChildren = v as unknown[];
+    }
+  } catch {
+    // If preserveOrder parse fails for any reason, fall back to the
+    // legacy type-grouped behaviour (elements still appear, just with
+    // wrong z-stacking on slides that interleave types).
+    spTreeOrderedChildren = [];
+  }
+
+  await processSpTree(spTree, reg, pageOrdinal, IDENTITY_XFRM, z, elements, spTreeOrderedChildren, []);
+
+  // Sort by composite _sourceRank (lexicographic on number arrays) and
+  // re-assign zIndex monotonically so the slides renderer paints in
+  // source-XML order. Strip the _sourceRank field before returning.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lexCompare = (a: number[], b: number[]) => {
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) {
+      if (a[i] !== b[i]) return a[i] - b[i];
+    }
+    return a.length - b.length;
+  };
+  elements.sort((a, b) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ra = ((a as any)._sourceRank as number[] | undefined) ?? [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rb = ((b as any)._sourceRank as number[] | undefined) ?? [];
+    return lexCompare(ra, rb);
+  });
+  elements.forEach((el, i) => {
+    el.zIndex = i + 1;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (el as any)._sourceRank;
+  });
+
   return elements;
 }
 
