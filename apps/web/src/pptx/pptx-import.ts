@@ -1700,9 +1700,36 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   headEnd: Arrowhead | null;
   tailEnd: Arrowhead | null;
   effectLst: IEffectListPayload | null;
+  // D7 — adjustment values from `<a:prstGeom><a:avLst><a:gd name="adjN" fmla="val M"/>`.
+  // PowerPoint shapes with tunable handles (wedgeRectCallout pointer
+  // position, roundRect corner radius, chevron arrow head, etc.) store
+  // each handle as `adj1`, `adj2`, ... in 1/100000 of the shape
+  // width/height. The renderer can read these to draw the correct path.
+  prstAdjustments: Record<string, number> | null;
 } {
   const prstGeom = findChild(spPr, 'a:prstGeom') as XmlNode | undefined;
   const prstAttr = prstGeom?.['@prst'];
+  // D7 — adjustment values. Each `<a:gd>` carries `@name="adjN"` and
+  // `@fmla="val M"`. We parse the integer out of the formula.
+  let prstAdjustments: Record<string, number> | null = null;
+  const avLst = findChild(prstGeom, 'a:avLst');
+  if (avLst) {
+    for (const gd of toArray(findChild(avLst, 'a:gd'))) {
+      if (!gd || typeof gd !== 'object') continue;
+      const node = gd as XmlNode;
+      const name = node['@name'];
+      const fmla = node['@fmla'];
+      if (typeof name !== 'string' || typeof fmla !== 'string') continue;
+      // Only the `val N` shape is supported today — formula
+      // expressions (`*/ adj1 1 2` etc.) would need a small evaluator.
+      const m = fmla.match(/^val\s+(-?\d+)$/);
+      if (!m) continue;
+      const n = parseInt(m[1], 10);
+      if (!Number.isFinite(n)) continue;
+      prstAdjustments = prstAdjustments ?? {};
+      prstAdjustments[name] = n;
+    }
+  }
   // D6 — custom geometry. When `<a:custGeom>` is present alongside (or
   // instead of) `<a:prstGeom>`, parse the path commands into an SVG
   // path string. The renderer can use this in place of the prst lookup
@@ -1766,7 +1793,7 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   // D18 + D19 — `<a:effectLst>` shadow / glow / reflection / blur.
   const effectLst = parseEffectList(spPr, theme);
 
-  return { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst };
+  return { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments };
 }
 
 // Placeholder geometry inherited from the slide layout / master (I3).
@@ -2554,7 +2581,7 @@ async function processSpTree(
     }
 
     if (spPr) {
-      const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
+      const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments } = parseShapeAppearance(spPr, reg.theme);
       const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shapeProperties: any = {};
@@ -2565,6 +2592,7 @@ async function processSpTree(
       // D6 — custGeom path data (SVG-style commands, coordinates
       // normalised 0..1 against the shape's bbox).
       if (pathData) shapeProperties.pathData = pathData;
+      if (prstAdjustments) shapeProperties.prstAdjustments = prstAdjustments;
       if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null || headEnd !== null || tailEnd !== null) {
         shapeProperties.outline = {
           outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,
@@ -2621,13 +2649,14 @@ async function processSpTree(
 
     const zIndex = z.next;
     z.next += 1;
-    const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst } = parseShapeAppearance(spPr, reg.theme);
+    const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments } = parseShapeAppearance(spPr, reg.theme);
     const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shapeProperties: any = {};
     if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
     if (fillGradient) shapeProperties.gradientFill = fillGradient;
     if (pathData) shapeProperties.pathData = pathData;
+    if (prstAdjustments) shapeProperties.prstAdjustments = prstAdjustments;
     if (outlineRgb || outlineWeightPx !== null || outlineDash !== null || outlineCap !== null || headEnd !== null || tailEnd !== null) {
       shapeProperties.outline = {
         outlineFill: outlineRgb ? { rgb: outlineRgb } : undefined,

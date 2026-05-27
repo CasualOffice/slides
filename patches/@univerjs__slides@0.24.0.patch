@@ -744,7 +744,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1490791e402bf1ec3a819381d32b23ca
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..152b0401c10cd03f5998beb7eba1ac143ec0bde2 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..573f6bace0b7d158e042c2e7520c4c603bbeb14d 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
@@ -1250,7 +1250,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..152b0401c10cd03f5998beb7eba1ac14
 +			} else if (cap === "flat") {
 +				strokeStyle.strokeLineCap = "butt";
 +			}
- 		}
++		}
 +		// Casual Slides patch — outerShdw (drop shadow) via the canvas
 +		// shadow* shape props. effectLst.outerShdw carries `color,
 +		// blurRad, dist, dir` where dist is in EMU and dir is in
@@ -1304,7 +1304,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..152b0401c10cd03f5998beb7eba1ac14
 +			shadowStyle.shadowBlur = radPx;
 +			shadowStyle.shadowOpacity = 0.6;
 +			shadowStyle.shadowForStrokeEnabled = true;
-+		}
+ 		}
 +		// Casual Slides patch — innerShdw / reflection / blur TODOs.
 +		// innerShdw: parsed identically to outerShdw but the shadow goes
 +		//   inside the shape's outline. Canvas has no native inner-shadow
@@ -1346,15 +1346,15 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..152b0401c10cd03f5998beb7eba1ac14
  			return new Circle(id, {
  				fill,
  				top,
-@@ -812,9 +1295,183 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -812,9 +1295,220 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
 -				...strokeStyle
 +				...strokeStyle,
 +				...shadowStyle
-+			});
-+		}
+ 			});
+ 		}
 +		// Casual Slides patch — per-prstGeom Path rendering for the most
 +		// common non-rect shapes. Falls back to Rect for anything not
 +		// listed. Coordinates are in object-local space (0..w / 0..h).
@@ -1482,6 +1482,43 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..152b0401c10cd03f5998beb7eba1ac14
 +					}
 +					return `M ${pts[0]} L ${pts.slice(1).join(" L ")} Z`;
 +				}
++				case "wedgeRectCallout": {
++					// Rectangle with a triangular pointer / speech-bubble
++					// tail. avLst's adj1 (x-offset of tip from center, in
++					// 1/100000 of width) and adj2 (y-offset, of height)
++					// land on shapeProperties.prstAdjustments. Default
++					// matches a bottom-left tail when adjustments are
++					// absent (a reasonable midpoint for typical decks).
++					const adj1 = (shapeProperties && shapeProperties.prstAdjustments && typeof shapeProperties.prstAdjustments.adj1 === "number")
++						? shapeProperties.prstAdjustments.adj1 / 100000
++						: -0.2;
++					const adj2 = (shapeProperties && shapeProperties.prstAdjustments && typeof shapeProperties.prstAdjustments.adj2 === "number")
++						? shapeProperties.prstAdjustments.adj2 / 100000
++						: 0.625;
++					const tipX = Math.max(0, Math.min(w, w * (0.5 + adj1)));
++					const tipY = h * (0.5 + adj2);
++					// Tail base sits on the nearest edge (typically the
++					// bottom for adj2 > 0.5). Width ~ 8% of shape size.
++					const baseHalf = Math.max(8, Math.min(w, h) * 0.06);
++					if (tipY > h) {
++						// Tail points BELOW — base on the bottom edge.
++						return `M 0 0 L ${w} 0 L ${w} ${h} L ${Math.min(w, tipX + baseHalf)} ${h} L ${tipX} ${tipY} L ${Math.max(0, tipX - baseHalf)} ${h} L 0 ${h} Z`;
++					}
++					if (tipY < 0) {
++						// Tail above — base on the top edge.
++						return `M 0 0 L ${Math.max(0, tipX - baseHalf)} 0 L ${tipX} ${tipY} L ${Math.min(w, tipX + baseHalf)} 0 L ${w} 0 L ${w} ${h} L 0 ${h} Z`;
++					}
++					if (tipX > w) {
++						// Tail right — base on the right edge.
++						return `M 0 0 L ${w} 0 L ${w} ${Math.max(0, tipY - baseHalf)} L ${tipX} ${tipY} L ${w} ${Math.min(h, tipY + baseHalf)} L ${w} ${h} L 0 ${h} Z`;
++					}
++					if (tipX < 0) {
++						// Tail left — base on the left edge.
++						return `M 0 0 L ${w} 0 L ${w} ${h} L 0 ${h} L 0 ${Math.min(h, tipY + baseHalf)} L ${tipX} ${tipY} L 0 ${Math.max(0, tipY - baseHalf)} Z`;
++					}
++					// Tip inside the rect — degenerate. Just draw the rect.
++					return `M 0 0 L ${w} 0 L ${w} ${h} L 0 ${h} Z`;
++				}
 +				default:
 +					return null;
 +			}
@@ -1505,8 +1542,8 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..152b0401c10cd03f5998beb7eba1ac14
 +				forceRender: true,
 +				...strokeStyle,
 +				...shadowStyle
- 			});
- 		}
++			});
++		}
 +		// Fallback for everything else — at least keep the element visible
 +		// as a bounding rect with the right fill + outline. Better than
 +		// disappearing entirely.
