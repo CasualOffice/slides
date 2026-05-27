@@ -5,7 +5,7 @@ Constraint: **SVG icons only, no emoji, no icon fonts**.
 
 Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked · `[-]` won't fix
 
-Last update: 2026-05-28 — **Wave 1 merged into main**. Type-check clean. Worktrees retired. Wave 1b + Wave 2-D + KB dispatching next.
+Last update: 2026-05-28 — **Waves 1 + 2 pushed** (commits 5551714 + 75a4eab). Worktrees retired. Brand fully cyan'd (CSS + SVG logo + favicon + theme-color). W1b (i18n string sweep) stopped mid-flight due to worktree bleed; re-running serially next.
 
 ---
 
@@ -175,7 +175,8 @@ Scope: `Toolbar.tsx` + new components. Industry-standard format controls.
 
 ## Done
 
-- **Wave 1 (2026-05-28)** — Z (i18n foundation) + A (SVG icons) + B (status + menu wiring) + C (slide context + DnD + stub cleanup) all merged. Type-check clean. Working tree carries 11 modified files + new `apps/web/src/i18n/`. Not yet committed — awaiting user direction.
+- **Wave 1 (2026-05-28, commit 5551714)** — Z (i18n foundation, ~210 keys) + A (45 SVG icons replacing Material Symbols webfont) + B (real Univer scene.scale zoom, SlideDataModel.activePage$ subscription, dirty-state Saved indicator, full Edit/View/Insert menu wiring, dismissible status/error pills) + C (slide context Move up/down/Hide, drag-and-drop .pptx import, disabled toolbar stubs removed). Pushed to origin/main.
+- **Wave 2 (2026-05-28, commit 75a4eab)** — W2-D (Google Slides toolbar with font family, size ±, B/I/U/S, text+fill+border color, align, list, indent ±, line spacing, link, paint format, clear formatting, ResizeObserver overflow popover, 8 new toolbar/* components, ~70 toolbar i18n keys) + W2-KB (Ctrl+/ shortcut overview dialog with search, platform-aware kbd chips, self-mounting ShortcutsProvider). Plus full brand-to-cyan repaint: CSS tokens + favicon.svg + TitleBar/AboutDialog SVG logos + `<meta name="theme-color">`. Univer command gaps recorded as TODO(univer) on inert buttons (paint format, clear formatting, link, line spacing, shape fill/outline, vertical align).
 
 ---
 
