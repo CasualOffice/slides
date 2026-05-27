@@ -205,11 +205,21 @@ Wave 8 + 9 + 10 + fix commits added significant work to the patched bundles. Rea
 | RichText respects authored frame height + bodyPr insets | slides-ui RichTextAdaptor | `b1924f0`, `0be74f6` |
 | Text-overflow — docs-engine paginating per wrap-line | docs / engine-render | `1b3c143` |
 | Z-stacking from source-XML DOM order | slides-ui canvas-view + import | `58fca1b` |
+| B14 letter-spacing (`spc`) rendered (advance-width add) | engine-render `glyph.ts` shaping | `795d0f2` |
+| B15 text-glyph outline (`tol`) rendered (strokeText pass after fill) | engine-render `font-and-base-line.ts` | `795d0f2` |
+| C12 arbitrary-angle body rotation (45°/180°/etc.) | engine-render `RichText.render` ctx rotate around frame centre | `00c80ad` |
+| Multi-font collapse — Calibri→Carlito + Cambria→Caladea model substitution; Google Fonts deck-pack in `index.html` | slides `pptx-import.ts` + `index.html` | `000bcc4` |
+| C13 fontScale moved to render-time (no double-shrink on re-import) | slides `pptx-import.ts` (write `renderConfig.fontScale`) + engine-render `tools.ts:getFontCreateConfig` (apply) + slides `pptx-export.ts` (bake on emit) | `e573b29`, `620e7f9` |
 
-### Known-fragile surfaces (per user feedback this turn)
+### Audit closures
 
-- **Z-axis**: model `zIndex` flows through adaptor mount order; recent commit forces DOM-order stacking but interaction with intra-Group order (TableAdaptor Group, group-shape flattening F1/F2) and the synthetic `s${pageOrdinal}-bg` element at z=0 has not been audited end-to-end. See companion analysis (this PR's renderer-pipeline report).
-- **Text size calculation**: `richText.fs` (pt) → docs-engine px conversion + C13 autofit's `fs` multiplication at import + bodyPr insets shrinking content box. Possible double-shrink and pagination edge cases noted by `1b3c143`.
+The renderer audit's three "critical" candidates resolved on inspection:
+
+- **Z-axis "all-in-layer-1" claim**: false positive — `Scene.addObjects` places objects in one layer, but the layer sorts by **per-object `zIndex`** via `core/src/shared/sort-rules.ts:17-25`. Paint order honors the model.
+- **Service-placeholder zIndex collision**: false positive — `maxZ + serviceCounter` always sits above authored user content.
+- **Image transparency clamp missing**: false positive — already guarded at `patches/@univerjs__slides@0.24.0.patch:153`.
+
+Real items the audit surfaced and this branch fixed: B14 / B15 / C12 / C13 + the multi-font collapse the user separately reported. Multi-paragraph balloon was previously addressed by commit `1b3c143` via single-page (`Infinity`-height) docs layout + props.height priority in `_initialProps`.
 
 ---
 
@@ -339,5 +349,6 @@ License envelope: every dep is Apache-2.0 or MIT (project rule — no AGPL, no s
 | 9a–9f | 2026-05-27 | K4 hf-opt-outs · A5-idx bgRef · A3+D9 multi-stop gradients · H2+H3 chart parse · E5+E6 image adjust + effects · D6 custGeom |
 | 10 (merge) | 2026-05-27 | parser fidelity consolidation merge |
 | renderer pipeline | 2026-05-27 | Shape/RichText/Image/Table/Chart adaptors, engine-render Image shadow+filter, IImageProperties.effectLst, DOM-order z-stacking, text-overflow pagination fix |
+| wave 11 (renderer-audit follow-up) | 2026-05-27 | B14 letter-spacing actually rendered (`glyph.ts` advance-width), B15 text-glyph outline actually rendered (`font-and-base-line.ts` strokeText pass), C12 arbitrary-angle body rotation (`RichText.render` rotates ctx around frame centre for non-vertical non-zero angles), multi-font collapse fix (model-level `FONT_SUBSTITUTION_MAP` Calibri→Carlito + Cambria→Caladea + Google Fonts deck-font pack in `index.html`), C13 fontScale moved from import-time multiplication to render-time application (`renderConfig.fontScale` + `getFontCreateConfig` + export-side bake), font console-error filter widened to include `fonts.gstatic` |
 
 Each wave ships with at least one round-trip e2e in `tests/e2e/smoke.spec.ts`.
