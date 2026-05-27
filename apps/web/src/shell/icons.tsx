@@ -213,6 +213,12 @@ const ICONS: Record<string, IconBody> = {
         <rect x="3" y="13" width="18" height="7" rx="1" />
       </>
     ),
+    filled: (
+      <>
+        <rect x="3" y="4" width="18" height="7" rx="1" fill="currentColor" stroke="none" />
+        <rect x="3" y="13" width="18" height="7" rx="1" fill="currentColor" stroke="none" />
+      </>
+    ),
   },
   view_module: {
     outlined: (
@@ -238,6 +244,16 @@ const ICONS: Record<string, IconBody> = {
       <>
         <path d="M4 4h10l6 6v10a2 2 0 0 1-2 2H4z" />
         <polyline points="14 4 14 10 20 10" />
+      </>
+    ),
+    filled: (
+      <>
+        <path
+          d="M4 4h10l6 6v10a2 2 0 0 1-2 2H4z"
+          fill="currentColor"
+          stroke="none"
+        />
+        <path d="M14 4v6h6" fill="rgba(255,255,255,0.35)" stroke="none" />
       </>
     ),
   },
@@ -455,6 +471,13 @@ const ICONS: Record<string, IconBody> = {
         <line x1="4" y1="12" x2="20" y2="12" />
       </>
     ),
+    filled: (
+      <>
+        <path d="M16 4H9a3 3 0 0 0-2.83 4" stroke="currentColor" />
+        <path d="M14 12a4 4 0 0 1 0 8H6" stroke="currentColor" />
+        <rect x="4" y="11" width="16" height="2" fill="currentColor" stroke="none" />
+      </>
+    ),
   },
   format_clear: {
     outlined: (
@@ -477,6 +500,13 @@ const ICONS: Record<string, IconBody> = {
         <line x1="3" y1="18" x2="18" y2="18" />
       </>
     ),
+    filled: (
+      <>
+        <rect x="3" y="5" width="18" height="2.4" fill="currentColor" stroke="none" />
+        <rect x="3" y="11" width="12" height="2.4" fill="currentColor" stroke="none" />
+        <rect x="3" y="17" width="15" height="2.4" fill="currentColor" stroke="none" />
+      </>
+    ),
   },
   format_align_center: {
     outlined: (
@@ -484,6 +514,13 @@ const ICONS: Record<string, IconBody> = {
         <line x1="3" y1="6" x2="21" y2="6" />
         <line x1="6" y1="12" x2="18" y2="12" />
         <line x1="4" y1="18" x2="20" y2="18" />
+      </>
+    ),
+    filled: (
+      <>
+        <rect x="3" y="5" width="18" height="2.4" fill="currentColor" stroke="none" />
+        <rect x="6" y="11" width="12" height="2.4" fill="currentColor" stroke="none" />
+        <rect x="4" y="17" width="16" height="2.4" fill="currentColor" stroke="none" />
       </>
     ),
   },
@@ -495,6 +532,13 @@ const ICONS: Record<string, IconBody> = {
         <line x1="6" y1="18" x2="21" y2="18" />
       </>
     ),
+    filled: (
+      <>
+        <rect x="3" y="5" width="18" height="2.4" fill="currentColor" stroke="none" />
+        <rect x="9" y="11" width="12" height="2.4" fill="currentColor" stroke="none" />
+        <rect x="6" y="17" width="15" height="2.4" fill="currentColor" stroke="none" />
+      </>
+    ),
   },
   format_align_justify: {
     outlined: (
@@ -502,6 +546,13 @@ const ICONS: Record<string, IconBody> = {
         <line x1="3" y1="6" x2="21" y2="6" />
         <line x1="3" y1="12" x2="21" y2="12" />
         <line x1="3" y1="18" x2="21" y2="18" />
+      </>
+    ),
+    filled: (
+      <>
+        <rect x="3" y="5" width="18" height="2.4" fill="currentColor" stroke="none" />
+        <rect x="3" y="11" width="18" height="2.4" fill="currentColor" stroke="none" />
+        <rect x="3" y="17" width="18" height="2.4" fill="currentColor" stroke="none" />
       </>
     ),
   },
@@ -518,6 +569,16 @@ const ICONS: Record<string, IconBody> = {
         <line x1="9" y1="18" x2="20" y2="18" />
       </>
     ),
+    filled: (
+      <>
+        <circle cx="5" cy="6" r="1.6" fill="currentColor" stroke="none" />
+        <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+        <circle cx="5" cy="18" r="1.6" fill="currentColor" stroke="none" />
+        <rect x="9" y="5" width="12" height="2.2" fill="currentColor" stroke="none" />
+        <rect x="9" y="11" width="12" height="2.2" fill="currentColor" stroke="none" />
+        <rect x="9" y="17" width="12" height="2.2" fill="currentColor" stroke="none" />
+      </>
+    ),
   },
   format_list_numbered: {
     outlined: (
@@ -528,6 +589,16 @@ const ICONS: Record<string, IconBody> = {
         <path d="M4 4v4h2" />
         <path d="M4 12h3a1 1 0 0 1 1 1v1l-3 2v0h3" />
         <path d="M5 18h2a1 1 0 0 1 0 2H5m0 0h2a1 1 0 0 0 0-2H5" />
+      </>
+    ),
+    filled: (
+      <>
+        <rect x="9" y="5" width="12" height="2.2" fill="currentColor" stroke="none" />
+        <rect x="9" y="11" width="12" height="2.2" fill="currentColor" stroke="none" />
+        <rect x="9" y="17" width="12" height="2.2" fill="currentColor" stroke="none" />
+        <path d="M4 4v4h2" stroke="currentColor" />
+        <path d="M4 12h3a1 1 0 0 1 1 1v1l-3 2v0h3" stroke="currentColor" />
+        <path d="M5 18h2a1 1 0 0 1 0 2H5m0 0h2a1 1 0 0 0 0-2H5" stroke="currentColor" />
       </>
     ),
   },

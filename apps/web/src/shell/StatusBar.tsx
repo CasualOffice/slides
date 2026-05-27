@@ -41,15 +41,16 @@ export function StatusBar({
       </div>
       <div className="cs-statusbar__right">
         <button type="button" className="cs-statusbar__view-btn is-active" title={t('viewNormal')}>
-          <Icon name="view_agenda" size={14} />
+          <Icon name="view_agenda" size={16} filled />
         </button>
         <button
           type="button"
           className={`cs-statusbar__view-btn ${notesVisible ? 'is-active' : ''}`}
           title={notesVisible ? t('notesHide') : t('notesShow')}
+          aria-pressed={notesVisible}
           onClick={onToggleNotes}
         >
-          <Icon name="sticky_note_2" size={14} />
+          <Icon name="sticky_note_2" size={16} filled={notesVisible} />
         </button>
         <span className="cs-statusbar__sep" aria-hidden="true" />
         <button
@@ -59,7 +60,7 @@ export function StatusBar({
           onClick={() => onZoomChange(clamp(zoom - 10))}
           disabled={zoom <= ZOOM_MIN}
         >
-          <Icon name="remove" size={14} />
+          <Icon name="remove" size={16} />
         </button>
         <input
           type="range"
@@ -78,7 +79,7 @@ export function StatusBar({
           onClick={() => onZoomChange(clamp(zoom + 10))}
           disabled={zoom >= ZOOM_MAX}
         >
-          <Icon name="add" size={14} />
+          <Icon name="add" size={16} />
         </button>
         <button
           type="button"

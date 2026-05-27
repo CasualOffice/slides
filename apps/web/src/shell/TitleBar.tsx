@@ -413,11 +413,11 @@ export function TitleBar({
           );
         })()}
         <button type="button" className="cs-btn cs-btn--ghost" onClick={onOpen} disabled={opening}>
-          <Icon name="folder_open" size={16} />
+          <Icon name="folder_open" size={18} />
           <span>{opening ? t('titlebar.actions.opening') : t('titlebar.actions.open')}</span>
         </button>
         <button type="button" className="cs-btn cs-btn--ghost" onClick={onSave} disabled={saving}>
-          <Icon name="download" size={16} />
+          <Icon name="download" size={18} />
           <span>{saving ? t('titlebar.actions.saving') : t('titlebar.actions.save')}</span>
         </button>
         {/* TODO: reinstate Share button in Phase 2 once collab links land

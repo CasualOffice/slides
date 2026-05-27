@@ -203,23 +203,54 @@ const DEFAULT_FORMAT: FormatState = {
 //   - Group 6 (font+size+B/I/U/S+3 colors) ≈ 440 px
 //   - Group 7 (align/list/indent×2/spacing/clear/link) ≈ 260 px
 //   - Slideshow CTA + padding ≈ 160 px
-// Total native width ≈ 1180 px. We collapse groups 6+7 into the overflow
-// popover when the available toolbar width drops below 1180 px.
-const OVERFLOW_BREAKPOINT = 1180;
-
+// Overflow is detected by measuring the inner row's scrollWidth vs its
+// clientWidth — anything that genuinely overflows the available space
+// triggers the "More" popover. Estimating from a hardcoded breakpoint is
+// brittle: pickers grow with i18n labels, locale, font, etc. Real
+// measurement Just Works.
+//
+// We need two passes per tick:
+//   1. Force `overflow=false` so groups 6+7 render inline, then measure.
+//   2. If the row's scrollWidth exceeds clientWidth, set `overflow=true`
+//      and re-render — the inline groups fold into the More popover.
+//
+// We add a small hysteresis (8 px) so a borderline width doesn't
+// thrash between expanded/collapsed on every resize tick.
 function useToolbarOverflow(rootRef: React.RefObject<HTMLDivElement>): boolean {
   const [overflow, setOverflow] = useState(false);
+
+  // Measure on every relevant change. We re-measure after the DOM commits
+  // by reading scrollWidth from the inner row element.
   useEffect(() => {
     const el = rootRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver((entries) => {
-      for (const e of entries) {
-        setOverflow(e.contentRect.width < OVERFLOW_BREAKPOINT);
-      }
-    });
+    const HYSTERESIS = 8;
+    const measure = () => {
+      const row = el.querySelector('.cs-toolbar2__row') as HTMLElement | null;
+      if (!row) return;
+      const sw = row.scrollWidth;
+      const cw = row.clientWidth;
+      setOverflow((prev) => {
+        // If inline content exceeds available width → collapse.
+        if (!prev && sw > cw + HYSTERESIS) return true;
+        // If collapsed and the available width grew enough that all the
+        // hidden groups + a margin could fit back, expand again. We
+        // approximate the hidden groups as ~430 px (group 6) + ~330 px
+        // (group 7) + 26 px of separators = ~786 px. When clientWidth
+        // grows back past scrollWidth + 786 + HYSTERESIS, the previously
+        // hidden groups should fit inline again.
+        if (prev && cw > sw + 786 + HYSTERESIS) return false;
+        return prev;
+      });
+    };
+    measure();
+    const ro = new ResizeObserver(() => measure());
     ro.observe(el);
+    const row = el.querySelector('.cs-toolbar2__row');
+    if (row) ro.observe(row as Element);
     return () => ro.disconnect();
   }, [rootRef]);
+
   return overflow;
 }
 
@@ -353,7 +384,7 @@ export function Toolbar() {
           }
         >
           <Icon name="category" size={18} />
-          <Icon name="expand_more" size={12} className="cs-toolbar2__caret" />
+          <Icon name="expand_more" size={14} className="cs-toolbar2__caret" />
         </button>
       </div>
       <button
@@ -433,7 +464,7 @@ export function Toolbar() {
         aria-pressed={format.bold}
         onClick={() => toggleFormat('bold', 'doc.command.set-inline-format-bold')}
       >
-        <Icon name="bold" size={16} filled={format.bold} />
+        <Icon name="bold" size={18} filled={format.bold} />
       </button>
       <button
         type="button"
@@ -443,7 +474,7 @@ export function Toolbar() {
         aria-pressed={format.italic}
         onClick={() => toggleFormat('italic', 'doc.command.set-inline-format-italic')}
       >
-        <Icon name="italic" size={16} filled={format.italic} />
+        <Icon name="italic" size={18} filled={format.italic} />
       </button>
       <button
         type="button"
@@ -453,7 +484,7 @@ export function Toolbar() {
         aria-pressed={format.underline}
         onClick={() => toggleFormat('underline', 'doc.command.set-inline-format-underline')}
       >
-        <Icon name="underline" size={16} filled={format.underline} />
+        <Icon name="underline" size={18} filled={format.underline} />
       </button>
       <button
         type="button"
@@ -463,7 +494,7 @@ export function Toolbar() {
         aria-pressed={format.strikethrough}
         onClick={() => toggleFormat('strikethrough', 'doc.command.set-inline-format-strikethrough')}
       >
-        <Icon name="strikethrough" size={16} filled={format.strikethrough} />
+        <Icon name="strikethrough" size={18} filled={format.strikethrough} />
       </button>
       <ColorPicker
         scope="text"
@@ -510,7 +541,7 @@ export function Toolbar() {
           void dispatchSlideCommand('doc.command.change-list-nesting-level', { type: 'decrease' })
         }
       >
-        <Icon name="format_indent_decrease" size={16} />
+        <Icon name="format_indent_decrease" size={18} />
       </button>
       <button
         type="button"
@@ -521,7 +552,7 @@ export function Toolbar() {
           void dispatchSlideCommand('doc.command.change-list-nesting-level', { type: 'increase' })
         }
       >
-        <Icon name="format_indent_increase" size={16} />
+        <Icon name="format_indent_increase" size={18} />
       </button>
       <LineSpacingPicker
         value={format.lineSpacing}
@@ -536,7 +567,7 @@ export function Toolbar() {
         // v0.24.0. Implementation reuses RichTextEditingMutation to wipe
         // `textRun.ts` over the selection. Inert until the patch lands.
       >
-        <Icon name="format_clear" size={16} />
+        <Icon name="format_clear" size={18} />
       </button>
       <button
         type="button"
@@ -547,7 +578,7 @@ export function Toolbar() {
         // docs-ui command in 0.24.0. Univer ships a HYPERLINK custom-range
         // type but no UI command id. Inert.
       >
-        <Icon name="link" size={16} />
+        <Icon name="link" size={18} />
       </button>
     </>
   );
@@ -634,7 +665,7 @@ export function Toolbar() {
             open?.();
           }}
         >
-          <Icon name="play_arrow" size={16} />
+          <Icon name="play_arrow" size={18} />
           <span>{t('toolbar.slideshow')}</span>
         </button>
       </div>

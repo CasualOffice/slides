@@ -37,7 +37,7 @@ export function ListPicker({ mode, onChange }: ListPickerProps) {
         aria-pressed={mode === 'bullet'}
         onClick={() => toggle('bullet')}
       >
-        <Icon name="format_list_bulleted" size={16} />
+        <Icon name="format_list_bulleted" size={18} filled={mode === 'bullet'} />
       </button>
       <button
         type="button"
@@ -47,7 +47,7 @@ export function ListPicker({ mode, onChange }: ListPickerProps) {
         aria-pressed={mode === 'number'}
         onClick={() => toggle('number')}
       >
-        <Icon name="format_list_numbered" size={16} />
+        <Icon name="format_list_numbered" size={18} filled={mode === 'number'} />
       </button>
     </>
   );

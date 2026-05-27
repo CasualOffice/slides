@@ -61,8 +61,8 @@ export function AlignPicker({ value, onChange }: AlignPickerProps) {
         aria-expanded={!!anchor}
         onClick={() => setAnchor(anchor ? null : triggerRef.current!.getBoundingClientRect())}
       >
-        <Icon name={current.icon} size={16} />
-        <Icon name="expand_more" size={12} className="cs-toolbar2__caret" />
+        <Icon name={current.icon} size={18} filled />
+        <Icon name="expand_more" size={14} className="cs-toolbar2__caret" />
       </button>
       {pos && (
         <div
@@ -84,7 +84,7 @@ export function AlignPicker({ value, onChange }: AlignPickerProps) {
                 aria-label={t(entry.labelKey)}
                 onClick={() => pick(entry)}
               >
-                <Icon name={entry.icon} size={16} />
+                <Icon name={entry.icon} size={18} filled={value === entry.value} />
               </button>
             ))}
           </div>
