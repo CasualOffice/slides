@@ -1,5 +1,9 @@
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
+// i18n must initialise before any React component mounts so the first
+// render of <App /> already sees the configured `t()` instance — otherwise
+// components would fall back to raw keys for one tick.
+import './i18n';
 import './univer-styles';
 import './styles.css';
 

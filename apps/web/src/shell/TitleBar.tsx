@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Icon } from './icons';
+import { dispatchSlideCommand } from '../univer/commands';
 
 // Google Docs-style title bar — single chrome block with brand on the
 // left, editable filename + menu strip stacked in the middle, action
@@ -23,8 +25,17 @@ export interface TitleBarProps {
   onOpenProperties: () => void;
   onOpenRecent: () => void;
   onOpenAbout: () => void;
+  onToggleNotes?: () => void;
+  onFitToWindow?: () => void;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onToggleSlidePanel?: () => void;
+  onInsertShape?: () => void;
+  onDismissStatus?: () => void;
+  onDismissError?: () => void;
   saving?: boolean;
   opening?: boolean;
+  dirty?: boolean;
   status?: string | null;
   error?: string | null;
   collabStatus?: 'idle' | 'connecting' | 'live' | 'reconnecting' | 'error';
@@ -44,46 +55,69 @@ interface MenuDef {
   items: (MenuItem | { id: string; label: '---' })[];
 }
 
-const MENUS: MenuDef[] = [
-  { id: 'file', label: 'File', items: [
-    { id: 'new', label: 'New', shortcut: 'Ctrl+N' },
-    { id: 'open', label: 'Open', shortcut: 'Ctrl+O' },
-    { id: 'recent', label: 'Recent files' },
-    { id: 'save', label: 'Save', shortcut: 'Ctrl+S' },
-    { id: 'sep1', label: '---' },
-    { id: 'properties', label: 'Properties' },
-    { id: 'share', label: 'Share' },
-  ] },
-  { id: 'edit', label: 'Edit', items: [
-    { id: 'undo', label: 'Undo', shortcut: 'Ctrl+Z' },
-    { id: 'redo', label: 'Redo', shortcut: 'Ctrl+Y' },
-    { id: 'sep1', label: '---' },
-    { id: 'cut', label: 'Cut', shortcut: 'Ctrl+X' },
-    { id: 'copy', label: 'Copy', shortcut: 'Ctrl+C' },
-    { id: 'paste', label: 'Paste', shortcut: 'Ctrl+V' },
-  ] },
-  { id: 'view', label: 'View', items: [
-    { id: 'fit', label: 'Fit to window' },
-    { id: 'zoom-in', label: 'Zoom in', shortcut: 'Ctrl++' },
-    { id: 'zoom-out', label: 'Zoom out', shortcut: 'Ctrl+-' },
-    { id: 'sep1', label: '---' },
-    { id: 'thumbs', label: 'Slide panel' },
-    { id: 'notes', label: 'Speaker notes' },
-  ] },
-  { id: 'insert', label: 'Insert', items: [
-    { id: 'text', label: 'Text box' },
-    { id: 'shape', label: 'Shape' },
-    { id: 'image', label: 'Image' },
-    { id: 'sep1', label: '---' },
-    { id: 'slide', label: 'New slide', shortcut: 'Ctrl+M' },
-  ] },
-  { id: 'help', label: 'Help', items: [
-    { id: 'about', label: 'About Casual Slides' },
-    { id: 'repo', label: 'GitHub repo' },
-  ] },
-];
+// Menu structure is built at render-time from the i18n catalogue so menu
+// labels + shortcut hints follow the active locale. Shortcut strings stay
+// keyed (English text today) so a future locale can override the hint —
+// the keystroke itself is universal ASCII.
+function buildMenus(t: (key: string) => string): MenuDef[] {
+  return [
+    { id: 'file', label: t('menu:file.label'), items: [
+      { id: 'new', label: t('menu:file.new'), shortcut: t('menu:file.shortcut.new') },
+      { id: 'open', label: t('menu:file.open'), shortcut: t('menu:file.shortcut.open') },
+      { id: 'recent', label: t('menu:file.recent') },
+      { id: 'save', label: t('menu:file.save'), shortcut: t('menu:file.shortcut.save') },
+      { id: 'sep1', label: '---' },
+      { id: 'properties', label: t('menu:file.properties') },
+    ] },
+    { id: 'edit', label: t('menu:edit.label'), items: [
+      { id: 'undo', label: t('menu:edit.undo'), shortcut: t('menu:edit.shortcut.undo') },
+      { id: 'redo', label: t('menu:edit.redo'), shortcut: t('menu:edit.shortcut.redo') },
+      { id: 'sep1', label: '---' },
+      { id: 'cut', label: t('menu:edit.cut'), shortcut: t('menu:edit.shortcut.cut') },
+      { id: 'copy', label: t('menu:edit.copy'), shortcut: t('menu:edit.shortcut.copy') },
+      { id: 'paste', label: t('menu:edit.paste'), shortcut: t('menu:edit.shortcut.paste') },
+    ] },
+    { id: 'view', label: t('menu:view.label'), items: [
+      { id: 'fit', label: t('menu:view.fit') },
+      { id: 'zoom-in', label: t('menu:view.zoomIn'), shortcut: t('menu:view.shortcut.zoomIn') },
+      { id: 'zoom-out', label: t('menu:view.zoomOut'), shortcut: t('menu:view.shortcut.zoomOut') },
+      { id: 'sep1', label: '---' },
+      { id: 'thumbs', label: t('menu:view.thumbs') },
+      { id: 'notes', label: t('menu:view.notes') },
+    ] },
+    { id: 'insert', label: t('menu:insert.label'), items: [
+      { id: 'text', label: t('menu:insert.text') },
+      { id: 'shape', label: t('menu:insert.shape') },
+      { id: 'image', label: t('menu:insert.image') },
+      { id: 'sep1', label: '---' },
+      { id: 'slide', label: t('menu:insert.slide'), shortcut: t('menu:insert.shortcut.slide') },
+    ] },
+    { id: 'help', label: t('menu:help.label'), items: [
+      { id: 'about', label: t('menu:help.about') },
+      { id: 'repo', label: t('menu:help.repo') },
+    ] },
+  ];
+}
 
 const isSep = (i: MenuDef['items'][number]): i is { id: string; label: '---' } => i.label === '---';
+
+// Best-effort clipboard fallback. Univer registers `univer.command.cut/copy/
+// paste` in @univerjs/ui, but those rely on a focused editor surface. When
+// the focus is on the slide canvas (not a text frame), Univer's commands
+// no-op silently. Calling document.execCommand at least lets the browser
+// route the action through its native focused-element handler. Both paths
+// can fail in headless contexts — we swallow the rejection.
+async function dispatchClipboard(cmd: 'cut' | 'copy' | 'paste'): Promise<void> {
+  const ok = await dispatchSlideCommand(`univer.command.${cmd}`);
+  if (ok) return;
+  // TODO: drop the execCommand fallback once Univer routes canvas-level
+  // clipboard through a slide command (Gap 1.x — clipboard on selection).
+  try {
+    document.execCommand(cmd);
+  } catch {
+    /* not available — silent no-op */
+  }
+}
 
 export function TitleBar({
   fileName,
@@ -93,19 +127,34 @@ export function TitleBar({
   onOpenProperties,
   onOpenRecent,
   onOpenAbout,
+  onToggleNotes,
+  onFitToWindow,
+  onZoomIn,
+  onZoomOut,
+  onToggleSlidePanel,
+  onInsertShape,
+  onDismissStatus,
+  onDismissError,
   saving,
   opening,
+  dirty,
   status,
   error,
   collabStatus,
   collabRoomId,
   collabPeers = 0,
 }: TitleBarProps) {
+  // We use both namespaces so the menu strip pulls from `menu` while the
+  // chrome (filename, pills, action buttons, collab badge) pulls from
+  // `chrome`. `useTranslation` returns a `t` whose first-namespace lookup
+  // is `chrome`; menu keys go through the explicit `menu:` prefix.
+  const { t } = useTranslation(['chrome', 'menu']);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [filenameEditing, setFilenameEditing] = useState(false);
   const [draft, setDraft] = useState(fileName);
   const inputRef = useRef<HTMLInputElement>(null);
   const menuStripRef = useRef<HTMLDivElement>(null);
+  const MENUS = buildMenus(t);
 
   useEffect(() => setDraft(fileName), [fileName]);
   useEffect(() => {
@@ -127,21 +176,86 @@ export function TitleBar({
   const handleMenuItem = useCallback(
     (menuId: string, itemId: string) => {
       setOpenMenu(null);
-      if (menuId === 'file' && itemId === 'open') onOpen();
-      if (menuId === 'file' && itemId === 'save') onSave();
-      if (menuId === 'file' && itemId === 'properties') onOpenProperties();
-      if (menuId === 'file' && itemId === 'recent') onOpenRecent();
-      if (menuId === 'help' && itemId === 'about') onOpenAbout();
-      if (menuId === 'help' && itemId === 'repo') {
-        window.open('https://github.com/schnsrw/slides', '_blank', 'noopener,noreferrer');
+      // File menu
+      if (menuId === 'file') {
+        if (itemId === 'new') {
+          // Reload the page — same as Ctrl+N. Cheaper than rebuilding
+          // a blank deck in-place; the default snapshot is restored on
+          // mount. TODO: replace with a proper "new deck" command when
+          // we keep multiple unsaved decks open.
+          if (typeof window !== 'undefined') window.location.reload();
+        }
+        if (itemId === 'open') onOpen();
+        if (itemId === 'save') onSave();
+        if (itemId === 'properties') onOpenProperties();
+        if (itemId === 'recent') onOpenRecent();
+        return;
+      }
+      // Edit menu
+      if (menuId === 'edit') {
+        if (itemId === 'undo') void dispatchSlideCommand('univer.command.undo');
+        if (itemId === 'redo') void dispatchSlideCommand('univer.command.redo');
+        if (itemId === 'cut') void dispatchClipboard('cut');
+        if (itemId === 'copy') void dispatchClipboard('copy');
+        if (itemId === 'paste') void dispatchClipboard('paste');
+        return;
+      }
+      // View menu
+      if (menuId === 'view') {
+        if (itemId === 'fit') onFitToWindow?.();
+        if (itemId === 'zoom-in') onZoomIn?.();
+        if (itemId === 'zoom-out') onZoomOut?.();
+        if (itemId === 'thumbs') onToggleSlidePanel?.();
+        if (itemId === 'notes') onToggleNotes?.();
+        return;
+      }
+      // Insert menu
+      if (menuId === 'insert') {
+        if (itemId === 'text') void dispatchSlideCommand('slide.command.add-text');
+        if (itemId === 'shape') onInsertShape?.();
+        if (itemId === 'image') void dispatchSlideCommand('slide.command.insert-float-image');
+        if (itemId === 'slide') void dispatchSlideCommand('slide.operation.append-slide');
+        return;
+      }
+      // Help menu
+      if (menuId === 'help') {
+        if (itemId === 'about') onOpenAbout();
+        if (itemId === 'repo') {
+          window.open('https://github.com/schnsrw/slides', '_blank', 'noopener,noreferrer');
+        }
       }
     },
-    [onOpen, onSave, onOpenProperties, onOpenRecent, onOpenAbout],
+    [
+      onOpen,
+      onSave,
+      onOpenProperties,
+      onOpenRecent,
+      onOpenAbout,
+      onToggleNotes,
+      onFitToWindow,
+      onZoomIn,
+      onZoomOut,
+      onToggleSlidePanel,
+      onInsertShape,
+    ],
   );
+
+  // Saved-state indicator. Three states:
+  //   "Saving…"        — an export is in flight.
+  //   "Unsaved changes" — a mutation has fired since the last save.
+  //   "Saved"          — clean (no mutations since the last save OR the
+  //                      initial render). Mirrors Google Docs' "All
+  //                      changes saved in Drive" copy but trimmed for
+  //                      our footprint.
+  const savedLabel = saving
+    ? t('titlebar.saved.saving')
+    : dirty
+      ? t('titlebar.saved.dirty')
+      : t('titlebar.saved.clean');
 
   return (
     <header className="cs-titlebar">
-      <a className="cs-titlebar__brand" href="#" aria-label="Casual Slides">
+      <a className="cs-titlebar__brand" href="#" aria-label={t('titlebar.brand')}>
         <svg viewBox="0 0 32 40" width="28" height="36" aria-hidden="true">
           <path d="M2 0C0.9 0 0 0.9 0 2V38C0 39.1 0.9 40 2 40H30C31.1 40 32 39.1 32 38V10L22 0H2Z" fill="#B7472A" />
           <path d="M22 0L32 10H24C22.9 10 22 9.1 22 8V0Z" fill="#8B3520" />
@@ -179,20 +293,47 @@ export function TitleBar({
               type="button"
               className="cs-titlebar__filename"
               onClick={() => setFilenameEditing(true)}
-              title="Rename"
+              title={t('titlebar.filenameRename')}
             >
               {fileName}
             </button>
           )}
+          <span
+            className={`cs-titlebar__saved cs-titlebar__saved--${saving ? 'saving' : dirty ? 'dirty' : 'clean'}`}
+            data-testid="saved-indicator"
+            title={savedLabel}
+          >
+            {savedLabel}
+          </span>
           {status && (
             <span className="cs-titlebar__pill cs-titlebar__pill--status" title={status}>
-              {status}
+              <span className="cs-titlebar__pill-text">{status}</span>
+              {onDismissStatus && (
+                <button
+                  type="button"
+                  className="cs-titlebar__pill-dismiss"
+                  aria-label={t('titlebar.pill.dismissStatus')}
+                  onClick={onDismissStatus}
+                >
+                  <Icon name="close" size={10} />
+                </button>
+              )}
             </span>
           )}
           {error && (
             <span className="cs-titlebar__pill cs-titlebar__pill--error" title={error}>
               <Icon name="error" size={12} />
-              {error}
+              <span className="cs-titlebar__pill-text">{error}</span>
+              {onDismissError && (
+                <button
+                  type="button"
+                  className="cs-titlebar__pill-dismiss"
+                  aria-label={t('titlebar.pill.dismissError')}
+                  onClick={onDismissError}
+                >
+                  <Icon name="close" size={10} />
+                </button>
+              )}
             </span>
           )}
         </div>
@@ -236,34 +377,51 @@ export function TitleBar({
         </nav>
       </div>
       <div className="cs-titlebar__actions">
-        {collabRoomId && (
-          <span
-            className={`cs-titlebar__live cs-titlebar__live--${collabStatus ?? 'idle'}`}
-            data-testid="collab-pill"
-            title={
-              collabStatus === 'live'
-                ? `Live in room "${collabRoomId}" · ${collabPeers + 1} editor${collabPeers ? 's' : ''}`
-                : `Collab room ${collabRoomId} (${collabStatus ?? 'idle'})`
-            }
-          >
-            <span className="cs-titlebar__live-dot" />
-            {collabStatus === 'live' ? 'Live' : (collabStatus ?? 'idle')}
-            {collabStatus === 'live' && collabPeers > 0 && ` · ${collabPeers + 1}`}
-          </span>
-        )}
+        {collabRoomId && (() => {
+          // Tooltip selects between the live + peers form and the
+          // generic state form. The live tooltip uses i18next plural
+          // form selection on `count`.
+          const peerCount = collabPeers + 1;
+          const liveTooltip = t('titlebar.collab.liveTooltip', {
+            count: peerCount,
+            room: collabRoomId,
+          });
+          const stateTooltip = t('titlebar.collab.stateTooltip', {
+            room: collabRoomId,
+            state: collabStatus ?? t('titlebar.collab.idle'),
+          });
+          const statusLabel =
+            collabStatus === 'live'
+              ? t('titlebar.collab.live')
+              : collabStatus === 'connecting'
+                ? t('titlebar.collab.connecting')
+                : collabStatus === 'reconnecting'
+                  ? t('titlebar.collab.reconnecting')
+                  : collabStatus === 'error'
+                    ? t('titlebar.collab.error')
+                    : t('titlebar.collab.idle');
+          return (
+            <span
+              className={`cs-titlebar__live cs-titlebar__live--${collabStatus ?? 'idle'}`}
+              data-testid="collab-pill"
+              title={collabStatus === 'live' ? liveTooltip : stateTooltip}
+            >
+              <span className="cs-titlebar__live-dot" />
+              {statusLabel}
+              {collabStatus === 'live' && collabPeers > 0 && ` · ${peerCount}`}
+            </span>
+          );
+        })()}
         <button type="button" className="cs-btn cs-btn--ghost" onClick={onOpen} disabled={opening}>
           <Icon name="folder_open" size={16} />
-          <span>{opening ? 'Opening' : 'Open'}</span>
+          <span>{opening ? t('titlebar.actions.opening') : t('titlebar.actions.open')}</span>
         </button>
         <button type="button" className="cs-btn cs-btn--ghost" onClick={onSave} disabled={saving}>
           <Icon name="download" size={16} />
-          <span>{saving ? 'Saving' : 'Save'}</span>
+          <span>{saving ? t('titlebar.actions.saving') : t('titlebar.actions.save')}</span>
         </button>
-        <button type="button" className="cs-btn cs-btn--primary" disabled title="Coming soon">
-          <Icon name="person_add" size={16} />
-          <span>Share</span>
-        </button>
-        <span className="cs-titlebar__avatar" title="You">U</span>
+        {/* TODO: reinstate Share button in Phase 2 once collab links land
+         *  (room URL + read/edit toggle). Avatar/identity returns then too. */}
       </div>
     </header>
   );

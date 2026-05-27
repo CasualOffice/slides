@@ -1,0 +1,352 @@
+{
+  "chrome": {
+    "titlebar": {
+      "brand": "Casual Slides",
+      "filenameRename": "Rename",
+      "actions": {
+        "open": "Open",
+        "opening": "Opening",
+        "save": "Save",
+        "saving": "Saving",
+        "share": "Share",
+        "shareComingSoon": "Coming soon",
+        "you": "You",
+        "youInitial": "U"
+      },
+      "collab": {
+        "live": "Live",
+        "idle": "idle",
+        "connecting": "connecting",
+        "reconnecting": "reconnecting",
+        "error": "error",
+        "liveTooltip_one": "Live in room \"{{room}}\" · {{count}} editor",
+        "liveTooltip_other": "Live in room \"{{room}}\" · {{count}} editors",
+        "stateTooltip": "Collab room {{room}} ({{state}})"
+      },
+      "saved": {
+        "saving": "Saving…",
+        "dirty": "Unsaved changes",
+        "clean": "Saved"
+      },
+      "pill": {
+        "dismissStatus": "Dismiss status",
+        "dismissError": "Dismiss error"
+      }
+    },
+    "workspace": {
+      "dropPptx": "Drop .pptx to open"
+    }
+  },
+  "menu": {
+    "file": {
+      "label": "File",
+      "new": "New",
+      "open": "Open",
+      "recent": "Recent files",
+      "save": "Save",
+      "properties": "Properties",
+      "share": "Share",
+      "shortcut": {
+        "new": "Ctrl+N",
+        "open": "Ctrl+O",
+        "save": "Ctrl+S"
+      }
+    },
+    "edit": {
+      "label": "Edit",
+      "undo": "Undo",
+      "redo": "Redo",
+      "cut": "Cut",
+      "copy": "Copy",
+      "paste": "Paste",
+      "shortcut": {
+        "undo": "Ctrl+Z",
+        "redo": "Ctrl+Y",
+        "cut": "Ctrl+X",
+        "copy": "Ctrl+C",
+        "paste": "Ctrl+V"
+      }
+    },
+    "view": {
+      "label": "View",
+      "fit": "Fit to window",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "thumbs": "Slide panel",
+      "notes": "Speaker notes",
+      "shortcut": {
+        "zoomIn": "Ctrl++",
+        "zoomOut": "Ctrl+-"
+      }
+    },
+    "insert": {
+      "label": "Insert",
+      "text": "Text box",
+      "shape": "Shape",
+      "image": "Image",
+      "slide": "New slide",
+      "shortcut": {
+        "slide": "Ctrl+M"
+      }
+    },
+    "help": {
+      "label": "Help",
+      "about": "About Casual Slides",
+      "repo": "GitHub repo"
+    }
+  },
+  "toolbar": {
+    "tools": {
+      "undo": "Undo",
+      "undoTooltip": "Undo (Ctrl+Z)",
+      "redo": "Redo",
+      "redoTooltip": "Redo (Ctrl+Y)",
+      "print": "Print",
+      "select": "Select",
+      "textbox": "Text box",
+      "image": "Image",
+      "shape": "Shape",
+      "line": "Line",
+      "addComment": "Add comment",
+      "newSlide": "New slide",
+      "newSlideTooltip": "New slide (Ctrl+M)",
+      "layout": "Layout",
+      "theme": "Theme",
+      "background": "Background",
+      "transition": "Transition",
+      "slideshow": "Slideshow",
+      "slideshowTooltip": "Start slideshow (F5)"
+    },
+    "shapes": {
+      "rectangle": "Rectangle",
+      "ellipse": "Ellipse",
+      "line": "Line",
+      "arrowRight": "Arrow right",
+      "arrowLeft": "Arrow left",
+      "arrowUp": "Arrow up",
+      "arrowDown": "Arrow down",
+      "triangle": "Triangle",
+      "diamond": "Diamond",
+      "pentagon": "Pentagon",
+      "hexagon": "Hexagon",
+      "octagon": "Octagon",
+      "chevron": "Chevron",
+      "plus": "Plus / Cross",
+      "star": "Star"
+    }
+  },
+  "statusbar": {
+    "slideCount_one": "Slide {{current}} of {{total}}",
+    "slideCount_other": "Slide {{current}} of {{total}}",
+    "language": "English (US)",
+    "viewNormal": "Normal view",
+    "viewSorter": "Slide sorter — coming soon",
+    "notesShow": "Show speaker notes",
+    "notesHide": "Hide speaker notes",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "zoomLabel": "Zoom",
+    "zoomValue": "{{percent}}%",
+    "zoomReset": "Reset zoom to 100%"
+  },
+  "notes": {
+    "title": "Speaker notes",
+    "hint": "Private — your own reference, not exported",
+    "closeTooltip": "Hide notes (View → Speaker notes)",
+    "regionLabel": "Speaker notes",
+    "placeholderActive": "Add speaker notes for this slide…",
+    "placeholderEmpty": "Select a slide to add notes"
+  },
+  "dialogs": {
+    "theme": {
+      "title": "Themes",
+      "hint": "Applies to every slide",
+      "ariaLabel": "Choose a theme",
+      "closeTooltip": "Close (Esc)",
+      "names": {
+        "classic": "Classic",
+        "paper": "Paper",
+        "sky": "Sky",
+        "mint": "Mint",
+        "sunset": "Sunset",
+        "lavender": "Lavender",
+        "graphite": "Graphite",
+        "ocean": "Ocean"
+      }
+    },
+    "background": {
+      "title": "Background",
+      "ariaLabel": "Background color",
+      "presetsLabel": "Color presets",
+      "custom": "Custom",
+      "apply": "Apply",
+      "applyToAll": "Apply to all slides",
+      "close": "Close",
+      "colors": {
+        "white": "White",
+        "lightGray": "Light gray",
+        "gray": "Gray",
+        "darkGray": "Dark gray",
+        "nearBlack": "Near black",
+        "cream": "Cream",
+        "sky": "Sky",
+        "mint": "Mint",
+        "red": "Red",
+        "orange": "Orange",
+        "yellow": "Yellow",
+        "green": "Green",
+        "blue": "Blue",
+        "indigo": "Indigo",
+        "purple": "Purple",
+        "pink": "Pink"
+      }
+    },
+    "layout": {
+      "header": "Insert slide with layout",
+      "names": {
+        "blank": "Blank",
+        "titleSlide": "Title slide",
+        "titleContent": "Title + content",
+        "twoContent": "Two content",
+        "comparison": "Comparison",
+        "sectionHeader": "Section header"
+      },
+      "placeholders": {
+        "clickToAddTitle": "Click to add title",
+        "clickToAddSubtitle": "Click to add subtitle",
+        "clickToAddContent": "Click to add content",
+        "heading": "Heading",
+        "sectionTitle": "Section title"
+      }
+    },
+    "properties": {
+      "title": "Properties",
+      "ariaLabel": "Deck properties",
+      "closeTooltip": "Close (Esc)",
+      "close": "Close",
+      "untitled": "Untitled deck",
+      "keys": {
+        "title": "Title",
+        "slides": "Slides",
+        "pageSize": "Page size",
+        "elements": "Elements",
+        "textLength": "Text length",
+        "format": "Format"
+      },
+      "values": {
+        "pageSize": "{{width}} × {{height}} px  ·  {{widthIn}} × {{heightIn}} in",
+        "textCharacters_one": "{{count}} character",
+        "textCharacters_other": "{{count}} characters",
+        "format": "PowerPoint (.pptx)"
+      }
+    },
+    "recent": {
+      "title": "Recent files",
+      "ariaLabel": "Recent files",
+      "closeTooltip": "Close (Esc)",
+      "loading": "Loading…",
+      "empty": "No recent decks yet. Open a .pptx and it'll appear here.",
+      "clearAll": "Clear all",
+      "close": "Close",
+      "openTooltip": "Open {{name}}",
+      "removeTooltip": "Remove from list",
+      "removeAriaLabel": "Remove {{name}}",
+      "entryUnavailable": "Entry no longer available.",
+      "meta": "{{size}} · {{relative}}",
+      "size": {
+        "bytes": "{{value}} B",
+        "kilobytes": "{{value}} KB",
+        "megabytes": "{{value}} MB"
+      },
+      "relative": {
+        "justNow": "just now",
+        "minutes_one": "{{count}} min ago",
+        "minutes_other": "{{count}} mins ago",
+        "hours_one": "{{count}} hr ago",
+        "hours_other": "{{count}} hrs ago",
+        "days_one": "{{count}} day ago",
+        "days_other": "{{count}} days ago"
+      }
+    },
+    "about": {
+      "title": "About Casual Slides",
+      "ariaLabel": "About Casual Slides",
+      "closeTooltip": "Close (Esc)",
+      "close": "Close",
+      "product": "Casual Slides",
+      "tagline": "Web-based PowerPoint-equivalent — built on Univer OSS, licensed Apache-2.0.",
+      "license": "License",
+      "licenseValue": "Apache-2.0",
+      "source": "Source",
+      "sourceLink": "github.com/schnsrw/slides",
+      "live": "Live",
+      "liveLink": "slide.schnsrw.live",
+      "attribTitle": "Open-source dependencies",
+      "deps": {
+        "univer": {
+          "name": "Univer OSS",
+          "license": "Apache-2.0",
+          "note": "Slides canvas + data model (v0.24.0)."
+        },
+        "pptxgenjs": {
+          "name": "PptxGenJS",
+          "license": "MIT",
+          "note": ".pptx export pipeline."
+        },
+        "jszip": {
+          "name": "JSZip",
+          "license": "MIT or GPL-3.0 (we use MIT)",
+          "note": ".pptx zip read/write."
+        },
+        "fastXmlParser": {
+          "name": "fast-xml-parser",
+          "license": "MIT",
+          "note": "OOXML parsing."
+        },
+        "react": {
+          "name": "React",
+          "license": "MIT",
+          "note": "UI shell."
+        },
+        "materialSymbols": {
+          "name": "Material Symbols",
+          "license": "Apache-2.0",
+          "note": "Toolbar + menu icons."
+        }
+      }
+    },
+    "slideContext": {
+      "newSlide": "New slide",
+      "duplicate": "Duplicate slide",
+      "delete": "Delete slide",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "hide": "Hide slide",
+      "unhide": "Unhide slide",
+      "shortcut": {
+        "duplicate": "Ctrl+D",
+        "delete": "Shift+Del"
+      }
+    }
+  },
+  "slideshow": {
+    "ariaLabel": "Slideshow",
+    "empty": "No slides to present.",
+    "notFound": "Slide not found.",
+    "exit": "Exit",
+    "counter": "{{current}} / {{total}}",
+    "tooltips": {
+      "previous": "Previous ({{key}})",
+      "previousKey": "Left arrow",
+      "next": "Next ({{key}})",
+      "nextKey": "Right arrow or Space",
+      "fullscreen": "Toggle fullscreen (F)",
+      "exit": "Exit (Escape)"
+    }
+  },
+  "errors": {
+    "generic": "Something went wrong.",
+    "unknown": "Unknown error",
+    "notPptx": "Only .pptx files are supported"
+  }
+}

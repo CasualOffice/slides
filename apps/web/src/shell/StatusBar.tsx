@@ -1,40 +1,52 @@
-import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Icon } from './icons';
 
-// Bottom status bar. Slide count + locale on the left, view-mode toggles
-// + zoom slider on the right. Zoom is visual-only in v0.0.x; wiring to
-// Univer's scale API follows in P1.
+// Bottom status bar. Slide count on the left, view-mode toggles + zoom
+// slider on the right.
+//
+// Zoom semantics — `zoom` is the integer percent (100 == 1.0). Owned by
+// App.tsx so the View → Zoom menu can drive it from the title bar.
+// onZoomChange clamps to 25..400 to match Google Slides' rail.
 
 export interface StatusBarProps {
   slideCount: number;
   activeSlideIndex?: number;
+  zoom: number;
+  onZoomChange: (next: number) => void;
   notesVisible?: boolean;
   onToggleNotes?: () => void;
 }
 
-export function StatusBar({ slideCount, activeSlideIndex = 0, notesVisible, onToggleNotes }: StatusBarProps) {
-  const [zoom, setZoom] = useState(100);
+const ZOOM_MIN = 25;
+const ZOOM_MAX = 400;
+
+export function StatusBar({
+  slideCount,
+  activeSlideIndex = 0,
+  zoom,
+  onZoomChange,
+  notesVisible,
+  onToggleNotes,
+}: StatusBarProps) {
+  const { t } = useTranslation('statusbar');
+  const clamp = (n: number) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(n)));
+  const safeSlideIndex = slideCount === 0 ? 0 : Math.min(activeSlideIndex + 1, slideCount);
 
   return (
     <footer className="cs-statusbar">
       <div className="cs-statusbar__left">
         <span className="cs-statusbar__slide-count">
-          Slide {Math.min(activeSlideIndex + 1, slideCount)} of {slideCount}
+          {t('slideCount', { count: slideCount, current: safeSlideIndex, total: slideCount })}
         </span>
-        <span className="cs-statusbar__sep" aria-hidden="true" />
-        <span className="cs-statusbar__lang">English (US)</span>
       </div>
       <div className="cs-statusbar__right">
-        <button type="button" className="cs-statusbar__view-btn is-active" title="Normal view">
+        <button type="button" className="cs-statusbar__view-btn is-active" title={t('viewNormal')}>
           <Icon name="view_agenda" size={14} />
-        </button>
-        <button type="button" className="cs-statusbar__view-btn" disabled title="Slide sorter — coming soon">
-          <Icon name="view_module" size={14} />
         </button>
         <button
           type="button"
           className={`cs-statusbar__view-btn ${notesVisible ? 'is-active' : ''}`}
-          title={notesVisible ? 'Hide speaker notes' : 'Show speaker notes'}
+          title={notesVisible ? t('notesHide') : t('notesShow')}
           onClick={onToggleNotes}
         >
           <Icon name="sticky_note_2" size={14} />
@@ -43,30 +55,39 @@ export function StatusBar({ slideCount, activeSlideIndex = 0, notesVisible, onTo
         <button
           type="button"
           className="cs-statusbar__zoom-btn"
-          title="Zoom out"
-          onClick={() => setZoom(Math.max(25, zoom - 10))}
+          title={t('zoomOut')}
+          onClick={() => onZoomChange(clamp(zoom - 10))}
+          disabled={zoom <= ZOOM_MIN}
         >
           <Icon name="remove" size={14} />
         </button>
         <input
           type="range"
-          min={25}
-          max={400}
+          min={ZOOM_MIN}
+          max={ZOOM_MAX}
           step={5}
           value={zoom}
-          onChange={(e) => setZoom(Number(e.target.value))}
+          onChange={(e) => onZoomChange(clamp(Number(e.target.value)))}
           className="cs-statusbar__zoom-slider"
-          aria-label="Zoom"
+          aria-label={t('zoomLabel')}
         />
         <button
           type="button"
           className="cs-statusbar__zoom-btn"
-          title="Zoom in"
-          onClick={() => setZoom(Math.min(400, zoom + 10))}
+          title={t('zoomIn')}
+          onClick={() => onZoomChange(clamp(zoom + 10))}
+          disabled={zoom >= ZOOM_MAX}
         >
           <Icon name="add" size={14} />
         </button>
-        <span className="cs-statusbar__zoom-value">{zoom}%</span>
+        <button
+          type="button"
+          className="cs-statusbar__zoom-value"
+          title={t('zoomReset')}
+          onClick={() => onZoomChange(100)}
+        >
+          {t('zoomValue', { percent: zoom })}
+        </button>
       </div>
     </footer>
   );

@@ -119,17 +119,15 @@
       }
     </script>
 
-    <!-- Inter for UI + Material Symbols Outlined for icons. preconnect
-         cuts ~100 ms off the first font request. -->
+    <!-- Inter for UI. Icons are inline SVGs (see src/shell/icons.tsx),
+         not a webfont — avoids the "folder_open" literal flash if the
+         icon font is slow/blocked. preconnect still helps Inter +
+         deck-fonts below. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-    />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300..700,0..1,-50..200&display=block"
     />
 
     <!--

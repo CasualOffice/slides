@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ISlideData, SlideDataModel } from '@univerjs/slides';
-import { IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
+import { ICommandService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { Univer } from '@univerjs/core';
+import { IRenderManagerService } from '@univerjs/engine-render';
 
 import { UniverSlide } from './UniverSlide';
 import { getPptxClient } from './pptx/client';
@@ -45,6 +46,39 @@ function deckTitle(snapshot: ISlideData): string {
   return t || 'Untitled deck';
 }
 
+// Resolve the main render scene for the focused slide unit. Returns
+// `null` if Univer is not ready — every caller no-ops in that case so
+// zoom changes happen lazily once the unit is wired.
+function getMainScene() {
+  const w = window as unknown as { univer?: Univer };
+  const univer = w.univer;
+  if (!univer) return null;
+  try {
+    const instances = univer.__getInjector().get(IUniverInstanceService);
+    const unitId = instances.getCurrentUnitOfType(UniverInstanceType.UNIVER_SLIDE)?.getUnitId();
+    if (!unitId) return null;
+    const renderManager = univer.__getInjector().get(IRenderManagerService);
+    return renderManager.getRenderById(unitId)?.scene ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Apply a percentage zoom (100 == 1.0) to the main slide scene. Done
+// outside React because the scene is owned by Univer's render manager,
+// not a React tree — same pattern Univer's own wheel-zoom uses
+// internally (slides-ui scene.scale call).
+function applyZoom(percent: number) {
+  const scene = getMainScene();
+  if (!scene) return;
+  const factor = percent / 100;
+  try {
+    scene.scale(factor, factor);
+  } catch {
+    /* scene disposed mid-frame — ignore, next call will retry */
+  }
+}
+
 export function App() {
   // Active deck. UniverSlide is keyed on snapshot.id — when Open .pptx
   // imports a new deck, the state update + key change forces React to
@@ -83,6 +117,29 @@ export function App() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Active slide index — driven by Univer's `SlideDataModel.activePage$`.
+  // Falls back to 0 until the model is wired (first paint).
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  // Zoom percent (100 == 1.0). Owned here so the View menu, status bar
+  // slider, and keyboard shortcuts all read/write the same source of
+  // truth. Persisted within the session only.
+  const [zoom, setZoom] = useState(100);
+  // Slide panel toggle. Default visible because the Univer SlideBar
+  // renders by default. Stored locally — DOM toggle is a stopgap until
+  // we wire ILeftSidebarService (TODO).
+  const [slidePanelVisible, setSlidePanelVisible] = useState(true);
+  // Saved-state indicator. Set to true when any slide mutation runs;
+  // cleared on a successful Save. Listens to `onMutationExecutedForCollab`
+  // — same hook the collab bridge uses, so it fires for every dirty op.
+  const [dirty, setDirty] = useState(false);
+
+  // === DRAG-AND-DROP IMPORT ===
+  // Tracks whether a file is currently hovered over the workspace so we
+  // can paint the drop overlay. Multi-file drop is not supported — we
+  // take the first .pptx and ignore the rest (PowerPoint behaviour;
+  // matches the file-input flow that already only reads files[0]).
+  const [dragActive, setDragActive] = useState(false);
+
   // Expose to the Toolbar (which lives outside App's prop tree).
   useEffect(() => {
     window.__casualSlides_openSlideshow = () => setSlideshowOpen(true);
@@ -98,6 +155,107 @@ export function App() {
   const fileName = useMemo(() => deckTitle(snapshot), [snapshot]);
   const slideCount = snapshot.body?.pageOrder?.length ?? 0;
   const collab = useCollabBridge();
+
+  // Subscribe to Univer's SlideDataModel.activePage$ once the editor has
+  // mounted. Univer wires the unit asynchronously after UniverSlide's
+  // useEffect, so we poll for the model on a short interval until we get
+  // it, then attach an rxjs subscription. Re-runs on snapshot.id change
+  // because the UniverSlide is keyed on that — a new instance means a
+  // new model and a new subscription.
+  useEffect(() => {
+    let disposed = false;
+    let unsub: (() => void) | null = null;
+    let retryHandle: number | null = null;
+    let mutationDisposer: { dispose?: () => void } | null = null;
+
+    const wire = () => {
+      if (disposed) return;
+      const w = window as unknown as { univer?: Univer };
+      const univer = w.univer;
+      if (!univer) {
+        retryHandle = window.setTimeout(wire, 200);
+        return;
+      }
+      try {
+        const instances = univer.__getInjector().get(IUniverInstanceService);
+        const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+        if (!model) {
+          retryHandle = window.setTimeout(wire, 200);
+          return;
+        }
+        // activePage$ emits the full ISlidePage (or null) on every
+        // activation. We translate to an index against the live page
+        // order so the StatusBar reads "Slide N of M" correctly.
+        const seedActive = model.getActivePage();
+        if (seedActive) {
+          const order = model.getPageOrder() ?? [];
+          const idx = order.indexOf(seedActive.id);
+          if (idx >= 0) setActiveSlideIndex(idx);
+        }
+        const sub = model.activePage$.subscribe((page) => {
+          if (disposed || !page) return;
+          const order = model.getPageOrder() ?? [];
+          const idx = order.indexOf(page.id);
+          if (idx >= 0) setActiveSlideIndex(idx);
+        });
+        unsub = () => sub.unsubscribe();
+
+        // Mutation watcher — flips the dirty bit on any mutation. Same
+        // hook as the collab bridge. Univer Slides currently routes
+        // element ops through CommandType.OPERATION (Gap 1.4), so they
+        // don't fire `onMutationExecutedForCollab`; we layer a
+        // commandExecuted listener with an OPERATION filter for slide.*
+        // until the upstream fork-patch lands.
+        const cs = univer.__getInjector().get(ICommandService);
+        const m1 = cs.onMutationExecutedForCollab(() => {
+          if (!disposed) setDirty(true);
+        });
+        const m2 = cs.onCommandExecuted((info) => {
+          if (disposed) return;
+          // Filter to slide.* mutations and operations that change
+          // doc state. Skip purely UI ops like activate-slide / set-thumb
+          // / text-edit-cursor.
+          const id = info.id;
+          if (!id.startsWith('slide.')) return;
+          if (
+            id === 'slide.operation.activate-slide' ||
+            id === 'slide.operation.set-slide-page-thumb' ||
+            id.includes('text-edit')
+          ) {
+            return;
+          }
+          setDirty(true);
+        });
+        mutationDisposer = {
+          dispose: () => {
+            m1?.dispose?.();
+            m2?.dispose?.();
+          },
+        };
+      } catch {
+        // Service not ready — retry. Cheap enough that a 200 ms poll
+        // never blocks first paint.
+        retryHandle = window.setTimeout(wire, 200);
+      }
+    };
+    wire();
+    return () => {
+      disposed = true;
+      if (retryHandle != null) window.clearTimeout(retryHandle);
+      unsub?.();
+      mutationDisposer?.dispose?.();
+    };
+  }, [snapshot.id]);
+
+  // Re-apply the zoom whenever it changes OR the deck remounts. The
+  // SlideRenderController centers + sets scale=1 on each mount, so we
+  // must reassert our percent after the canvas is alive.
+  useEffect(() => {
+    // Wait a couple of frames so the scene exists. ResizeObserver in
+    // UniverSlide.tsx fires centering after ~80ms.
+    const t = window.setTimeout(() => applyZoom(zoom), 120);
+    return () => window.clearTimeout(t);
+  }, [zoom, snapshot.id]);
 
   // Global keyboard shortcuts. Each guards on the active element NOT being
   // an editable input (text-frame editor inside Univer manages its own
@@ -138,6 +296,15 @@ export function App() {
         // (Google Slides does the same).
         e.preventDefault();
         void dispatchSlideCommand('slide.command.duplicate-slide');
+      } else if (k === '=' || k === '+') {
+        e.preventDefault();
+        setZoom((z) => Math.min(400, z + 10));
+      } else if (k === '-') {
+        e.preventDefault();
+        setZoom((z) => Math.max(25, z - 10));
+      } else if (k === '0') {
+        e.preventDefault();
+        setZoom(100);
       }
     };
     const deleteSlideHandler = (e: KeyboardEvent) => {
@@ -185,6 +352,8 @@ export function App() {
       const { blob, fileName: producedName } = await getPptxClient().export(out);
       downloadBlob(blob, producedName);
       setStatus(`Saved · ${(blob.size / 1024).toFixed(1)} KB`);
+      // Successful export → clean. Subsequent mutations re-dirty.
+      setDirty(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -213,6 +382,8 @@ export function App() {
       const imported = await getPptxClient().import(buffer, name);
       const pageCount = imported.body?.pageOrder.length ?? 0;
       setSnapshot(imported);
+      // Newly-imported deck is clean by definition.
+      setDirty(false);
       const w = window as unknown as { __pptxImportedSnapshot?: unknown };
       w.__pptxImportedSnapshot = imported;
       if (persistCopy) {
@@ -251,6 +422,96 @@ export function App() {
 
   function handleFileNameChange(next: string) {
     setSnapshot({ ...snapshot, title: next });
+    // Filename edits are saved with the next export — mark dirty so the
+    // indicator reflects the pending change.
+    setDirty(true);
+  }
+
+  // View → Fit to window. Re-invokes SlideRenderController.scrollToCenter
+  // (same engine as UniverSlide.tsx mount-centering), then resets zoom to
+  // 100% — the centering math assumes scale=1. Google Slides' Fit behaves
+  // identically: it always normalises zoom.
+  function handleFitToWindow() {
+    setZoom(100);
+    const w = window as unknown as { univer?: Univer };
+    const univer = w.univer;
+    if (!univer) return;
+    try {
+      const instances = univer.__getInjector().get(IUniverInstanceService);
+      const unitId = instances.getCurrentUnitOfType(UniverInstanceType.UNIVER_SLIDE)?.getUnitId();
+      if (!unitId) return;
+      const renderManager = univer.__getInjector().get(IRenderManagerService);
+      const renderUnit = renderManager.getRenderById(unitId);
+      renderUnit?.engine?.resize();
+      // Dynamic import keeps the SlideRenderController out of the main
+      // bundle path — we already pull it for UniverSlide.tsx, so the
+      // chunk is warm.
+      void import('@univerjs/slides-ui').then(({ SlideRenderController }) => {
+        try {
+          renderUnit?.with(SlideRenderController)?.scrollToCenter();
+        } catch {
+          /* controller not ready — silent no-op */
+        }
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Slide-panel toggle is a DOM-level display flip on Univer's left
+  // sidebar wrapper. Stopgap until we wire ILeftSidebarService —
+  // see Gap UX-1.x. Re-evaluates on remount because the sidebar div
+  // is recreated when UniverSlide remounts.
+  function handleToggleSlidePanel() {
+    const next = !slidePanelVisible;
+    setSlidePanelVisible(next);
+    const node = document.querySelector('[data-u-comp="left-sidebar"]') as HTMLElement | null;
+    if (node) node.style.display = next ? '' : 'none';
+  }
+
+  // Insert → Shape. Toolbar.tsx owns the shapes popover (we're not
+  // allowed to refactor it in this pass). Until the popover exposes a
+  // window-hook, the safest behavior is to dispatch the rectangle
+  // command directly — that's the same default the slides-ui shape
+  // menu picks first. TODO: when Toolbar.tsx adds
+  // `__casualSlides_openShapes`, call it here instead so the user gets
+  // the picker, not an immediate rectangle insert.
+  function handleInsertShape() {
+    void dispatchSlideCommand('slide.command.insert-float-shape.rectangle');
+  }
+
+  // === DRAG-AND-DROP IMPORT ===
+  // Drop a .pptx onto the workspace to open it — same import path as the
+  // file picker. We only accept the first file; extension check first,
+  // fallback to MIME type. dragLeave fires for child element transitions
+  // too, so we anchor on `e.currentTarget` to suppress the false negatives.
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!dragActive) setDragActive(true);
+  }
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    // Only flip off when leaving the workspace boundary, not when moving
+    // between inner children (relatedTarget is null only on real exit).
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setDragActive(false);
+  }
+  async function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    const isPptx =
+      file.name.toLowerCase().endsWith('.pptx') ||
+      file.type ===
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    if (!isPptx) {
+      setError('Only .pptx files are supported');
+      return;
+    }
+    const buffer = await file.arrayBuffer();
+    await importBuffer(buffer, file.name, /* persist */ true);
   }
 
   return (
@@ -263,8 +524,17 @@ export function App() {
         onOpenProperties={() => setPropertiesOpen(true)}
         onOpenRecent={() => setRecentOpen(true)}
         onOpenAbout={() => setAboutOpen(true)}
+        onToggleNotes={() => setNotesVisible((v) => !v)}
+        onFitToWindow={handleFitToWindow}
+        onZoomIn={() => setZoom((z) => Math.min(400, z + 10))}
+        onZoomOut={() => setZoom((z) => Math.max(25, z - 10))}
+        onToggleSlidePanel={handleToggleSlidePanel}
+        onInsertShape={handleInsertShape}
+        onDismissStatus={() => setStatus(null)}
+        onDismissError={() => setError(null)}
         saving={saving}
         opening={opening}
+        dirty={dirty}
         status={status}
         error={error}
         collabStatus={collab.status}
@@ -279,12 +549,27 @@ export function App() {
         style={{ display: 'none' }}
         onChange={handleOpenPptx}
       />
-      <div className="cs-workspace">
+      <div
+        className="cs-workspace"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => void handleDrop(e)}
+      >
         <UniverSlide key={snapshot.id} snapshot={snapshot} />
+        {/* === DRAG-AND-DROP IMPORT === */}
+        {dragActive && (
+          <div className="cs-workspace__drop-overlay" data-testid="drop-overlay" role="status">
+            {/* TODO(i18n): swap to t('workspace.dropPptx') once strings migrate. */}
+            <span className="cs-workspace__drop-overlay-text">Drop .pptx to open</span>
+          </div>
+        )}
       </div>
       <NotesPanel visible={notesVisible} onToggle={() => setNotesVisible((v) => !v)} />
       <StatusBar
         slideCount={slideCount}
+        activeSlideIndex={activeSlideIndex}
+        zoom={zoom}
+        onZoomChange={setZoom}
         notesVisible={notesVisible}
         onToggleNotes={() => setNotesVisible((v) => !v)}
       />

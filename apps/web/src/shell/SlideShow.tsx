@@ -250,7 +250,7 @@ export function SlideShow({ snapshot, startIndex = 0, onExit }: SlideShowProps) 
           className="cs-slideshow__btn"
           onClick={prev}
           disabled={idx === 0}
-          title="Previous (←)"
+          title="Previous (Left arrow)"
         >
           <Icon name="chevron_left" size={20} />
         </button>
@@ -264,7 +264,7 @@ export function SlideShow({ snapshot, startIndex = 0, onExit }: SlideShowProps) 
           className="cs-slideshow__btn"
           onClick={next}
           disabled={idx === visiblePageIds.length - 1}
-          title="Next (→ or Space)"
+          title="Next (Right arrow or Space)"
         >
           <Icon name="chevron_right" size={20} />
         </button>

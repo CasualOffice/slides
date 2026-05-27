@@ -1,8 +1,8 @@
 /* Casual Slides — chrome stylesheet.
    Aesthetic: Google Slides / Google Docs. Compact two-row title bar,
    single-row icon toolbar, gray canvas stage. PowerPoint orange-red
-   (#B7472A) as the brand accent. Inter for UI text. Material Symbols
-   Outlined (preloaded via index.html) for inline icons. */
+   (#B7472A) as the brand accent. Inter for UI text. Icons are inline
+   SVG (see src/shell/icons.tsx) — no webfont. */
 
 :root {
   --cs-bg:        #f8f9fa;
@@ -16,10 +16,12 @@
   --cs-border-2:  #e8eaed;
   --cs-hover:     #f1f3f4;
   --cs-active:    #e8eaed;
-  --cs-accent:    #b7472a;
-  --cs-accent-dk: #8b3520;
-  --cs-accent-bg: #fef3ef;
-  --cs-focus:     #1a73e8;
+  /* Brand: cyan-600 family. Deliberately distinct from PowerPoint
+     orange-red, Impress orange, Google Slides yellow. */
+  --cs-accent:    #0891b2;
+  --cs-accent-dk: #0e7490;
+  --cs-accent-bg: #ecfeff;
+  --cs-focus:     #0891b2;
   --cs-shadow-1:  0 1px 2px rgba(60, 64, 67, 0.1), 0 1px 3px rgba(60, 64, 67, 0.05);
   --cs-shadow-2:  0 2px 6px rgba(60, 64, 67, 0.12), 0 1px 2px rgba(60, 64, 67, 0.06);
   --cs-radius:    4px;
@@ -152,14 +154,13 @@ button:disabled { cursor: not-allowed; }
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  padding: 2px 8px;
+  /* Asymmetric padding leaves room for the dismiss × on the right. */
+  padding: 2px 4px 2px 8px;
   border-radius: 999px;
   border: 1px solid var(--cs-border-2);
   background: var(--cs-surface-2);
   color: var(--cs-text-mute);
-  max-width: 28ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 32ch;
   white-space: nowrap;
   margin-left: 8px;
 }
@@ -884,11 +885,11 @@ button:disabled { cursor: not-allowed; }
   text-align: left;
 }
 .cs-slide-context__item:hover { background: var(--cs-hover); }
-.cs-slide-context__item .material-symbols-outlined { color: var(--cs-text-mute); }
+.cs-slide-context__item .cs-icon { color: var(--cs-text-mute); }
 
 .cs-slide-context__item--danger { color: #b91c1c; }
 .cs-slide-context__item--danger:hover { background: #fee2e2; }
-.cs-slide-context__item--danger .material-symbols-outlined { color: #b91c1c; }
+.cs-slide-context__item--danger .cs-icon { color: #b91c1c; }
 
 .cs-slide-context__shortcut {
   margin-left: auto;
@@ -1403,3 +1404,125 @@ button:disabled { cursor: not-allowed; }
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--cs-text-dim); }
 ::-webkit-scrollbar-corner { background: transparent; }
+
+/* ============================================================= Drop overlay */
+/* Painted on top of the workspace while a file is dragged over the
+   editor. Anchored to .cs-workspace (already position: relative above),
+   guards against the overlay swallowing pointer events on quick drag-
+   leave by setting pointer-events: none — the dragLeave event still
+   reaches the workspace div underneath because the overlay does not
+   participate in hit testing. */
+
+.cs-workspace__drop-overlay {
+  position: absolute;
+  inset: 12px;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(2px);
+  border: 2px dashed var(--cs-accent);
+  border-radius: var(--cs-radius-lg);
+  /* MD3 elevation level 3 — matches dialogs / popovers */
+  box-shadow:
+    0 1px 3px rgba(60, 64, 67, 0.12),
+    0 4px 12px rgba(60, 64, 67, 0.16);
+  animation: cs-drop-overlay-in 80ms ease-out;
+}
+
+.cs-workspace__drop-overlay-text {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cs-accent-dk);
+  padding: 14px 22px;
+  background: var(--cs-surface);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-2);
+  letter-spacing: 0.01em;
+}
+
+@keyframes cs-drop-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* =============================================================
+ * NEW (dead-UI fix pass) — saved indicator, dismissible pills,
+ * status-bar zoom-reset button. Keep grouped here so a future
+ * refactor can pull this block into the per-component sections.
+ * ============================================================= */
+
+.cs-titlebar__saved {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--cs-text-mute);
+  margin-left: 10px;
+  font-variant-numeric: tabular-nums;
+  transition: opacity 160ms ease, color 160ms ease;
+}
+
+.cs-titlebar__saved--saving {
+  color: var(--cs-text-mute);
+  font-style: italic;
+}
+
+.cs-titlebar__saved--dirty {
+  color: var(--cs-text-dim);
+}
+
+.cs-titlebar__saved--clean {
+  color: #6b7280;
+}
+
+.cs-titlebar__pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 24ch;
+}
+
+.cs-titlebar__pill-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  margin-left: 2px;
+  margin-right: -4px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+  padding: 0;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+.cs-titlebar__pill-dismiss:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.08);
+}
+.cs-titlebar__pill-dismiss:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: 1px;
+  opacity: 1;
+}
+
+/* The zoom-value cell is now a click target (reset to 100%). Keep its
+ * footprint identical to the old <span> so layout doesn't shift. */
+button.cs-statusbar__zoom-value {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: var(--cs-radius);
+  transition: background-color 120ms ease;
+}
+button.cs-statusbar__zoom-value:hover { background: var(--cs-hover); }
+button.cs-statusbar__zoom-value:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: 1px;
+}

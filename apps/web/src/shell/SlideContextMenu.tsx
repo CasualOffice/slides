@@ -19,6 +19,8 @@ interface MenuState {
   y: number;
   pageId: string;
   pageIndex: number;
+  total: number;
+  isHidden: boolean;
 }
 
 function getModel(): SlideDataModel | null {
@@ -68,6 +70,45 @@ function clampToViewport(x: number, y: number, w: number, h: number) {
   return { x: Math.max(pad, Math.min(x, maxX)), y: Math.max(pad, Math.min(y, maxY)) };
 }
 
+// Reorder pageOrder by swapping the entry at `idx` with `idx + delta`.
+// Univer Slides v0.24.0 ships no built-in move-page mutation, so this
+// hits the snapshot directly. Bumps the rev + re-pings setActivePage so
+// the SlideSideBar React subscriber re-reads pageOrder.
+//
+// TODO(collab): not collab-safe — bypasses the command bus, so peers
+// won't see the reorder. Replace with a `slide.mutation.move-page`
+// command once we land it in the fork (tracked in UNIVER_SLIDES_GAPS.md).
+function reorderPage(pageId: string, delta: -1 | 1): void {
+  const model = getModel();
+  if (!model) return;
+  const snapshot = model.getSnapshot();
+  const order = snapshot.body?.pageOrder;
+  if (!order) return;
+  const idx = order.indexOf(pageId);
+  if (idx < 0) return;
+  const target = idx + delta;
+  if (target < 0 || target >= order.length) return;
+  // In-place swap — keeps the array reference stable for any consumers
+  // that captured it.
+  [order[idx], order[target]] = [order[target], order[idx]];
+  model.incrementRev();
+  // Re-emit on activePage$ so the SlideSideBar subscriber re-renders
+  // and reads the new pageOrder. Without this the rail keeps painting
+  // the old sequence until the next active-page change.
+  const active = model.getActivePage();
+  if (active) model.setActivePage(active);
+}
+
+// Toggle isSkipped on the page via the existing `slide.mutation.update-page`.
+// PowerPoint persists "Hide slide" as `<p:sld show="0">`; PptxGenJS export
+// will need to honour `slideProperties.isSkipped` (follow-up).
+async function toggleHidden(pageId: string, current: boolean): Promise<void> {
+  await dispatchSlideCommand('slide.mutation.update-page', {
+    pageId,
+    patch: { slideProperties: { isSkipped: !current } },
+  });
+}
+
 export function SlideContextMenu() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuRef = useRef<HTMLUListElement>(null);
@@ -86,9 +127,18 @@ export function SlideContextMenu() {
       if (!order) return;
       const pageId = order[idx - 1];
       if (!pageId) return;
+      const page = model.getPage(pageId);
+      const isHidden = !!page?.slideProperties?.isSkipped;
       e.preventDefault();
       // Position will be clamped after the menu mounts (we know its size).
-      setMenu({ x: e.clientX, y: e.clientY, pageId, pageIndex: idx });
+      setMenu({
+        x: e.clientX,
+        y: e.clientY,
+        pageId,
+        pageIndex: idx,
+        total: order.length,
+        isHidden,
+      });
     };
     document.addEventListener('contextmenu', handler);
     return () => document.removeEventListener('contextmenu', handler);
@@ -130,7 +180,22 @@ export function SlideContextMenu() {
     await dispatchSlideCommand(cmd, params);
   }, []);
 
+  const runReorder = useCallback((delta: -1 | 1) => {
+    if (!menu) return;
+    setMenu(null);
+    reorderPage(menu.pageId, delta);
+  }, [menu]);
+
+  const runToggleHidden = useCallback(() => {
+    if (!menu) return;
+    setMenu(null);
+    void toggleHidden(menu.pageId, menu.isHidden);
+  }, [menu]);
+
   if (!menu) return null;
+
+  const isFirst = menu.pageIndex <= 1;
+  const isLast = menu.pageIndex >= menu.total;
 
   return (
     <ul
@@ -165,12 +230,57 @@ export function SlideContextMenu() {
       <li>
         <button
           type="button"
+          className="cs-slide-context__item"
+          disabled={isFirst}
+          onClick={() => runReorder(-1)}
+          data-testid="slide-context-move-up"
+        >
+          <Icon name="arrow_upward" size={14} />
+          <span>Move up</span>
+        </button>
+      </li>
+      <li>
+        <button
+          type="button"
+          className="cs-slide-context__item"
+          disabled={isLast}
+          onClick={() => runReorder(1)}
+          data-testid="slide-context-move-down"
+        >
+          <Icon name="arrow_downward" size={14} />
+          <span>Move down</span>
+        </button>
+      </li>
+      <li className="cs-slide-context__sep" role="separator" />
+      {/* TODO(layout/background): "Change layout" + "Change background"
+       *  are deferred. Both pickers (LayoutPicker, BackgroundPicker) are
+       *  mounted inside Toolbar.tsx and anchored to a DOMRect held in
+       *  Toolbar local state. To open them from this context menu we
+       *  need Toolbar to expose `window.__casualSlides_openLayout(rect)`
+       *  + `__casualSlides_openBackground(rect)` (mirroring the existing
+       *  `__casualSlides_openThemes` pattern). That wiring lives in
+       *  Toolbar and is outside this agent's scope. */}
+      <li>
+        <button
+          type="button"
+          className="cs-slide-context__item"
+          onClick={runToggleHidden}
+          data-testid="slide-context-hide"
+        >
+          <Icon name={menu.isHidden ? 'visibility' : 'visibility_off'} size={14} />
+          <span>{menu.isHidden ? 'Unhide slide' : 'Hide slide'}</span>
+        </button>
+      </li>
+      <li className="cs-slide-context__sep" role="separator" />
+      <li>
+        <button
+          type="button"
           className="cs-slide-context__item cs-slide-context__item--danger"
           onClick={() => void fire('slide.command.delete-slide', { pageId: menu.pageId })}
         >
           <Icon name="delete" size={14} />
           <span>Delete slide</span>
-          <span className="cs-slide-context__shortcut">⇧ Del</span>
+          <span className="cs-slide-context__shortcut">Shift+Del</span>
         </button>
       </li>
     </ul>

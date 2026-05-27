@@ -34,10 +34,10 @@ const SHAPES_MENU: NonNullable<ToolButton['menu']> = [
   { id: 'rect', label: 'Rectangle', icon: 'rectangle', cmd: 'slide.command.insert-float-shape.rectangle' },
   { id: 'ellipse', label: 'Ellipse', icon: 'circle', cmd: 'slide.command.insert-float-shape.ellipse' },
   { id: 'line', label: 'Line', icon: 'horizontal_rule', shapeType: 'line' },
-  { id: 'rightArrow', label: 'Arrow →', icon: 'arrow_right_alt', shapeType: 'rightArrow' },
-  { id: 'leftArrow', label: 'Arrow ←', icon: 'arrow_back', shapeType: 'leftArrow' },
-  { id: 'upArrow', label: 'Arrow ↑', icon: 'arrow_upward', shapeType: 'upArrow' },
-  { id: 'downArrow', label: 'Arrow ↓', icon: 'arrow_downward', shapeType: 'downArrow' },
+  { id: 'rightArrow', label: 'Arrow right', icon: 'arrow_right_alt', shapeType: 'rightArrow' },
+  { id: 'leftArrow', label: 'Arrow left', icon: 'arrow_back', shapeType: 'leftArrow' },
+  { id: 'upArrow', label: 'Arrow up', icon: 'arrow_upward', shapeType: 'upArrow' },
+  { id: 'downArrow', label: 'Arrow down', icon: 'arrow_downward', shapeType: 'downArrow' },
   { id: 'triangle', label: 'Triangle', icon: 'change_history', shapeType: 'triangle' },
   { id: 'diamond', label: 'Diamond', icon: 'diamond', shapeType: 'diamond' },
   { id: 'pentagon', label: 'Pentagon', icon: 'pentagon', shapeType: 'pentagon' },
@@ -53,7 +53,7 @@ const TOOLS: (ToolButton | { sep: true })[] = [
   { id: 'redo', icon: 'redo', label: 'Redo (Ctrl+Y)', cmd: 'univer.command.redo', dynamicDisabled: 'redo' },
   { id: 'print', icon: 'print', label: 'Print', cmd: 'casual-slides.command.print' },
   { sep: true },
-  { id: 'pointer', icon: 'arrow_selector_tool', label: 'Select', disabled: true },
+  // TODO: re-add Select/Comment/Transition once wired
   { id: 'textbox', icon: 'text_fields', label: 'Text box', cmd: 'slide.command.add-text' },
   { id: 'image', icon: 'image', label: 'Image', cmd: 'slide.command.insert-float-image' },
   { id: 'shape', icon: 'category', label: 'Shape', menu: SHAPES_MENU },
@@ -61,13 +61,10 @@ const TOOLS: (ToolButton | { sep: true })[] = [
   // dispatch path as picking "Line" from the Shape menu.
   { id: 'line', icon: 'horizontal_rule', label: 'Line', cmd: 'casual-slides.command.insert-shape.line' },
   { sep: true },
-  { id: 'comment', icon: 'add_comment', label: 'Add comment', disabled: true },
-  { sep: true },
   { id: 'new-slide', icon: 'add_to_photos', label: 'New slide (Ctrl+M)', cmd: 'slide.operation.append-slide' },
   { id: 'layout', icon: 'view_compact', label: 'Layout' /* handled inline below */ },
   { id: 'theme', icon: 'palette', label: 'Theme' /* handled inline below */ },
   { id: 'background', icon: 'format_color_fill', label: 'Background' /* handled inline below */ },
-  { id: 'transition', icon: 'auto_awesome_motion', label: 'Transition', disabled: true },
 ];
 
 const isSep = (t: (typeof TOOLS)[number]): t is { sep: true } => 'sep' in t;
