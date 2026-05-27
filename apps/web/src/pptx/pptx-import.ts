@@ -1823,6 +1823,19 @@ function getPlaceholderKey(sp: unknown): string | null {
 //   `|${idx}`       — idx-only (matches slide `<p:ph idx=…>` with no type)
 // Slide lookup keeps the simple `${type}|${idx}` shape; one of the
 // three layout-side indexes is the match.
+// OOXML places related placeholder types in the same inheritance class
+// per §17.7.5. A slide's `<p:ph type="ctrTitle">` inherits from the
+// master's `<p:ph type="title">`; `subTitle` inherits from `body`; etc.
+// When indexing, we alias each type under every member of its class so
+// a slide-side `ctrTitle` lookup also lands the master's `title`-keyed
+// rect (with the layout's `ctrTitle` overrides merged on top).
+const PLACEHOLDER_TYPE_ALIASES: Record<string, string[]> = {
+  title: ['ctrTitle'],
+  ctrTitle: ['title'],
+  body: ['subTitle'],
+  subTitle: ['body'],
+};
+
 function indexUnderAllKeys(map: Map<string, PlaceholderRect>, ph: XmlNode | undefined, rect: PlaceholderRect): void {
   if (!ph) return;
   const type = ph['@type'];
@@ -1837,6 +1850,16 @@ function indexUnderAllKeys(map: Map<string, PlaceholderRect>, ph: XmlNode | unde
   if (i) map.set(`|${i}`, rect);
   // Bare placeholder default
   if (!t && !i) map.set('|0', rect);
+  // J5 — inheritance aliasing across related placeholder types so
+  // master's `title` rect/defaults are visible under `ctrTitle` keys
+  // (and similar) when the slide picks the specialised type but
+  // master only declared the generic one.
+  if (t && PLACEHOLDER_TYPE_ALIASES[t]) {
+    for (const alias of PLACEHOLDER_TYPE_ALIASES[t]) {
+      map.set(`${alias}|${i}`, rect);
+      map.set(`${alias}|`, rect);
+    }
+  }
 }
 
 // Walk a <p:sldLayout> or <p:sldMaster> XML and collect every
