@@ -51,8 +51,9 @@ test('diagnose: open "Your big idea.pptx" and dump text-frame state', async ({ p
     const snap = model.getSnapshot();
     const order = snap?.body?.pageOrder ?? [];
     const out: Array<Record<string, unknown>> = [];
-    // Dump slide 11 — title overflows top.
-    const interesting = [10];
+    // Dump slide 1 — looking for the white connector lines from
+    // layout 1 (top/bottom horizontal + tiny top-left tick).
+    const interesting = [0];
     for (const i of interesting.filter((j) => j < order.length)) {
       const page = snap.body.pages[order[i]];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

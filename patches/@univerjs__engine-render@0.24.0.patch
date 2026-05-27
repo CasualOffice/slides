@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index fafb8476bdd10d7a5224234dc0d7494756933de3..17a044126a2208d766b3f8f79500dd7a14967258 100644
+index fafb8476bdd10d7a5224234dc0d7494756933de3..5fe6b159e67308a1c607e33a1f1733f03bd5b80e 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -12648,6 +12648,12 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -55,7 +55,42 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..17a044126a2208d766b3f8f79500dd7a
  		this._draw(mainCtx, void 0, realWidth, realHeight);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20633,21 +20665,45 @@ var RichText = class extends BaseObject {
+@@ -19790,8 +19822,9 @@ var Path = class Path extends Shape {
+ 				else fixX = this.width - preWidth;
+ 				if (!preHeight) fixY = 0;
+ 				else fixY = this.height - preHeight;
+-				const increaseScaleX = fixX / width;
+-				const increaseScaleY = fixY / height;
++				// Casual Slides patch — guard against 0-extent path bbox.
++				const increaseScaleX = width === 0 ? 0 : fixX / width;
++				const increaseScaleY = height === 0 ? 0 : fixY / height;
+ 				this.scaleX += increaseScaleX;
+ 				this.scaleY += increaseScaleY;
+ 				this.left = this.left - left * increaseScaleX;
+@@ -20374,14 +20407,18 @@ var Path = class Path extends Shape {
+ 	}
+ 	_setFixBoundingBox() {
+ 		const { left, top, width, height } = this._getSelfRect();
+-		const fixScaleX = this.width / width;
+-		const fixScaleY = this.height / height;
++		// Casual Slides patch — guard against width/height = 0 in the
++		// path data bbox (horizontal / vertical line connectors).
++		const _csW = width === 0 ? this.width || 1 : width;
++		const _csH = height === 0 ? this.height || 1 : height;
++		const fixScaleX = this.width / _csW;
++		const fixScaleY = this.height / _csH;
+ 		this.left = this.left - left * fixScaleX;
+ 		this.top = this.top - top * fixScaleY;
+ 		this.scaleX = fixScaleX;
+ 		this.scaleY = fixScaleY;
+-		this.width = width;
+-		this.height = height;
++		this.width = _csW;
++		this.height = _csH;
+ 		this._setTransForm();
+ 	}
+ 	_getSelfRect() {
+@@ -20633,21 +20670,45 @@ var RichText = class extends BaseObject {
  		const docModel = this.documentModel = new _univerjs_core.DocumentDataModel(this._documentData);
  		const docViewModel = new DocumentViewModel(docModel);
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -106,7 +141,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..17a044126a2208d766b3f8f79500dd7a
  			}
  		});
  	}
-@@ -20709,6 +20765,27 @@ var RichText = class extends BaseObject {
+@@ -20709,6 +20770,27 @@ var RichText = class extends BaseObject {
  		const m = this.transform.getMatrix();
  		mainCtx.save();
  		mainCtx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
@@ -134,7 +169,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..17a044126a2208d766b3f8f79500dd7a
  		this._draw(mainCtx);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20757,16 +20834,37 @@ var RichText = class extends BaseObject {
+@@ -20757,16 +20839,37 @@ var RichText = class extends BaseObject {
  		};
  	}
  	_initialProps(props) {
@@ -175,7 +210,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..17a044126a2208d766b3f8f79500dd7a
  		this.setProps(props);
  		this.makeDirty(true);
  	}
-@@ -20776,11 +20874,17 @@ var RichText = class extends BaseObject {
+@@ -20776,11 +20879,17 @@ var RichText = class extends BaseObject {
  	refreshDocumentByDocData() {
  		const docViewModel = new DocumentViewModel(this.documentModel = new _univerjs_core.DocumentDataModel(this._documentData));
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -196,7 +231,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..17a044126a2208d766b3f8f79500dd7a
  		this._documentSkeleton.calculate();
  	}
  	/**
-@@ -21330,6 +21434,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21330,6 +21439,15 @@ var FontAndBaseLine = class extends docExtension {
  			ctx.rotate(Math.PI / 2);
  			ctx.translate(-width / 2, (aba + abd) / 2 - abd);
  			ctx.fillText(content, 0, 0);
@@ -212,7 +247,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..17a044126a2208d766b3f8f79500dd7a
  			ctx.restore();
  		} else {
  			const CHECKED_GLYPH = "☑";
-@@ -21360,6 +21473,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21360,6 +21478,15 @@ var FontAndBaseLine = class extends docExtension {
  					y_offset = -(glyph.width - fontHeight) / 2;
  				}
  				ctx.fillText(content, spanPointWithFont.x + x_offset, spanPointWithFont.y + y_offset);
@@ -228,7 +263,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..17a044126a2208d766b3f8f79500dd7a
  			}
  		}
  	}
-@@ -24644,7 +24766,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
+@@ -24644,7 +24771,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
@@ -239,7 +274,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..17a044126a2208d766b3f8f79500dd7a
  	}
  	_onKeyDown(evt) {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..29a2333dc2f8c1d9fea963f4a71727c3155c8fe3 100644
+index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8df45f721663e1d979fa1200856e713187d0ad8f 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -12619,6 +12619,13 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -299,7 +334,51 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..29a2333dc2f8c1d9fea963f4a71727c3
  		this._draw(mainCtx, void 0, realWidth, realHeight);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20604,21 +20640,46 @@ var RichText = class extends BaseObject {
+@@ -19761,8 +19797,12 @@ var Path = class Path extends Shape {
+ 				else fixX = this.width - preWidth;
+ 				if (!preHeight) fixY = 0;
+ 				else fixY = this.height - preHeight;
+-				const increaseScaleX = fixX / width;
+-				const increaseScaleY = fixY / height;
++				// Casual Slides patch — same 0-extent guard as
++				// _setFixBoundingBox. Zero width / height in the path
++				// data bbox (horizontal / vertical lines) blew up
++				// scale to Infinity here too.
++				const increaseScaleX = width === 0 ? 0 : fixX / width;
++				const increaseScaleY = height === 0 ? 0 : fixY / height;
+ 				this.scaleX += increaseScaleX;
+ 				this.scaleY += increaseScaleY;
+ 				this.left = this.left - left * increaseScaleX;
+@@ -20345,14 +20385,24 @@ var Path = class Path extends Shape {
+ 	}
+ 	_setFixBoundingBox() {
+ 		const { left, top, width, height } = this._getSelfRect();
+-		const fixScaleX = this.width / width;
+-		const fixScaleY = this.height / height;
++		// Casual Slides patch — guard against width/height = 0 in the path
++		// data bbox. A horizontal line ("M 0 2 L 655 2") has 0 vertical
++		// extent; the original code computed `this.height / 0 = Infinity`
++		// for scaleY and the canvas silently failed to render. Now we
++		// keep scale at 1 for the degenerate axis and DO NOT collapse
++		// this.width / this.height to the path bbox — those came from
++		// the caller as the authored frame and need to drive the bbox
++		// for clipping / hit-testing.
++		const _csW = width === 0 ? this.width || 1 : width;
++		const _csH = height === 0 ? this.height || 1 : height;
++		const fixScaleX = this.width / _csW;
++		const fixScaleY = this.height / _csH;
+ 		this.left = this.left - left * fixScaleX;
+ 		this.top = this.top - top * fixScaleY;
+ 		this.scaleX = fixScaleX;
+ 		this.scaleY = fixScaleY;
+-		this.width = width;
+-		this.height = height;
++		this.width = _csW;
++		this.height = _csH;
+ 		this._setTransForm();
+ 	}
+ 	_getSelfRect() {
+@@ -20604,21 +20654,46 @@ var RichText = class extends BaseObject {
  		const docModel = this.documentModel = new DocumentDataModel(this._documentData);
  		const docViewModel = new DocumentViewModel(docModel);
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -351,7 +430,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..29a2333dc2f8c1d9fea963f4a71727c3
  			}
  		});
  	}
-@@ -20680,6 +20741,27 @@ var RichText = class extends BaseObject {
+@@ -20680,6 +20755,27 @@ var RichText = class extends BaseObject {
  		const m = this.transform.getMatrix();
  		mainCtx.save();
  		mainCtx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
@@ -379,7 +458,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..29a2333dc2f8c1d9fea963f4a71727c3
  		this._draw(mainCtx);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20728,16 +20810,52 @@ var RichText = class extends BaseObject {
+@@ -20728,16 +20824,52 @@ var RichText = class extends BaseObject {
  		};
  	}
  	_initialProps(props) {
@@ -435,7 +514,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..29a2333dc2f8c1d9fea963f4a71727c3
  		this.setProps(props);
  		this.makeDirty(true);
  	}
-@@ -20747,11 +20865,17 @@ var RichText = class extends BaseObject {
+@@ -20747,11 +20879,17 @@ var RichText = class extends BaseObject {
  	refreshDocumentByDocData() {
  		const docViewModel = new DocumentViewModel(this.documentModel = new DocumentDataModel(this._documentData));
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -456,7 +535,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..29a2333dc2f8c1d9fea963f4a71727c3
  		this._documentSkeleton.calculate();
  	}
  	/**
-@@ -21301,6 +21425,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21301,6 +21439,15 @@ var FontAndBaseLine = class extends docExtension {
  			ctx.rotate(Math.PI / 2);
  			ctx.translate(-width / 2, (aba + abd) / 2 - abd);
  			ctx.fillText(content, 0, 0);
@@ -472,7 +551,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..29a2333dc2f8c1d9fea963f4a71727c3
  			ctx.restore();
  		} else {
  			const CHECKED_GLYPH = "☑";
-@@ -21331,6 +21464,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21331,6 +21478,15 @@ var FontAndBaseLine = class extends docExtension {
  					y_offset = -(glyph.width - fontHeight) / 2;
  				}
  				ctx.fillText(content, spanPointWithFont.x + x_offset, spanPointWithFont.y + y_offset);
@@ -488,7 +567,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..29a2333dc2f8c1d9fea963f4a71727c3
  			}
  		}
  	}
-@@ -24615,7 +24757,8 @@ var InputManager = class InputManager extends Disposable {
+@@ -24615,7 +24771,8 @@ var InputManager = class InputManager extends Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
