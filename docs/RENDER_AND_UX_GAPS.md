@@ -5,7 +5,7 @@ Companion to [`FIDELITY_TRACKER.md`](./FIDELITY_TRACKER.md). The fidelity tracke
 1. **Render fidelity** — does the canvas actually paint what PowerPoint paints? An OOXML field can be ✅ in the data tracker (parser captures it, model carries it, exporter restores it) and still be ⚪ here (adaptor doesn't read it, engine-render doesn't draw it).
 2. **UX completeness** — does the editor have the verbs a real presentation tool has?
 
-Last refreshed 2026-05-27 after the render-fidelity + UX audits + D6 fix.
+Last refreshed 2026-05-27 after the render-fidelity + UX audits + D6 fix + wave UX-P0 #3/#4/#6.
 
 ---
 
@@ -40,10 +40,10 @@ Per the UX audit: "Casual Slides is today a *read-only presentation tool* wearin
 |---|---|---|---|
 | 1 | **No text formatting toolbar** — no B/I/U/S, font family picker, font size, color, highlight. Selection of a text frame shows no contextual controls. | `shell/Toolbar.tsx` (~27-45); needs new selection-aware control row; `App.tsx` needs to subscribe to Univer's selection observable. | PowerPoint ribbon Home tab; Google Slides floating contextual toolbar. |
 | 2 | **No alignment / paragraph controls** — no left/center/right/justify, no indent/outdent, no bullet/numbered list toggle. | Same Toolbar location; `univer/commands.ts` already dispatches paragraph mutations. | Format → Align Left/Center/Right; Bullets & Numbering. |
-| 3 | **Shape menu has only rect + ellipse** — no line, arrow, connector, diamond, callout, star, speech bubble. | `Toolbar.tsx` `SHAPES_MENU` array (line 22-25); engine-render supports the prstGeom values already, just exposing them in UI. | PowerPoint Insert → Shapes (100+ presets); Google Slides Insert → Shape (30+). |
-| 4 | **Image insert disabled** — button exists but is greyed out. No file picker, no drop-zone, no image-properties panel. | `Toolbar.tsx:34`; `slide.command.insert-float-image` (or equivalent) exists in slides-ui. | Insert → Picture / drag-and-drop. |
+| ~~3~~ | ~~**Shape menu has only rect + ellipse**~~ — **Done** — `SHAPES_MENU` lists 15 prsts; menu items without a slides-ui command dispatch `slide.mutation.insert-element` directly with a hand-crafted IPageElement, leveraging the ShapeAdaptor's per-prstGeom Path branch. Toolbar also got a top-level "Line" shortcut. | `Toolbar.tsx:33-49` (SHAPES_MENU) + `Toolbar.tsx:83-156` (`insertShapeOfType`). | PowerPoint Insert → Shapes (100+ presets); Google Slides Insert → Shape (30+). |
+| ~~4~~ | ~~**Image insert disabled**~~ — **Wired** — toolbar Image button now invokes `slide.command.insert-float-image`, which opens the OS file picker via `ILocalFileService` and emits a `SLIDE_INSERT_ELEMENT` mutation. Drop-zone + image-properties panel still pending. | `Toolbar.tsx:58`; `univer-revamp/packages/slides-ui/src/commands/operations/insert-image.operation.ts`. | Insert → Picture / drag-and-drop. |
 | 5 | **No selection feedback** — clicking a shape / text frame / image shows no bounding box, no resize handles, no rotation knob. No spatial cue that something is selected. | `UniverSlide.tsx`; needs subscription to engine's selection event + overlay layer for handles. | Universal — 8 resize handles + rotation knob + selection outline. |
-| 6 | **Undo/Redo no disabled state** — buttons don't grey out when the stack is empty. No visible history. | `Toolbar.tsx` (line 28-29); needs to read `IUndoRedoService` state. | PowerPoint / Google Slides both grey out exhausted history. |
+| ~~6~~ | ~~**Undo/Redo no disabled state**~~ — **Done** — `useUndoRedoCounts()` polls Univer's injector for `IUndoRedoService` and subscribes to its `undoRedoStatus$` observable; buttons disable when the matching stack hits 0. | `Toolbar.tsx:163-197`. | PowerPoint / Google Slides both grey out exhausted history. |
 
 ### P1 — Polish / table-stakes
 
@@ -77,12 +77,12 @@ Ranked by impact ÷ complexity. Each row: estimated diff size + scope.
 | ~~1~~ | ~~D6 custGeom~~ | — | **Fixed `71a894e`** |
 | ~~2~~ | ~~D17 arrowheads~~ | — | **Fixed `d578c93`** (V-marker; filled-triangle variant TODO) |
 | ~~3~~ | ~~C10 right/bottom insets~~ | — | **Fixed `13fcbbb`** |
-| 4 | UX P0 #4 — Image insert | "Cannot add images" is a critical workflow block | Med — file picker dialog + `slide.command.insert-float-image` wiring |
-| 5 | UX P0 #3 — Line + arrow shape menu items | Currently disabled in toolbar; underlying Path support already there | Low — Toolbar.tsx menu + icons |
+| ~~4~~ | ~~UX P0 #4 — Image insert~~ | — | **Wired** — `slide.command.insert-float-image` opens file picker via `ILocalFileService`; toolbar button no longer disabled (Toolbar.tsx) |
+| ~~5~~ | ~~UX P0 #3 — Line + arrow shape menu items~~ | — | **Done** — `SHAPES_MENU` expanded to 15 prsts (line, 4 arrows, triangle, diamond, polygons, chevron, plus, star); inserted via direct `slide.mutation.insert-element` dispatch with a hand-crafted IPageElement |
+| ~~9~~ | ~~UX P0 #6 — Undo/Redo state~~ | — | **Done** — `useUndoRedoCounts()` subscribes to `IUndoRedoService.undoRedoStatus$`; buttons go disabled when respective stack is empty |
 | 6 | UX P0 #5 — Selection feedback | The most visually-jarring gap when actually editing | High — selection overlay + handle UI |
 | 7 | UX P0 #1 — Text formatting toolbar | Foundation for #2 alignment; requires selection observable | High — new component + selection plumbing |
 | 8 | UX P0 #2 — Alignment / paragraph controls | Sits on top of #1 + #5 | Med (~150 LOC, depends on #6) |
-| 9 | UX P0 #6 — Undo/Redo state | One-liner if `IUndoRedoService` has the right observables | Low |
 | 10 | A3 / D9 multi-stop gradients | Visual depth; lower frequency than arrows / text | High — renderer-API widening |
 | 11 | D17 proper filled triangle / stealth / diamond / oval | Replace the V-marker with PowerPoint-shaped arrowheads | Med — Group with fill+stroke paths |
 
