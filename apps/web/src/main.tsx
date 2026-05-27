@@ -1,5 +1,6 @@
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
+import { ShortcutsProvider } from './shell/ShortcutsDialog';
 // i18n must initialise before any React component mounts so the first
 // render of <App /> already sees the configured `t()` instance — otherwise
 // components would fall back to raw keys for one tick.
@@ -30,4 +31,9 @@ if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
 // Univer instance before its first render completes, which leaves the DOM in
 // an inconsistent state. Same pattern most editor SDKs (Monaco, Univer, Lexical)
 // require. Do NOT wrap App in StrictMode at this boundary.
-ReactDOM.createRoot(document.getElementById('root')!).render(<App />);
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <>
+    <App />
+    <ShortcutsProvider />
+  </>,
+);

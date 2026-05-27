@@ -257,13 +257,13 @@ export function TitleBar({
     <header className="cs-titlebar">
       <a className="cs-titlebar__brand" href="#" aria-label={t('titlebar.brand')}>
         <svg viewBox="0 0 32 40" width="28" height="36" aria-hidden="true">
-          <path d="M2 0C0.9 0 0 0.9 0 2V38C0 39.1 0.9 40 2 40H30C31.1 40 32 39.1 32 38V10L22 0H2Z" fill="#B7472A" />
-          <path d="M22 0L32 10H24C22.9 10 22 9.1 22 8V0Z" fill="#8B3520" />
+          <path d="M2 0C0.9 0 0 0.9 0 2V38C0 39.1 0.9 40 2 40H30C31.1 40 32 39.1 32 38V10L22 0H2Z" fill="#0891B2" />
+          <path d="M22 0L32 10H24C22.9 10 22 9.1 22 8V0Z" fill="#0E7490" />
           <rect x="6" y="17" width="20" height="14" rx="1" fill="#fff" opacity="0.95" />
-          <rect x="8" y="19" width="10" height="2" rx="0.5" fill="#B7472A" />
-          <rect x="8" y="23" width="14" height="1.5" rx="0.5" fill="#B7472A" opacity="0.7" />
-          <rect x="8" y="26" width="10" height="1.5" rx="0.5" fill="#B7472A" opacity="0.7" />
-          <path d="M20.5 26 L24 27.75 L20.5 29.5 Z" fill="#B7472A" />
+          <rect x="8" y="19" width="10" height="2" rx="0.5" fill="#0891B2" />
+          <rect x="8" y="23" width="14" height="1.5" rx="0.5" fill="#0891B2" opacity="0.7" />
+          <rect x="8" y="26" width="10" height="1.5" rx="0.5" fill="#0891B2" opacity="0.7" />
+          <path d="M20.5 26 L24 27.75 L20.5 29.5 Z" fill="#0891B2" />
         </svg>
       </a>
       <div className="cs-titlebar__center">

@@ -2,6 +2,11 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from './locales/en.json';
 
+// Re-export `useTranslation` so consumers can pull it from the local
+// `./i18n` barrel — keeps imports symmetrical with our local config and
+// makes a future swap (e.g. to a custom hook) a one-line change here.
+export { useTranslation } from 'react-i18next';
+
 // i18n foundation for Casual Slides.
 //
 // Why this shape:

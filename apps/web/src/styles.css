@@ -1,8 +1,9 @@
 /* Casual Slides — chrome stylesheet.
    Aesthetic: Google Slides / Google Docs. Compact two-row title bar,
-   single-row icon toolbar, gray canvas stage. PowerPoint orange-red
-   (#B7472A) as the brand accent. Inter for UI text. Icons are inline
-   SVG (see src/shell/icons.tsx) — no webfont. */
+   single-row icon toolbar, gray canvas stage. Brand accent is cyan
+   (#0891B2) — deliberately distinct from PowerPoint orange-red,
+   Impress orange, and Google Slides yellow. Inter for UI text. Icons
+   are inline SVG (see src/shell/icons.tsx) — no webfont. */
 
 :root {
   --cs-bg:        #f8f9fa;
@@ -1526,3 +1527,638 @@ button.cs-statusbar__zoom-value:focus-visible {
   outline: 2px solid var(--cs-focus);
   outline-offset: 1px;
 }
+/* ================= Shortcuts dialog ================= */
+
+/* Material Design 3 modal: centred card, scrim backdrop, 8 px corner, 180 ms
+   eased open. Two-column body — action label (60 %) on the left, key chips
+   (40 %) on the right. <kbd> chips use Inter's tabular numbers + a 1 px
+   lift shadow to read as physical keys. */
+
+@keyframes cs-shortcuts-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes cs-shortcuts-pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+.cs-shortcuts__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  background: rgba(15, 20, 25, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+  animation: cs-shortcuts-fade-in 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cs-shortcuts {
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(640px, calc(100vh - 80px));
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border-2);
+  border-radius: 8px;
+  box-shadow: var(--cs-shadow-2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: cs-shortcuts-pop-in 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+.cs-shortcuts__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--cs-border-2);
+  flex-shrink: 0;
+}
+
+.cs-shortcuts__title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+  color: var(--cs-text);
+}
+
+.cs-shortcuts__close {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cs-radius);
+  color: var(--cs-text-mute);
+}
+.cs-shortcuts__close:hover { background: var(--cs-hover); color: var(--cs-text); }
+.cs-shortcuts__close:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: 2px;
+}
+
+.cs-shortcuts__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 10px 16px 8px;
+  flex-shrink: 0;
+}
+
+.cs-shortcuts__search-icon {
+  position: absolute;
+  left: 26px;
+  color: var(--cs-text-mute);
+  pointer-events: none;
+}
+
+.cs-shortcuts__search-input {
+  flex: 1;
+  font: inherit;
+  font-size: 13px;
+  color: var(--cs-text);
+  background: var(--cs-surface-2);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius);
+  padding: 7px 10px 7px 32px;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.cs-shortcuts__search-input::placeholder { color: var(--cs-text-dim); }
+.cs-shortcuts__search-input:focus {
+  border-color: var(--cs-focus);
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.18);
+}
+/* Hide the native clear button on search inputs — we don't need it and it
+   visually clashes with the icon prefix. */
+.cs-shortcuts__search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.cs-shortcuts__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 4px 8px 12px;
+}
+
+.cs-shortcuts__empty {
+  padding: 32px 16px;
+  margin: 0;
+  text-align: center;
+  color: var(--cs-text-mute);
+  font-size: 13px;
+}
+
+.cs-shortcuts__section {
+  padding: 8px 8px 4px;
+}
+
+.cs-shortcuts__section-title {
+  margin: 0 0 4px;
+  padding: 8px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cs-text-mute);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.cs-shortcuts__section-hint {
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--cs-text-dim);
+}
+
+.cs-shortcuts__list {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cs-shortcuts__row {
+  display: grid;
+  grid-template-columns: 60% 40%;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 8px;
+  border-radius: var(--cs-radius);
+  min-height: 32px;
+}
+.cs-shortcuts__row:hover { background: var(--cs-hover); }
+
+.cs-shortcuts__label {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cs-text);
+}
+
+.cs-shortcuts__keys {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--cs-text-mute);
+}
+
+.cs-shortcuts__bind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cs-shortcuts__chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.cs-shortcuts__chip-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.cs-shortcuts__or {
+  color: var(--cs-text-dim);
+  font-size: 11px;
+  padding: 0 2px;
+}
+
+.cs-shortcuts__plus {
+  color: var(--cs-text-dim);
+  font-size: 10px;
+}
+
+.cs-shortcuts__kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 4px 6px;
+  font-family: 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--cs-text);
+  background: var(--cs-surface-2);
+  border: 1px solid var(--cs-border);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 0 var(--cs-border);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-shortcuts__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-top: 1px solid var(--cs-border-2);
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.cs-shortcuts__hint {
+  font-size: 11px;
+  color: var(--cs-text-dim);
+}
+
+/* Reduced motion: skip the open animation. */
+@media (prefers-reduced-motion: reduce) {
+  .cs-shortcuts__backdrop,
+  .cs-shortcuts {
+    animation: none;
+  }
+}
+
+/* =================== Toolbar v2 ===================
+   Google-Slides-grade format toolbar. Coexists with the legacy
+   `.cs-toolbar*` rules above by namespacing every new class with
+   `.cs-toolbar2__*`. The outer `.cs-toolbar` wrapper still owns the
+   shell row + bottom border.
+*/
+
+.cs-toolbar2__row {
+  display: flex;
+  align-items: center;
+  height: var(--cs-toolbar-h);
+  padding: 0 12px;
+  gap: 2px;
+  /* No horizontal scroll — overflow falls into the "More" popover. */
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.cs-toolbar2__btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--cs-radius);
+  color: var(--cs-text);
+  transition: background 80ms ease, color 80ms ease;
+}
+.cs-toolbar2__btn:hover:not(:disabled) { background: var(--cs-hover); }
+.cs-toolbar2__btn:active:not(:disabled) { background: var(--cs-active); }
+.cs-toolbar2__btn:disabled { color: var(--cs-text-dim); opacity: 0.55; }
+.cs-toolbar2__btn:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: -2px;
+}
+.cs-toolbar2__btn.is-active {
+  background: var(--cs-accent-bg);
+  color: var(--cs-accent);
+}
+
+.cs-toolbar2__btn--with-caret { width: auto; padding: 0 2px 0 6px; gap: 0; }
+
+.cs-toolbar2__caret {
+  color: var(--cs-text-mute);
+  margin-left: -2px;
+}
+
+.cs-toolbar2__split {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ── combobox triggers (font family, font size) ──────────────────── */
+
+.cs-toolbar2__combo {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border-radius: var(--cs-radius);
+  border: 1px solid transparent;
+  margin: 0 2px;
+}
+.cs-toolbar2__combo:hover { background: var(--cs-hover); }
+.cs-toolbar2__combo:focus-within {
+  background: var(--cs-surface);
+  border-color: var(--cs-focus);
+}
+
+.cs-toolbar2__combo--font { width: 140px; }
+.cs-toolbar2__combo--size { width: auto; }
+
+.cs-toolbar2__combo-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 0 4px 0 8px;
+  border-radius: var(--cs-radius);
+  color: var(--cs-text);
+  font-size: 13px;
+  text-align: left;
+}
+
+.cs-toolbar2__combo-value {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-toolbar2__combo-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 100%;
+  color: var(--cs-text-mute);
+  border-radius: 0 var(--cs-radius) var(--cs-radius) 0;
+}
+.cs-toolbar2__combo-caret:hover { background: var(--cs-active); }
+
+.cs-toolbar2__step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 100%;
+  color: var(--cs-text-mute);
+  border-radius: var(--cs-radius) 0 0 var(--cs-radius);
+}
+.cs-toolbar2__step:hover { background: var(--cs-active); color: var(--cs-text); }
+
+.cs-toolbar2__size-input {
+  width: 36px;
+  height: 22px;
+  margin: 0 1px;
+  padding: 0 4px;
+  text-align: center;
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--cs-text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--cs-radius);
+  outline: 0;
+}
+.cs-toolbar2__size-input:focus {
+  background: var(--cs-surface);
+  border-color: var(--cs-focus);
+}
+
+/* ── color split-button ──────────────────────────────────────────── */
+
+.cs-toolbar2__color {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  height: 32px;
+  border-radius: var(--cs-radius);
+}
+
+.cs-toolbar2__color-apply {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 32px;
+  padding: 0;
+  gap: 2px;
+  border-radius: var(--cs-radius) 0 0 var(--cs-radius);
+  color: var(--cs-text);
+}
+.cs-toolbar2__color-apply:hover:not(:disabled) { background: var(--cs-hover); }
+.cs-toolbar2__color-apply:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: -2px;
+}
+
+.cs-toolbar2__color-bar {
+  display: block;
+  width: 18px;
+  height: 4px;
+  border-radius: 1px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.cs-toolbar2__color-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 32px;
+  color: var(--cs-text-mute);
+  border-radius: 0 var(--cs-radius) var(--cs-radius) 0;
+}
+.cs-toolbar2__color-caret:hover { background: var(--cs-hover); color: var(--cs-text); }
+
+/* ── shared popover surface ──────────────────────────────────────── */
+
+.cs-toolbar2__popover {
+  position: fixed;
+  z-index: 80;
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-2);
+  padding: 6px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.cs-toolbar2__popover--fonts { width: 280px; max-height: 420px; }
+.cs-toolbar2__popover--sizes { width: 80px; max-height: 280px; }
+.cs-toolbar2__popover--color { width: 248px; }
+.cs-toolbar2__popover--align { width: 184px; }
+.cs-toolbar2__popover--spacing { width: 200px; }
+.cs-toolbar2__popover--shapes { width: 220px; max-height: 360px; overflow-y: auto; }
+.cs-toolbar2__popover--overflow { width: auto; max-width: 90vw; padding: 6px 8px; }
+
+.cs-toolbar2__popover-search { padding: 4px 4px 6px; border-bottom: 1px solid var(--cs-border-2); }
+
+.cs-toolbar2__popover-search-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12px;
+  background: var(--cs-surface-2);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius);
+  outline: 0;
+}
+.cs-toolbar2__popover-search-input:focus {
+  background: var(--cs-surface);
+  border-color: var(--cs-focus);
+}
+
+.cs-toolbar2__popover-scroll {
+  overflow-y: auto;
+  max-height: 380px;
+  display: flex;
+  flex-direction: column;
+}
+
+.cs-toolbar2__popover-section { padding: 4px 0; }
+.cs-toolbar2__popover-section + .cs-toolbar2__popover-section {
+  border-top: 1px solid var(--cs-border-2);
+}
+
+.cs-toolbar2__popover-section-label {
+  padding: 6px 10px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cs-text-mute);
+}
+
+.cs-toolbar2__popover-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 26px;
+  font-size: 13px;
+  color: var(--cs-text);
+  border-radius: var(--cs-radius);
+  text-align: left;
+  width: 100%;
+  transition: background 80ms ease;
+}
+.cs-toolbar2__popover-item:hover { background: var(--cs-hover); }
+.cs-toolbar2__popover-item:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: -2px;
+}
+.cs-toolbar2__popover-item.is-active { background: var(--cs-accent-bg); color: var(--cs-accent); }
+
+.cs-toolbar2__check {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--cs-accent);
+}
+
+/* ── color grid + custom hex row ─────────────────────────────────── */
+
+.cs-toolbar2__color-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  padding: 4px 6px 6px;
+}
+
+.cs-toolbar2__color-chip {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--cs-radius);
+  border: 1px solid var(--cs-border-2);
+  cursor: pointer;
+  transition: transform 80ms ease, border-color 80ms ease;
+}
+.cs-toolbar2__color-chip:hover {
+  transform: scale(1.12);
+  border-color: var(--cs-accent);
+}
+
+.cs-toolbar2__color-custom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px 4px;
+  border-top: 1px solid var(--cs-border-2);
+  margin-top: 4px;
+}
+
+.cs-toolbar2__color-custom-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--cs-text-mute);
+  cursor: pointer;
+}
+
+.cs-toolbar2__color-custom-input {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius);
+  background: transparent;
+  cursor: pointer;
+}
+
+.cs-toolbar2__color-hex {
+  flex: 1;
+  height: 24px;
+  padding: 0 6px;
+  font: inherit;
+  font-size: 11.5px;
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  color: var(--cs-text);
+  background: var(--cs-surface-2);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius);
+  outline: 0;
+  text-transform: uppercase;
+  min-width: 0;
+}
+.cs-toolbar2__color-hex:focus {
+  background: var(--cs-surface);
+  border-color: var(--cs-focus);
+}
+
+.cs-toolbar2__color-apply-btn {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.cs-toolbar2__color-clear {
+  margin-top: 4px;
+  border-top: 1px solid var(--cs-border-2);
+  padding-top: 8px;
+  padding-left: 12px;
+}
+
+/* ── segmented (alignment) row ───────────────────────────────────── */
+
+.cs-toolbar2__segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ── overflow popover row ────────────────────────────────────────── */
+
+.cs-toolbar2__overflow-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  max-width: 720px;
+}
+

@@ -1,82 +1,75 @@
-import { useEffect, useRef, useState } from 'react';
+// Toolbar v2 — Google Slides-grade single-row formatting toolbar.
+//
+// Layout (left to right):
+//   Group 1: Undo · Redo · Print · Paint format
+//   Group 3: Text box · Image · Shape · Line
+//   Group 5: New slide · Layout · Theme · Background
+//   Group 6: Font family · Font size · Bold · Italic · Underline · Strikethrough · Text color · Fill color · Border color
+//   Group 7: Align · Bullet · Number · Indent- · Indent+ · Line spacing · Clear formatting · Insert link
+//   Group 8: Slideshow CTA (right-aligned)
+//
+// The row never scrolls horizontally. A ResizeObserver tracks the toolbar
+// width — when the natural width of the children exceeds the available
+// space, groups 6 + 7 collapse into a single "More" popover so the rest
+// stays visible.
+//
+// All formatting controls dispatch existing Univer commands (see the
+// constants below). Where a command is missing in v0.24.0 (paint format,
+// line spacing, clear formatting, insert link, vertical-align), the button
+// is wired to local state only with an inline `TODO(univer)` comment
+// pointing at the gap. We never fake a dispatch.
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Univer } from '@univerjs/core';
 import { IUndoRedoService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
+import { useTranslation } from '../i18n';
 import { dispatchSlideCommand } from '../univer/commands';
 import { BackgroundPicker } from './BackgroundPicker';
 import { LayoutPicker } from './LayoutPicker';
 import { Icon } from './icons';
+import { FontFamilyPicker } from './toolbar/FontFamilyPicker';
+import { FontSizePicker } from './toolbar/FontSizePicker';
+import { ColorPicker } from './toolbar/ColorPicker';
+import { AlignPicker, type AlignValue } from './toolbar/AlignPicker';
+import { ListPicker, type ListMode } from './toolbar/ListPicker';
+import { LineSpacingPicker } from './toolbar/LineSpacingPicker';
+import { OverflowPopover } from './toolbar/OverflowPopover';
 
-// Google Slides-style toolbar — single horizontal row of icon-only
-// affordances, grouped by separator chevrons. No tabs, no multi-row
-// tool groups. Quick access to the most common commands.
+// ============================================================ shapes ===
 
-interface ToolButton {
+interface ShapeMenuItem {
   id: string;
+  labelKey: string;
   icon: string;
-  label: string;
   cmd?: string;
-  cmdParams?: Record<string, unknown>;
-  menu?: { id: string; label: string; icon?: string; cmd?: string; shapeType?: string }[];
-  disabled?: boolean;
-  primary?: boolean;
-  /** When true, the disabled state is computed at render time from a
-   *  live signal (undo/redo stack depth). */
-  dynamicDisabled?: 'undo' | 'redo';
+  shapeType?: string;
 }
 
-// Wave UX-P0#3 — expanded shape catalog. Rectangle / Ellipse dispatch
-// the slides-ui-registered commands (registered upstream). Everything
-// else dispatches `slide.mutation.insert-element` directly with a
-// hand-crafted IPageElement; the renderer already paints these
-// prsts via the per-prstGeom Path branch in ShapeAdaptor.
-const SHAPES_MENU: NonNullable<ToolButton['menu']> = [
-  { id: 'rect', label: 'Rectangle', icon: 'rectangle', cmd: 'slide.command.insert-float-shape.rectangle' },
-  { id: 'ellipse', label: 'Ellipse', icon: 'circle', cmd: 'slide.command.insert-float-shape.ellipse' },
-  { id: 'line', label: 'Line', icon: 'horizontal_rule', shapeType: 'line' },
-  { id: 'rightArrow', label: 'Arrow right', icon: 'arrow_right_alt', shapeType: 'rightArrow' },
-  { id: 'leftArrow', label: 'Arrow left', icon: 'arrow_back', shapeType: 'leftArrow' },
-  { id: 'upArrow', label: 'Arrow up', icon: 'arrow_upward', shapeType: 'upArrow' },
-  { id: 'downArrow', label: 'Arrow down', icon: 'arrow_downward', shapeType: 'downArrow' },
-  { id: 'triangle', label: 'Triangle', icon: 'change_history', shapeType: 'triangle' },
-  { id: 'diamond', label: 'Diamond', icon: 'diamond', shapeType: 'diamond' },
-  { id: 'pentagon', label: 'Pentagon', icon: 'pentagon', shapeType: 'pentagon' },
-  { id: 'hexagon', label: 'Hexagon', icon: 'hexagon', shapeType: 'hexagon' },
-  { id: 'octagon', label: 'Octagon', icon: 'shape_line', shapeType: 'octagon' },
-  { id: 'chevron', label: 'Chevron', icon: 'double_arrow', shapeType: 'chevron' },
-  { id: 'plus', label: 'Plus / Cross', icon: 'add', shapeType: 'plus' },
-  { id: 'star5', label: 'Star', icon: 'star', shapeType: 'star5' },
+// Same catalogue + insert path as the legacy toolbar — we kept the
+// dispatch pipeline intact so the renderer/exporter pieces don't need to
+// change. Labels go through i18n (`toolbar.shape_*`).
+const SHAPES_MENU: ShapeMenuItem[] = [
+  { id: 'rect',       labelKey: 'toolbar.shape_rect',       icon: 'add',            cmd: 'slide.command.insert-float-shape.rectangle' },
+  { id: 'ellipse',    labelKey: 'toolbar.shape_ellipse',    icon: 'add',            cmd: 'slide.command.insert-float-shape.ellipse' },
+  { id: 'line',       labelKey: 'toolbar.shape_line',       icon: 'remove',         shapeType: 'line' },
+  { id: 'rightArrow', labelKey: 'toolbar.shape_rightArrow', icon: 'add',            shapeType: 'rightArrow' },
+  { id: 'leftArrow',  labelKey: 'toolbar.shape_leftArrow',  icon: 'add',            shapeType: 'leftArrow' },
+  { id: 'upArrow',    labelKey: 'toolbar.shape_upArrow',    icon: 'add',            shapeType: 'upArrow' },
+  { id: 'downArrow',  labelKey: 'toolbar.shape_downArrow',  icon: 'add',            shapeType: 'downArrow' },
+  { id: 'triangle',   labelKey: 'toolbar.shape_triangle',   icon: 'add',            shapeType: 'triangle' },
+  { id: 'diamond',    labelKey: 'toolbar.shape_diamond',    icon: 'add',            shapeType: 'diamond' },
+  { id: 'pentagon',   labelKey: 'toolbar.shape_pentagon',   icon: 'add',            shapeType: 'pentagon' },
+  { id: 'hexagon',    labelKey: 'toolbar.shape_hexagon',    icon: 'add',            shapeType: 'hexagon' },
+  { id: 'octagon',    labelKey: 'toolbar.shape_octagon',    icon: 'add',            shapeType: 'octagon' },
+  { id: 'chevron',    labelKey: 'toolbar.shape_chevron',    icon: 'add',            shapeType: 'chevron' },
+  { id: 'plus',       labelKey: 'toolbar.shape_plus',       icon: 'add',            shapeType: 'plus' },
+  { id: 'star5',      labelKey: 'toolbar.shape_star5',      icon: 'add',            shapeType: 'star5' },
 ];
 
-const TOOLS: (ToolButton | { sep: true })[] = [
-  { id: 'undo', icon: 'undo', label: 'Undo (Ctrl+Z)', cmd: 'univer.command.undo', dynamicDisabled: 'undo' },
-  { id: 'redo', icon: 'redo', label: 'Redo (Ctrl+Y)', cmd: 'univer.command.redo', dynamicDisabled: 'redo' },
-  { id: 'print', icon: 'print', label: 'Print', cmd: 'casual-slides.command.print' },
-  { sep: true },
-  // TODO: re-add Select/Comment/Transition once wired
-  { id: 'textbox', icon: 'text_fields', label: 'Text box', cmd: 'slide.command.add-text' },
-  { id: 'image', icon: 'image', label: 'Image', cmd: 'slide.command.insert-float-image' },
-  { id: 'shape', icon: 'category', label: 'Shape', menu: SHAPES_MENU },
-  // Single-click line shortcut for quick diagram authoring. Same
-  // dispatch path as picking "Line" from the Shape menu.
-  { id: 'line', icon: 'horizontal_rule', label: 'Line', cmd: 'casual-slides.command.insert-shape.line' },
-  { sep: true },
-  { id: 'new-slide', icon: 'add_to_photos', label: 'New slide (Ctrl+M)', cmd: 'slide.operation.append-slide' },
-  { id: 'layout', icon: 'view_compact', label: 'Layout' /* handled inline below */ },
-  { id: 'theme', icon: 'palette', label: 'Theme' /* handled inline below */ },
-  { id: 'background', icon: 'format_color_fill', label: 'Background' /* handled inline below */ },
-];
-
-const isSep = (t: (typeof TOOLS)[number]): t is { sep: true } => 'sep' in t;
-
-// Wave UX-P0#3 helper — insert a shape with the given prstGeom via
-// `slide.mutation.insert-element`. Bypasses slide-ui's per-shape
-// command registry so we can ship any prst the ShapeAdaptor knows
-// about without authoring fork-side commands first.
-//
-// Default size + position match PowerPoint's "Insert Shape" drop
-// (~250x250 mid-canvas). Defaults to a light fill + dark outline so
-// the inserted shape is visible immediately even on a white slide.
+// Manual `slide.mutation.insert-element` payload for shape types the
+// slides-ui plug-in doesn't ship a dedicated command for. Same defaults
+// (250×250 rect / 300×24 line) the legacy toolbar used so PPTX export
+// round-trips identically.
 function insertShapeOfType(shapeType: string): void {
   const w = window as unknown as { univer?: Univer };
   const univer = w.univer;
@@ -89,32 +82,21 @@ function insertShapeOfType(shapeType: string): void {
     const activePage = model.getActivePage();
     if (!activePage) return;
     const pageId = activePage.id;
-
-    // zIndex on the new element = max existing + 1.
     const existingZ = Object.values(activePage.pageElements ?? {}).reduce(
       (m, e) => Math.max(m, e?.zIndex ?? 0),
       0,
     );
     const id = `manual-shape-${Date.now().toString(36)}`;
-    // Line shapes ship at a small fixed visual height (24 px) so they
-    // look like lines, not tall rects. Every other shape ships as a
-    // 250x250 square — same as slide-ui's rect/ellipse defaults.
     const isLine = shapeType === 'line';
-    const left = 378;
-    const top = 142;
-    const width = isLine ? 300 : 250;
-    const height = isLine ? 24 : 250;
-
     const element = {
       id,
       zIndex: existingZ + 1,
-      left,
-      top,
-      width,
-      height,
+      left: 378,
+      top: 142,
+      width: isLine ? 300 : 250,
+      height: isLine ? 24 : 250,
       title: '',
       description: '',
-      // PageElementType.SHAPE = 0 (matches the slides-ui patch enum).
       type: 0,
       shape: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -122,24 +104,15 @@ function insertShapeOfType(shapeType: string): void {
         text: '',
         shapeProperties: isLine
           ? {
-              // Lines render via the LINE family in ShapeAdaptor; fill is
-              // transparent + a solid outline so the line is visible.
               shapeBackgroundFill: { rgb: 'rgba(0,0,0,0)' },
-              outline: {
-                outlineFill: { rgb: 'rgb(31, 41, 55)' },
-                weight: 2,
-              },
+              outline: { outlineFill: { rgb: 'rgb(31, 41, 55)' }, weight: 2 },
             }
           : {
               shapeBackgroundFill: { rgb: 'rgb(219, 234, 254)' },
-              outline: {
-                outlineFill: { rgb: 'rgb(37, 99, 235)' },
-                weight: 2,
-              },
+              outline: { outlineFill: { rgb: 'rgb(37, 99, 235)' }, weight: 2 },
             },
       },
     };
-
     void dispatchSlideCommand('slide.mutation.insert-element', {
       unitId,
       pageId,
@@ -147,22 +120,16 @@ function insertShapeOfType(shapeType: string): void {
       element: element as any,
     });
   } catch {
-    /* univer / model not ready — silent no-op (toolbar dispatch is
-     * non-critical; user can retry once the editor is fully wired) */
+    /* silent — Univer not ready */
   }
 }
 
-// Wave UX-P0#6 — undo/redo state subscription. Returns the live counts
-// so the buttons can be disabled when the corresponding stack is
-// empty. Polls the Univer DI container until it resolves the
-// IUndoRedoService (mount race — UniverSlide finishes wiring a few
-// ticks after the Toolbar mounts).
+// ============================================================ undo/redo ===
+
 function useUndoRedoCounts(): { undos: number; redos: number } {
   const [counts, setCounts] = useState<{ undos: number; redos: number }>({ undos: 0, redos: 0 });
-
   useEffect(() => {
     let disposed = false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let sub: { unsubscribe?: () => void } | undefined;
     const tryWire = () => {
       if (disposed) return;
@@ -179,7 +146,6 @@ function useUndoRedoCounts(): { undos: number; redos: number } {
           if (!disposed) setCounts({ undos: s.undos, redos: s.redos });
         });
       } catch {
-        /* service not registered yet — retry after a tick */
         window.setTimeout(tryWire, 200);
       }
     };
@@ -189,119 +155,500 @@ function useUndoRedoCounts(): { undos: number; redos: number } {
       sub?.unsubscribe?.();
     };
   }, []);
-
   return counts;
 }
 
+// ============================================================ format state ===
+
+// Local mirror of the inline-format toggle state. We can't subscribe to the
+// docs-ui selection cleanly from outside the Univer DI scope without adding
+// a fork patch, so this is a best-effort snapshot — each format command
+// toggles the local flag optimistically. The visual `aria-pressed` state
+// gives the user immediate feedback; when the selection moves the next
+// keypress in the editor resyncs from Univer's actual run style.
+interface FormatState {
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strikethrough: boolean;
+  font: string;
+  size: number;
+  align: AlignValue;
+  list: ListMode;
+  lineSpacing: number;
+  textColor: string | null;
+  fillColor: string | null;
+  borderColor: string | null;
+}
+
+const DEFAULT_FORMAT: FormatState = {
+  bold: false,
+  italic: false,
+  underline: false,
+  strikethrough: false,
+  font: 'Inter',
+  size: 18,
+  align: 'left',
+  list: 'none',
+  lineSpacing: 1.15,
+  textColor: null,
+  fillColor: null,
+  borderColor: null,
+};
+
+// ============================================================ resize ===
+
+// Threshold breakdown:
+//   - Groups 1+3+5 (icon-only) ≈ 320 px including separators
+//   - Group 6 (font+size+B/I/U/S+3 colors) ≈ 440 px
+//   - Group 7 (align/list/indent×2/spacing/clear/link) ≈ 260 px
+//   - Slideshow CTA + padding ≈ 160 px
+// Total native width ≈ 1180 px. We collapse groups 6+7 into the overflow
+// popover when the available toolbar width drops below 1180 px.
+const OVERFLOW_BREAKPOINT = 1180;
+
+function useToolbarOverflow(rootRef: React.RefObject<HTMLDivElement>): boolean {
+  const [overflow, setOverflow] = useState(false);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        setOverflow(e.contentRect.width < OVERFLOW_BREAKPOINT);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [rootRef]);
+  return overflow;
+}
+
+// ============================================================ Toolbar ===
+
 export function Toolbar() {
+  const { t } = useTranslation();
+  const { undos, redos } = useUndoRedoCounts();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const overflow = useToolbarOverflow(rootRef);
+
+  const [format, setFormat] = useState<FormatState>(DEFAULT_FORMAT);
   const [shapesAnchor, setShapesAnchor] = useState<DOMRect | null>(null);
   const [bgAnchor, setBgAnchor] = useState<DOMRect | null>(null);
   const [layoutAnchor, setLayoutAnchor] = useState<DOMRect | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-  const { undos, redos } = useUndoRedoCounts();
+  const [overflowAnchor, setOverflowAnchor] = useState<DOMRect | null>(null);
 
+  // Dismiss the shapes popover on outside click.
+  const shapesContainerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!shapesAnchor) return;
     const handler = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setShapesAnchor(null);
+      if (!shapesContainerRef.current?.contains(e.target as Node)) setShapesAnchor(null);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [shapesAnchor]);
 
-  function onClick(btn: ToolButton, anchorEl: HTMLButtonElement) {
-    if (btn.menu) {
-      setShapesAnchor(shapesAnchor ? null : anchorEl.getBoundingClientRect());
-      return;
-    }
-    if (btn.id === 'theme') {
-      (window as Window & { __casualSlides_openThemes?: () => void }).__casualSlides_openThemes?.();
-      return;
-    }
-    if (btn.id === 'background') {
-      setBgAnchor(bgAnchor ? null : anchorEl.getBoundingClientRect());
-      return;
-    }
-    if (btn.id === 'layout') {
-      setLayoutAnchor(layoutAnchor ? null : anchorEl.getBoundingClientRect());
-      return;
-    }
-    // Toolbar "Line" shortcut — dispatches the same insertShapeOfType
-    // path as picking Line from the Shapes menu.
-    if (btn.cmd === 'casual-slides.command.insert-shape.line') {
-      insertShapeOfType('line');
-      return;
-    }
-    if (btn.cmd) void dispatchSlideCommand(btn.cmd, btn.cmdParams);
+  // Helper for "icon toggle" buttons that dispatch a single Univer command.
+  function toggleFormat<K extends keyof FormatState>(key: K, cmd: string) {
+    setFormat((prev) => ({ ...prev, [key]: !prev[key] }));
+    void dispatchSlideCommand(cmd);
   }
 
-  function onMenuItemClick(item: NonNullable<ToolButton['menu']>[number]) {
-    setShapesAnchor(null);
-    if (item.shapeType) {
-      insertShapeOfType(item.shapeType);
-      return;
-    }
-    if (item.cmd) void dispatchSlideCommand(item.cmd);
+  function applyFillColor(rgb: string) {
+    setFormat((p) => ({ ...p, fillColor: rgb }));
+    // TODO(univer): no docs-ui inline-format-fill exists. Slide shape fill
+    // would route through `slide.mutation.update-element` with a
+    // shapeProperties.shapeBackgroundFill patch — but we don't track the
+    // selected element id at the toolbar layer yet. Inert until the
+    // selection bridge in `docs/UNIVER_SLIDES_GAPS.md` lands.
   }
+  function applyBorderColor(rgb: string) {
+    setFormat((p) => ({ ...p, borderColor: rgb }));
+    // TODO(univer): same gap as fill — needs `slide.mutation.update-element`
+    // with the shape's outline patch + a selection bridge.
+  }
+  function applyTextColor(rgb: string) {
+    setFormat((p) => ({ ...p, textColor: rgb }));
+    void dispatchSlideCommand('doc.command.set-inline-format-text-color', { value: rgb });
+  }
+
+  // ──────────────────────────────────────────────────── render groups
+  // Each group is wrapped in a fragment so the overflow logic can swap
+  // chunks of buttons out cleanly.
+  const group1 = (
+    <>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.undoShortcut')}
+        aria-label={t('toolbar.undo')}
+        disabled={undos === 0}
+        onClick={() => void dispatchSlideCommand('univer.command.undo')}
+      >
+        <Icon name="undo" size={18} />
+      </button>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.redoShortcut')}
+        aria-label={t('toolbar.redo')}
+        disabled={redos === 0}
+        onClick={() => void dispatchSlideCommand('univer.command.redo')}
+      >
+        <Icon name="redo" size={18} />
+      </button>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.printShortcut')}
+        aria-label={t('toolbar.print')}
+        onClick={() => void dispatchSlideCommand('casual-slides.command.print')}
+      >
+        <Icon name="print" size={18} />
+      </button>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.paintFormat')}
+        aria-label={t('toolbar.paintFormat')}
+        // TODO(univer): no paint-format pipe exists. Implementation would
+        // snapshot the active selection's run style + push it onto the
+        // next mouse-up. Inert.
+      >
+        <Icon name="format_paint" size={18} />
+      </button>
+    </>
+  );
+
+  const group3 = (
+    <>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.textBox')}
+        aria-label={t('toolbar.textBox')}
+        onClick={() => void dispatchSlideCommand('slide.command.add-text')}
+      >
+        <Icon name="text_fields" size={18} />
+      </button>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.image')}
+        aria-label={t('toolbar.image')}
+        onClick={() => void dispatchSlideCommand('slide.command.insert-float-image')}
+      >
+        <Icon name="image" size={18} />
+      </button>
+      <div className="cs-toolbar2__split" ref={shapesContainerRef}>
+        <button
+          type="button"
+          className="cs-toolbar2__btn cs-toolbar2__btn--with-caret"
+          title={t('toolbar.shape')}
+          aria-label={t('toolbar.shape')}
+          aria-haspopup="menu"
+          aria-expanded={!!shapesAnchor}
+          onClick={(e) =>
+            setShapesAnchor(shapesAnchor ? null : e.currentTarget.getBoundingClientRect())
+          }
+        >
+          <Icon name="category" size={18} />
+          <Icon name="expand_more" size={12} className="cs-toolbar2__caret" />
+        </button>
+      </div>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.line')}
+        aria-label={t('toolbar.line')}
+        onClick={() => insertShapeOfType('line')}
+      >
+        <Icon name="horizontal_rule" size={18} />
+      </button>
+    </>
+  );
+
+  const group5 = (
+    <>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.newSlideShortcut')}
+        aria-label={t('toolbar.newSlide')}
+        onClick={() => void dispatchSlideCommand('slide.operation.append-slide')}
+      >
+        <Icon name="add_to_photos" size={18} />
+      </button>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.layout')}
+        aria-label={t('toolbar.layout')}
+        onClick={(e) =>
+          setLayoutAnchor(layoutAnchor ? null : e.currentTarget.getBoundingClientRect())
+        }
+      >
+        <Icon name="view_compact" size={18} />
+      </button>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.theme')}
+        aria-label={t('toolbar.theme')}
+        onClick={() =>
+          (window as Window & { __casualSlides_openThemes?: () => void }).__casualSlides_openThemes?.()
+        }
+      >
+        <Icon name="palette" size={18} />
+      </button>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.background')}
+        aria-label={t('toolbar.background')}
+        onClick={(e) =>
+          setBgAnchor(bgAnchor ? null : e.currentTarget.getBoundingClientRect())
+        }
+      >
+        <Icon name="format_color_fill" size={18} />
+      </button>
+    </>
+  );
+
+  const group6 = (
+    <>
+      <FontFamilyPicker
+        value={format.font}
+        onChange={(font) => setFormat((p) => ({ ...p, font }))}
+      />
+      <FontSizePicker
+        value={format.size}
+        onChange={(size) => setFormat((p) => ({ ...p, size }))}
+      />
+      <button
+        type="button"
+        className={`cs-toolbar2__btn ${format.bold ? 'is-active' : ''}`}
+        title={t('toolbar.boldShortcut')}
+        aria-label={t('toolbar.bold')}
+        aria-pressed={format.bold}
+        onClick={() => toggleFormat('bold', 'doc.command.set-inline-format-bold')}
+      >
+        <Icon name="bold" size={16} />
+      </button>
+      <button
+        type="button"
+        className={`cs-toolbar2__btn ${format.italic ? 'is-active' : ''}`}
+        title={t('toolbar.italicShortcut')}
+        aria-label={t('toolbar.italic')}
+        aria-pressed={format.italic}
+        onClick={() => toggleFormat('italic', 'doc.command.set-inline-format-italic')}
+      >
+        <Icon name="italic" size={16} />
+      </button>
+      <button
+        type="button"
+        className={`cs-toolbar2__btn ${format.underline ? 'is-active' : ''}`}
+        title={t('toolbar.underlineShortcut')}
+        aria-label={t('toolbar.underline')}
+        aria-pressed={format.underline}
+        onClick={() => toggleFormat('underline', 'doc.command.set-inline-format-underline')}
+      >
+        <Icon name="underline" size={16} />
+      </button>
+      <button
+        type="button"
+        className={`cs-toolbar2__btn ${format.strikethrough ? 'is-active' : ''}`}
+        title={t('toolbar.strikethroughShortcut')}
+        aria-label={t('toolbar.strikethrough')}
+        aria-pressed={format.strikethrough}
+        onClick={() => toggleFormat('strikethrough', 'doc.command.set-inline-format-strikethrough')}
+      >
+        <Icon name="strikethrough" size={16} />
+      </button>
+      <ColorPicker
+        scope="text"
+        value={format.textColor}
+        onPick={applyTextColor}
+        icon="format_color_text"
+        label={t('toolbar.textColor')}
+      />
+      <ColorPicker
+        scope="fill"
+        value={format.fillColor}
+        onPick={applyFillColor}
+        onClear={() => applyFillColor('rgba(0,0,0,0)')}
+        icon="format_color_fill"
+        label={t('toolbar.fillColor')}
+      />
+      <ColorPicker
+        scope="border"
+        value={format.borderColor}
+        onPick={applyBorderColor}
+        onClear={() => applyBorderColor('rgba(0,0,0,0)')}
+        icon="border_color"
+        label={t('toolbar.borderColor')}
+      />
+    </>
+  );
+
+  const group7 = (
+    <>
+      <AlignPicker
+        value={format.align}
+        onChange={(align) => setFormat((p) => ({ ...p, align }))}
+      />
+      <ListPicker
+        mode={format.list}
+        onChange={(list) => setFormat((p) => ({ ...p, list }))}
+      />
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.indentDecrease')}
+        aria-label={t('toolbar.indentDecrease')}
+        onClick={() =>
+          void dispatchSlideCommand('doc.command.change-list-nesting-level', { type: 'decrease' })
+        }
+      >
+        <Icon name="format_indent_decrease" size={16} />
+      </button>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.indentIncrease')}
+        aria-label={t('toolbar.indentIncrease')}
+        onClick={() =>
+          void dispatchSlideCommand('doc.command.change-list-nesting-level', { type: 'increase' })
+        }
+      >
+        <Icon name="format_indent_increase" size={16} />
+      </button>
+      <LineSpacingPicker
+        value={format.lineSpacing}
+        onChange={(lineSpacing) => setFormat((p) => ({ ...p, lineSpacing }))}
+      />
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.clearFormatting')}
+        aria-label={t('toolbar.clearFormatting')}
+        // TODO(univer): docs-ui has no `clear-formatting` command in
+        // v0.24.0. Implementation reuses RichTextEditingMutation to wipe
+        // `textRun.ts` over the selection. Inert until the patch lands.
+      >
+        <Icon name="format_clear" size={16} />
+      </button>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar.insertLinkShortcut')}
+        aria-label={t('toolbar.insertLink')}
+        // TODO(univer): hyperlink inline format is not exposed as a
+        // docs-ui command in 0.24.0. Univer ships a HYPERLINK custom-range
+        // type but no UI command id. Inert.
+      >
+        <Icon name="link" size={16} />
+      </button>
+    </>
+  );
+
+  // Slides menu items rendered by the popover. Memo'd so the same array
+  // identity flows into the popover render and the keyboard handler.
+  const shapesMenuRendered = useMemo(
+    () => (
+      <div
+        className="cs-toolbar2__popover cs-toolbar2__popover--shapes"
+        style={
+          shapesAnchor
+            ? { top: shapesAnchor.bottom + 6, left: shapesAnchor.left }
+            : undefined
+        }
+        role="menu"
+        aria-label={t('toolbar.shape')}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {SHAPES_MENU.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="menuitem"
+            className="cs-toolbar2__popover-item"
+            onClick={() => {
+              setShapesAnchor(null);
+              if (item.shapeType) insertShapeOfType(item.shapeType);
+              else if (item.cmd) void dispatchSlideCommand(item.cmd);
+            }}
+          >
+            <Icon name={item.icon} size={14} />
+            <span>{t(item.labelKey)}</span>
+          </button>
+        ))}
+      </div>
+    ),
+    [shapesAnchor, t],
+  );
 
   return (
-    <div className="cs-toolbar" ref={ref}>
-      <div className="cs-toolbar__row">
-        {TOOLS.map((t, i) =>
-          isSep(t) ? (
-            <span key={`sep-${i}`} className="cs-toolbar__sep" aria-hidden="true" />
-          ) : (
+    <div className="cs-toolbar" ref={rootRef}>
+      <div className="cs-toolbar2__row" role="toolbar" aria-label={t('toolbar.group.actions')}>
+        {group1}
+        <span className="cs-toolbar__sep" aria-hidden="true" />
+        {group3}
+        <span className="cs-toolbar__sep" aria-hidden="true" />
+        {group5}
+        {!overflow && (
+          <>
+            <span className="cs-toolbar__sep" aria-hidden="true" />
+            {group6}
+            <span className="cs-toolbar__sep" aria-hidden="true" />
+            {group7}
+          </>
+        )}
+        {overflow && (
+          <>
+            <span className="cs-toolbar__sep" aria-hidden="true" />
             <button
-              key={t.id}
               type="button"
-              className={`cs-toolbar__btn ${t.menu ? 'cs-toolbar__btn--split' : ''}`}
-              title={t.label}
-              aria-label={t.label}
-              disabled={
-                t.disabled ||
-                (t.dynamicDisabled === 'undo' && undos === 0) ||
-                (t.dynamicDisabled === 'redo' && redos === 0)
+              className="cs-toolbar2__btn"
+              title={t('toolbar.moreActions')}
+              aria-label={t('toolbar.moreActions')}
+              aria-haspopup="dialog"
+              aria-expanded={!!overflowAnchor}
+              onClick={(e) =>
+                setOverflowAnchor(overflowAnchor ? null : e.currentTarget.getBoundingClientRect())
               }
-              onClick={(e) => onClick(t, e.currentTarget)}
             >
-              <Icon name={t.icon} size={18} />
-              {t.menu && <Icon name="expand_more" size={14} className="cs-toolbar__caret" />}
+              <Icon name="more_vert" size={18} />
             </button>
-          ),
+          </>
         )}
         <div className="cs-toolbar__spacer" />
         <button
           type="button"
           className="cs-btn cs-btn--accent"
-          title="Start slideshow (F5)"
+          title={t('toolbar.slideshowShortcut')}
+          aria-label={t('toolbar.slideshow')}
           onClick={() => {
-            const open = (window as Window & { __casualSlides_openSlideshow?: () => void }).__casualSlides_openSlideshow;
+            const open = (window as Window & { __casualSlides_openSlideshow?: () => void })
+              .__casualSlides_openSlideshow;
             open?.();
           }}
         >
           <Icon name="play_arrow" size={16} />
-          <span>Slideshow</span>
+          <span>{t('toolbar.slideshow')}</span>
         </button>
       </div>
-      {shapesAnchor && (
-        <div
-          className="cs-toolbar__popover cs-toolbar__popover--shapes"
-          style={{ top: shapesAnchor.bottom + 4, left: shapesAnchor.left }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {SHAPES_MENU.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="cs-toolbar__popover-item"
-              onClick={() => onMenuItemClick(item)}
-            >
-              {item.icon && <Icon name={item.icon} size={16} />}
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
+
+      {shapesAnchor && shapesMenuRendered}
+
+      {overflow && overflowAnchor && (
+        <OverflowPopover anchor={overflowAnchor} onClose={() => setOverflowAnchor(null)}>
+          {group6}
+          <span className="cs-toolbar__sep" aria-hidden="true" />
+          {group7}
+        </OverflowPopover>
       )}
+
       <BackgroundPicker anchorRect={bgAnchor} onClose={() => setBgAnchor(null)} />
       <LayoutPicker anchorRect={layoutAnchor} onClose={() => setLayoutAnchor(null)} />
     </div>
