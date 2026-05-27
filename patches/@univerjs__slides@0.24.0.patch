@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..3040213b7abf48644f64995e26438f47415e9f27 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1490791e402bf1ec3a819381d32b23ca91d1d060 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -572,7 +572,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..3040213b7abf48644f64995e26438f47
  			return new _univerjs_engine_render.Circle(id, {
  				fill,
  				top,
-@@ -813,9 +1275,148 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -813,9 +1275,169 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -601,12 +601,33 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..3040213b7abf48644f64995e26438f47
 +			for (let i = 0; i < scaled.length; i += 2) pairs.push(scaled[i] + "," + scaled[i + 1]);
 +			return cmd + pairs.join(" ");
 +		});
++		// D17 — arrowhead V-marker. See es bundle for full comment.
++		const _appendArrowheads = (basePath, cy, isLineFamily) => {
++			if (!isLineFamily || !outline) return basePath;
++			const sizeFor = (a) => {
++				const lMap = { sm: 6, med: 9, lg: 12 };
++				const wMap = { sm: 4, med: 6, lg: 8 };
++				return { l: lMap[(a && a.len) || "med"] || 9, halfW: ((wMap[(a && a.w) || "med"] || 6) / 2) };
++			};
++			const tail = outline.tailEnd;
++			const head = outline.headEnd;
++			let augmented = basePath;
++			if (tail && tail.type && tail.type !== "none") {
++				const { l, halfW } = sizeFor(tail);
++				augmented += ` M ${w - l} ${cy - halfW} L ${w} ${cy} L ${w - l} ${cy + halfW}`;
++			}
++			if (head && head.type && head.type !== "none") {
++				const { l, halfW } = sizeFor(head);
++				augmented += ` M ${l} ${cy - halfW} L 0 ${cy} L ${l} ${cy + halfW}`;
++			}
++			return augmented;
++		};
 +		const pathData = (() => {
 +			if (_customPath) return _scaleCustomPath(_customPath);
 +			switch (shapeType) {
 +				case "line":
 +				case "straightConnector1":
-+					return `M 0 ${h / 2} L ${w} ${h / 2}`;
++					return _appendArrowheads(`M 0 ${h / 2} L ${w} ${h / 2}`, h / 2, true);
 +				case "triangle":
 +					return `M ${w / 2} 0 L ${w} ${h} L 0 ${h} Z`;
 +				case "rtTriangle":
@@ -723,7 +744,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..3040213b7abf48644f64995e26438f47
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..c1cc786bb4e0342d914d6a15bd666e2826e13c39 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..152b0401c10cd03f5998beb7eba1ac143ec0bde2 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
@@ -1325,7 +1346,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..c1cc786bb4e0342d914d6a15bd666e28
  			return new Circle(id, {
  				fill,
  				top,
-@@ -812,9 +1295,156 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -812,9 +1295,183 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -1358,6 +1379,33 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..c1cc786bb4e0342d914d6a15bd666e28
 +			for (let i = 0; i < scaled.length; i += 2) pairs.push(scaled[i] + "," + scaled[i + 1]);
 +			return cmd + pairs.join(" ");
 +		});
++		// D17 — arrowhead V-marker. Appends a short V (^>) shape to the
++		// path at start (headEnd) and/or end (tailEnd). Strokes-only so
++		// it picks up the same outline colour as the line itself — no
++		// separate filled-path needed. Sizes are constants based on the
++		// w/len attributes (sm/med/lg). Sufficient visual cue that "this
++		// is an arrow" for the line family; proper filled triangle /
++		// stealth / diamond / oval is a future iteration.
++		const _appendArrowheads = (basePath, cy, isLineFamily) => {
++			if (!isLineFamily || !outline) return basePath;
++			const sizeFor = (a) => {
++				const lMap = { sm: 6, med: 9, lg: 12 };
++				const wMap = { sm: 4, med: 6, lg: 8 };
++				return { l: lMap[(a && a.len) || "med"] || 9, halfW: ((wMap[(a && a.w) || "med"] || 6) / 2) };
++			};
++			const tail = outline.tailEnd;
++			const head = outline.headEnd;
++			let augmented = basePath;
++			if (tail && tail.type && tail.type !== "none") {
++				const { l, halfW } = sizeFor(tail);
++				augmented += ` M ${w - l} ${cy - halfW} L ${w} ${cy} L ${w - l} ${cy + halfW}`;
++			}
++			if (head && head.type && head.type !== "none") {
++				const { l, halfW } = sizeFor(head);
++				augmented += ` M ${l} ${cy - halfW} L 0 ${cy} L ${l} ${cy + halfW}`;
++			}
++			return augmented;
++		};
 +		const pathData = (() => {
 +			if (_customPath) return _scaleCustomPath(_customPath);
 +			switch (shapeType) {
@@ -1366,7 +1414,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..c1cc786bb4e0342d914d6a15bd666e28
 +					// Horizontal line at vertical centre; covers the common
 +					// case of pptx lines stored with cy=0 (our F4 import
 +					// fix already inflates the bbox to outline width).
-+					return `M 0 ${h / 2} L ${w} ${h / 2}`;
++					return _appendArrowheads(`M 0 ${h / 2} L ${w} ${h / 2}`, h / 2, true);
 +				case "triangle":
 +					return `M ${w / 2} 0 L ${w} ${h} L 0 ${h} Z`;
 +				case "rtTriangle":
