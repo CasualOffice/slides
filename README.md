@@ -5,8 +5,8 @@
 **Open-source self-hosted web slides editor with `.pptx` round-trip — an alternative to Google Slides, PowerPoint Online, and PPTist (deeper fidelity than the latter; closer to native Office UX than the former two).**
 
 [![Deploy](https://github.com/schnsrw/slides/actions/workflows/deploy-pages.yml/badge.svg?branch=main)](https://github.com/schnsrw/slides/actions/workflows/deploy-pages.yml)
-[![Fidelity](https://img.shields.io/badge/pptx%20fidelity-68%2F87%20%E2%9C%93-brightgreen)](./docs/FIDELITY_TRACKER.md)
-[![Wave](https://img.shields.io/badge/latest-wave%207o-blue)](./docs/FIDELITY_TRACKER.md)
+[![Fidelity](https://img.shields.io/badge/pptx%20fidelity-93%2F99%20%E2%9C%93-brightgreen)](./docs/FIDELITY_TRACKER.md)
+[![Wave](https://img.shields.io/badge/latest-wave%2012-blue)](./docs/FIDELITY_TRACKER.md)
 [![Version](https://img.shields.io/badge/version-v0.0.0%20%C2%B7%20pre--tag-orange)](./PLAN.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 

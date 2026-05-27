@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..b9f8c6ec161f2d693995455eb6adf5dec2f3fbbb 100644
+index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..3040213b7abf48644f64995e26438f47415e9f27 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -45,6 +45,9 @@ let PageElementType = /* @__PURE__ */ function(PageElementType) {
@@ -476,7 +476,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..b9f8c6ec161f2d693995455eb6adf5de
 +			} else if (cap === "flat") {
 +				strokeStyle.strokeLineCap = "butt";
 +			}
-+		}
+ 		}
 +		// Casual Slides patch — outerShdw (drop shadow) via the canvas
 +		// shadow* shape props. effectLst.outerShdw carries `color,
 +		// blurRad, dist, dir` where dist is in EMU and dir is in
@@ -530,7 +530,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..b9f8c6ec161f2d693995455eb6adf5de
 +			shadowStyle.shadowBlur = radPx;
 +			shadowStyle.shadowOpacity = 0.6;
 +			shadowStyle.shadowForStrokeEnabled = true;
- 		}
++		}
 +		// Casual Slides patch — innerShdw / reflection / blur TODOs.
 +		// innerShdw: parsed identically to outerShdw but the shadow goes
 +		//   inside the shape's outline. Canvas has no native inner-shadow
@@ -572,21 +572,37 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..b9f8c6ec161f2d693995455eb6adf5de
  			return new _univerjs_engine_render.Circle(id, {
  				fill,
  				top,
-@@ -813,9 +1275,132 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -813,9 +1275,148 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
 -				...strokeStyle
 +				...strokeStyle,
 +				...shadowStyle
- 			});
- 		}
++			});
++		}
 +		// Casual Slides patch — per-prstGeom Path rendering for the most
 +		// common non-rect shapes. Falls back to Rect for anything not
 +		// listed. Coordinates are in object-local space (0..w / 0..h).
 +		const w = width || 0;
 +		const h = height || 0;
++		// D6 — custGeom: scale normalised pathData (0..1 fractions) to
++		// absolute object-local coords (0..w / 0..h).
++		const _customPath = shapeProperties && typeof shapeProperties.pathData === "string" && shapeProperties.pathData.length > 0 ? shapeProperties.pathData : null;
++		const _scaleCustomPath = (d) => d.replace(/([MLCQZmlcqz])([^MLCQZmlcqz]*)/g, (_m, cmd, args) => {
++			if (cmd === "Z" || cmd === "z") return cmd;
++			const nums = args.trim().split(/[\s,]+/).filter(Boolean);
++			const scaled = nums.map((n, i) => {
++				const v = parseFloat(n);
++				if (!Number.isFinite(v)) return n;
++				return (i % 2 === 0 ? v * w : v * h).toFixed(2);
++			});
++			const pairs = [];
++			for (let i = 0; i < scaled.length; i += 2) pairs.push(scaled[i] + "," + scaled[i + 1]);
++			return cmd + pairs.join(" ");
++		});
 +		const pathData = (() => {
++			if (_customPath) return _scaleCustomPath(_customPath);
 +			switch (shapeType) {
 +				case "line":
 +				case "straightConnector1":
@@ -680,8 +696,8 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..b9f8c6ec161f2d693995455eb6adf5de
 +				forceRender: true,
 +				...strokeStyle,
 +				...shadowStyle
-+			});
-+		}
+ 			});
+ 		}
 +		// Fallback for everything else — at least keep the element visible
 +		// as a bounding rect with the right fill + outline. Better than
 +		// disappearing entirely.
@@ -707,7 +723,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..b9f8c6ec161f2d693995455eb6adf5de
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..e9df76c10d44d35d27e538ea7c4e87b5f14b442c 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..c1cc786bb4e0342d914d6a15bd666e2826e13c39 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
@@ -1213,7 +1229,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..e9df76c10d44d35d27e538ea7c4e87b5
 +			} else if (cap === "flat") {
 +				strokeStyle.strokeLineCap = "butt";
 +			}
-+		}
+ 		}
 +		// Casual Slides patch — outerShdw (drop shadow) via the canvas
 +		// shadow* shape props. effectLst.outerShdw carries `color,
 +		// blurRad, dist, dir` where dist is in EMU and dir is in
@@ -1267,7 +1283,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..e9df76c10d44d35d27e538ea7c4e87b5
 +			shadowStyle.shadowBlur = radPx;
 +			shadowStyle.shadowOpacity = 0.6;
 +			shadowStyle.shadowForStrokeEnabled = true;
- 		}
++		}
 +		// Casual Slides patch — innerShdw / reflection / blur TODOs.
 +		// innerShdw: parsed identically to outerShdw but the shadow goes
 +		//   inside the shape's outline. Canvas has no native inner-shadow
@@ -1309,21 +1325,41 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..e9df76c10d44d35d27e538ea7c4e87b5
  			return new Circle(id, {
  				fill,
  				top,
-@@ -812,9 +1295,136 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -812,9 +1295,156 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
 -				...strokeStyle
 +				...strokeStyle,
 +				...shadowStyle
- 			});
- 		}
++			});
++		}
 +		// Casual Slides patch — per-prstGeom Path rendering for the most
 +		// common non-rect shapes. Falls back to Rect for anything not
 +		// listed. Coordinates are in object-local space (0..w / 0..h).
 +		const w = width || 0;
 +		const h = height || 0;
++		// D6 — custGeom: the importer emits a normalised SVG-style path
++		// (coords are 0..1 fractions of the bbox) on shapeProperties.pathData.
++		// Scale it to absolute object-local coords (0..w / 0..h) so the
++		// engine-render Path can paint it. Each command's numbers
++		// alternate x, y; multiply x by w and y by h, preserve commas
++		// between point pairs.
++		const _customPath = shapeProperties && typeof shapeProperties.pathData === "string" && shapeProperties.pathData.length > 0 ? shapeProperties.pathData : null;
++		const _scaleCustomPath = (d) => d.replace(/([MLCQZmlcqz])([^MLCQZmlcqz]*)/g, (_m, cmd, args) => {
++			if (cmd === "Z" || cmd === "z") return cmd;
++			const nums = args.trim().split(/[\s,]+/).filter(Boolean);
++			const scaled = nums.map((n, i) => {
++				const v = parseFloat(n);
++				if (!Number.isFinite(v)) return n;
++				return (i % 2 === 0 ? v * w : v * h).toFixed(2);
++			});
++			const pairs = [];
++			for (let i = 0; i < scaled.length; i += 2) pairs.push(scaled[i] + "," + scaled[i + 1]);
++			return cmd + pairs.join(" ");
++		});
 +		const pathData = (() => {
++			if (_customPath) return _scaleCustomPath(_customPath);
 +			switch (shapeType) {
 +				case "line":
 +				case "straightConnector1":
@@ -1421,8 +1457,8 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..e9df76c10d44d35d27e538ea7c4e87b5
 +				forceRender: true,
 +				...strokeStyle,
 +				...shadowStyle
-+			});
-+		}
+ 			});
+ 		}
 +		// Fallback for everything else — at least keep the element visible
 +		// as a bounding rect with the right fill + outline. Better than
 +		// disappearing entirely.
