@@ -3984,12 +3984,69 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
       if (hfOptOuts.has(phType)) continue;
       serviceCounter += 1;
       const elId = `s${pageOrdinal}-svc-${phType}-${serviceCounter}`;
+      // C18 — `<a:fld type="slidenum">` carries the literal placeholder
+      // text ‹#› (OOXML's slide-number sentinel; PptxGenJS uses
+      // `<#>`). PowerPoint and LibreOffice substitute the actual slide
+      // number at render time. We do the substitution at import time
+      // for sldNum service placeholders so the rendered text shows the
+      // real page number instead of the sentinel. Date and footer
+      // placeholders keep their authored content (footer is user text;
+      // date sentinels are a follow-up — would need locale + format).
+      const SLIDENUM_RX = /[‹<]#[›>]/g;
+      const substitute = phType === 'sldNum'
+        ? (s: string) => s.replace(SLIDENUM_RX, String(pageOrdinal))
+        : (s: string) => s;
+      const substitutedText = substitute(svc.text);
+      // If we have a rich body, the same substitution has to happen on
+      // dataStream + every textRun's [st, ed] needs adjusting because
+      // ‹#› (3 chars) → "1" (1-2 chars) shifts indices. Easiest: rewrite
+      // the dataStream and the runs in one pass.
+      let substitutedRich: IDocumentData | undefined;
+      if (svc.rich) {
+        const body = svc.rich.body;
+        if (body && typeof body.dataStream === 'string' && SLIDENUM_RX.test(body.dataStream)) {
+          // Build a delta map: char index → cumulative shift after that
+          // index. Then walk runs and adjust.
+          const replaced = String(pageOrdinal);
+          // Find every occurrence of ‹#› and pre-compute resulting indices.
+          const matches: Array<{ start: number; len: number }> = [];
+          // Reset the regex (it has /g state).
+          const rx = /[‹<]#[›>]/g;
+          let m: RegExpExecArray | null;
+          while ((m = rx.exec(body.dataStream)) !== null) {
+            matches.push({ start: m.index, len: m[0].length });
+          }
+          const shiftAt = (idx: number) => {
+            let delta = 0;
+            for (const mt of matches) {
+              if (mt.start + mt.len <= idx) delta += replaced.length - mt.len;
+              else if (mt.start < idx) delta += replaced.length - (idx - mt.start);
+            }
+            return delta;
+          };
+          const newDataStream = body.dataStream.replace(SLIDENUM_RX, replaced);
+          const newTextRuns = (body.textRuns ?? []).map((r) => ({
+            ...r,
+            st: r.st + shiftAt(r.st),
+            ed: r.ed + shiftAt(r.ed),
+          }));
+          const newParagraphs = (body.paragraphs ?? []).map((p) => ({
+            ...p,
+            startIndex: p.startIndex + shiftAt(p.startIndex),
+          }));
+          substitutedRich = {
+            ...svc.rich,
+            id: `${elId}-doc`,
+            body: { ...body, dataStream: newDataStream, textRuns: newTextRuns, paragraphs: newParagraphs },
+          };
+        } else {
+          substitutedRich = { ...svc.rich, id: `${elId}-doc` };
+        }
+      }
       const richText: ISlideRichTextProps = {
-        text: svc.text,
+        text: substitutedText,
         ...svc.props,
-        ...(svc.rich
-          ? { rich: { ...svc.rich, id: `${elId}-doc` } as IDocumentData }
-          : {}),
+        ...(substitutedRich ? { rich: substitutedRich } : {}),
       } as ISlideRichTextProps;
       // Service placeholders sit ABOVE the authored content so the
       // footer / page number paints over a backdrop image. zIndex picks
