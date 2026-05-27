@@ -157,12 +157,28 @@ function emitImageElement(slide: pptxgen.Slide, element: IPageElement, image: II
 }
 
 function emitTextElement(slide: pptxgen.Slide, element: IPageElement, richText: ISlideRichTextProps) {
+  // C13 export-side — `documentStyle.renderConfig.fontScale` carries
+  // the parsed `<a:normAutofit fontScale>` fraction. The importer
+  // stopped multiplying `fs` at import (so the model preserves the
+  // authored size and re-import doesn't double-shrink). On export we
+  // BAKE the multiplication back into the static `fs` so PowerPoint
+  // reads the visually-correct size — PptxGenJS doesn't expose a
+  // `normAutofit fontScale="N"` opt, so the autofit metadata itself is
+  // intentionally lost. Net effect: bytes-different round-trip, but
+  // visually stable through any number of edit / save cycles.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fontScale = (richText.rich as any)?.documentStyle?.renderConfig?.fontScale;
+  const baseFs = richText.fs ?? 18;
+  const fs = typeof fontScale === 'number' && fontScale > 0 && fontScale !== 1
+    ? Math.round(baseFs * fontScale * 10) / 10
+    : baseFs;
+
   slide.addText(richText.text ?? '', {
     x: px2in(element.left),
     y: px2in(element.top),
     w: px2in(element.width),
     h: px2in(element.height),
-    fontSize: richText.fs ?? 18,
+    fontSize: fs,
     fontFace: richText.ff || undefined,
     color: normalizeColor(richText.cl?.rgb, '111827'),
     bold: !!richText.bl,
