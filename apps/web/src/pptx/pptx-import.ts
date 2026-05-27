@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
+import { loadFontsForSnapshot } from './fonts-loader';
 import type { IPageElement, ISlideData, ISlidePage, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
 import type { IBullet, ICustomRange, IDocumentData, IDocumentStyle, IParagraph, ITextRun, IParagraphStyle } from '@univerjs/core';
@@ -3896,7 +3897,7 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
   // back to filename when absent so legacy decks still round-trip.
   const title = coreProps.title ?? fileName.replace(/\.pptx$/i, '');
 
-  return {
+  const snapshot: ISlideData = {
     id: `imported-${Date.now().toString(36)}`,
     title,
     pageSize,
@@ -3934,5 +3935,20 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
           ],
         }
       : {}),
-  };
+  } as ISlideData;
+
+  // Scan the just-built snapshot for every distinct font family it
+  // references and ask Google Fonts to load them. Fonts not in the
+  // catalog 404 silently (display=swap falls back to system + Arial).
+  // The bulk preload in index.html keeps the top ~50 deck families
+  // warm for first paint; this dynamic pass covers idiosyncratic
+  // family names the deck author picked. Runs only in the browser —
+  // no-op under Node test runners.
+  try {
+    loadFontsForSnapshot(snapshot);
+  } catch {
+    /* font injection is best-effort; never block import on it. */
+  }
+
+  return snapshot;
 }
