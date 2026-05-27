@@ -692,6 +692,20 @@ function parseRunProps(
     }
   }
 
+  // B16 — text caps transform. `<a:rPr cap="all|small|none">` is the
+  // OOXML equivalent of CSS `text-transform`. Common on title styles
+  // (e.g. master defaults to `cap="all"` so the title renders as
+  // ALL CAPS regardless of how the author typed it). Univer's
+  // IStyleBase has no text-transform field, so we mark the style with
+  // a private `_cap` token and uppercase / lowercase the text at run
+  // emission time. Lossy for round-trip (export won't re-emit
+  // `cap="all"`) until a fork patch adds a proper IStyleBase field.
+  const capRaw = node['@cap'];
+  if (typeof capRaw === 'string' && capRaw !== 'none' && capRaw.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (out as any)._cap = capRaw;
+  }
+
   // Color: <a:solidFill><a:srgbClr val="…"/></a:solidFill> or
   // <a:solidFill><a:schemeClr val="accent1"/></a:solidFill> resolved
   // via the theme color scheme (J2).
@@ -1254,13 +1268,26 @@ function extractRichDoc(
       regularRunIdx += 1;
       if (!r) continue;
       const tNode = findChild(r, 'a:t');
-      const txt = readT(tNode);
-      segmentText.push(txt);
-      dataStream.push(txt);
+      let txt = readT(tNode);
 
       const rPr = findChild(r, 'a:rPr');
       const runStyle = parseRunProps(rPr, theme, isTitle);
       const ts = { ...(fallbackProps ?? {}), ...runStyle };
+
+      // B16 — apply text-caps transform from runStyle._cap (or
+      // inherited from fallback). `all` → uppercase, `small` → also
+      // uppercase (Univer doesn't have small-caps glyphs; fold to
+      // upper for visual proximity). The marker is private so we
+      // delete it before the style lands on the textRun.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const effCap = (ts as any)._cap;
+      if (typeof effCap === 'string' && (effCap === 'all' || effCap === 'small')) {
+        txt = txt.toLocaleUpperCase();
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (ts as any)._cap;
+      segmentText.push(txt);
+      dataStream.push(txt);
 
       if (txt.length > 0) {
         textRuns.push({ st: cursor, ed: cursor + txt.length, ts });
