@@ -5,7 +5,7 @@ Constraint: **SVG icons only, no emoji, no icon fonts**.
 
 Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked · `[-]` won't fix
 
-Last update: 2026-05-28 — **Waves 1 + 2 pushed** (commits 5551714 + 75a4eab). Worktrees retired. Brand fully cyan'd (CSS + SVG logo + favicon + theme-color). W1b (i18n string sweep) stopped mid-flight due to worktree bleed; re-running serially next.
+Last update: 2026-05-28 — **Waves 1 + 2 pushed** (5551714, 75a4eab, 9ba5c5f, e018737, 93aa6bb). Brand fully cyan. Icons have outlined+filled variants wired on every toggle. Toolbar overflow measures real scrollWidth. Wave 3 dispatched: Format pane, Slideshow presenter, Find &amp; replace — three parallel agents in worktrees.
 
 ---
 
@@ -110,7 +110,42 @@ Scope: NEW `ShortcutsDialog.tsx`, `<ShortcutsProvider />` self-mounts in `main.t
 
 ---
 
-## Wave 3 — pending dispatch (after Wave 2 merges)
+## Wave 3 — in flight (parallel agents, isolated worktrees)
+
+### Bucket W3-E — Right-side Format pane
+Owner: Agent-W3E (worktree)
+Scope: NEW `FormatPane.tsx` + sub-section files, self-mount via `<FormatPaneProvider />` in `main.tsx`, new `dialogs.format` i18n namespace, styles.css append.
+- [~] Selection-aware show/hide (subscribe Univer selection).
+- [~] Position / Size / Fill / Border / Shadow / Opacity sections.
+- [~] Collapsible sections with localStorage persistence.
+- [~] 280 px right rail, 180 ms slide-in.
+
+### Bucket W3-G — Slideshow + presenter view
+Owner: Agent-W3G (worktree)
+Scope: MOD `SlideShow.tsx`, NEW `PresenterView.tsx` + `SlideTile.tsx`, `slideshow.*` i18n, styles.css append.
+- [~] Presenter view (two-pane: current + next + notes + timer).
+- [~] B / W blackscreen toggles.
+- [~] Touch swipe (60 px / 100 ms).
+- [~] Defer auto-fullscreen until user gesture.
+- [~] Counter overlay default off, reveal on mouse-move.
+- [~] Jump-to-slide by typing a number.
+- [~] Empty state Exit button.
+- [~] Mouse-cursor auto-hide after 2 s.
+
+### Bucket W3-J — Find &amp; replace dialog
+Owner: Agent-W3J (worktree)
+Scope: NEW `FindReplaceDialog.tsx` + `<FindReplaceProvider />` self-mount in `main.tsx`, new `dialogs.findReplace` namespace, styles.css append.
+- [~] Ctrl+F (Cmd+F Mac) intercept, guarded for editable surfaces.
+- [~] Match-case / whole-word / regex toggles (filled when active).
+- [~] Search across every TEXT page-element + shape text.
+- [~] Result count + Prev/Next navigation, auto-jump to matching slide.
+- [~] Animated match highlight (cyan ring, 600 ms).
+- [~] Replace one / Replace all (with `TODO(collab)` if direct snapshot write).
+- [~] Floating top-right card, 380 px, MD3 elevation.
+
+---
+
+## Wave 4 — pending dispatch (after Wave 3 merges)
 
 ### Bucket D — Google Slides toolbar (the BIG one)
 Scope: `Toolbar.tsx` + new components. Industry-standard format controls.
