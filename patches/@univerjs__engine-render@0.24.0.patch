@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index fafb8476bdd10d7a5224234dc0d7494756933de3..e7bd7f09d67b7354eddb06dc1e5d8a4f4ff05a28 100644
+index fafb8476bdd10d7a5224234dc0d7494756933de3..17a044126a2208d766b3f8f79500dd7a14967258 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -12648,6 +12648,12 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -55,7 +55,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e7bd7f09d67b7354eddb06dc1e5d8a4f
  		this._draw(mainCtx, void 0, realWidth, realHeight);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20633,19 +20665,38 @@ var RichText = class extends BaseObject {
+@@ -20633,21 +20665,45 @@ var RichText = class extends BaseObject {
  		const docModel = this.documentModel = new _univerjs_core.DocumentDataModel(this._documentData);
  		const docViewModel = new DocumentViewModel(docModel);
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -98,8 +98,15 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e7bd7f09d67b7354eddb06dc1e5d8a4f
 +				// is parsed by the importer as a fs multiplier on each run.
  				this._setTransForm();
  				this.refreshDocumentByDocData();
++				// Casual Slides patch — keep inner Documents.height in
++				// sync with the outer RichText.height on every resize.
++				if (this._documents) {
++					this._documents.transformByState({ width: this.width, height: this.height });
++				}
  			}
-@@ -20709,6 +20760,27 @@ var RichText = class extends BaseObject {
+ 		});
+ 	}
+@@ -20709,6 +20765,27 @@ var RichText = class extends BaseObject {
  		const m = this.transform.getMatrix();
  		mainCtx.save();
  		mainCtx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
@@ -127,7 +134,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e7bd7f09d67b7354eddb06dc1e5d8a4f
  		this._draw(mainCtx);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20757,12 +20829,24 @@ var RichText = class extends BaseObject {
+@@ -20757,16 +20834,37 @@ var RichText = class extends BaseObject {
  		};
  	}
  	_initialProps(props) {
@@ -147,15 +154,28 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e7bd7f09d67b7354eddb06dc1e5d8a4f
 +		// Casual Slides patch — respect caller's authored width / height
 +		// when provided. See es/index.js for the rationale (imported pptx
 +		// frames have authoritative bounds; renderer must keep them).
++		const _csOuterW = ((props === null || props === void 0 ? void 0 : props.width)) || ((contentSize === null || contentSize === void 0 ? void 0 : contentSize.width) || 0);
++		const _csOuterH = ((props === null || props === void 0 ? void 0 : props.height)) || ((contentSize === null || contentSize === void 0 ? void 0 : contentSize.height) || 0);
  		this.transformByState({
 -			width: (contentSize === null || contentSize === void 0 ? void 0 : contentSize.width) || 0,
 -			height: (contentSize === null || contentSize === void 0 ? void 0 : contentSize.height) || 0,
-+			width: ((props === null || props === void 0 ? void 0 : props.width)) || ((contentSize === null || contentSize === void 0 ? void 0 : contentSize.width) || 0),
-+			height: ((props === null || props === void 0 ? void 0 : props.height)) || ((contentSize === null || contentSize === void 0 ? void 0 : contentSize.height) || 0),
++			width: _csOuterW,
++			height: _csOuterH,
  			left: (props === null || props === void 0 ? void 0 : props.left) || 0,
  			top: (props === null || props === void 0 ? void 0 : props.top) || 0,
  			angle: props === null || props === void 0 ? void 0 : props.angle
-@@ -20776,11 +20860,17 @@ var RichText = class extends BaseObject {
+ 		});
++		// Casual Slides patch — propagate authored frame dimensions to
++		// the inner Documents so the docs anchor handler reads a
++		// non-zero height. Without this, MIDDLE-anchored text gets
++		// `(0 - pageHeight) / 2` and renders above the frame top.
++		if (this._documents) {
++			this._documents.transformByState({ width: _csOuterW, height: _csOuterH });
++		}
+ 		this.setProps(props);
+ 		this.makeDirty(true);
+ 	}
+@@ -20776,11 +20874,17 @@ var RichText = class extends BaseObject {
  	refreshDocumentByDocData() {
  		const docViewModel = new DocumentViewModel(this.documentModel = new _univerjs_core.DocumentDataModel(this._documentData));
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -176,7 +196,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e7bd7f09d67b7354eddb06dc1e5d8a4f
  		this._documentSkeleton.calculate();
  	}
  	/**
-@@ -21330,6 +21420,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21330,6 +21434,15 @@ var FontAndBaseLine = class extends docExtension {
  			ctx.rotate(Math.PI / 2);
  			ctx.translate(-width / 2, (aba + abd) / 2 - abd);
  			ctx.fillText(content, 0, 0);
@@ -192,7 +212,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e7bd7f09d67b7354eddb06dc1e5d8a4f
  			ctx.restore();
  		} else {
  			const CHECKED_GLYPH = "☑";
-@@ -21360,6 +21459,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21360,6 +21473,15 @@ var FontAndBaseLine = class extends docExtension {
  					y_offset = -(glyph.width - fontHeight) / 2;
  				}
  				ctx.fillText(content, spanPointWithFont.x + x_offset, spanPointWithFont.y + y_offset);
@@ -208,7 +228,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e7bd7f09d67b7354eddb06dc1e5d8a4f
  			}
  		}
  	}
-@@ -24644,7 +24752,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
+@@ -24644,7 +24766,8 @@ var InputManager = class InputManager extends _univerjs_core.Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
@@ -219,7 +239,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..e7bd7f09d67b7354eddb06dc1e5d8a4f
  	}
  	_onKeyDown(evt) {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8fd0991b6380fe3c5754e25d43bb86cae0124d5a 100644
+index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..29a2333dc2f8c1d9fea963f4a71727c3155c8fe3 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -12619,6 +12619,13 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -279,7 +299,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8fd0991b6380fe3c5754e25d43bb86ca
  		this._draw(mainCtx, void 0, realWidth, realHeight);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20604,19 +20640,39 @@ var RichText = class extends BaseObject {
+@@ -20604,21 +20640,46 @@ var RichText = class extends BaseObject {
  		const docModel = this.documentModel = new DocumentDataModel(this._documentData);
  		const docViewModel = new DocumentViewModel(docModel);
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -323,8 +343,15 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8fd0991b6380fe3c5754e25d43bb86ca
 +				// is parsed by the importer as a fs multiplier on each run.
  				this._setTransForm();
  				this.refreshDocumentByDocData();
++				// Casual Slides patch — keep inner Documents.height in
++				// sync with the outer RichText.height on every resize.
++				if (this._documents) {
++					this._documents.transformByState({ width: this.width, height: this.height });
++				}
  			}
-@@ -20680,6 +20736,27 @@ var RichText = class extends BaseObject {
+ 		});
+ 	}
+@@ -20680,6 +20741,27 @@ var RichText = class extends BaseObject {
  		const m = this.transform.getMatrix();
  		mainCtx.save();
  		mainCtx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
@@ -352,7 +379,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8fd0991b6380fe3c5754e25d43bb86ca
  		this._draw(mainCtx);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20728,12 +20805,39 @@ var RichText = class extends BaseObject {
+@@ -20728,16 +20810,52 @@ var RichText = class extends BaseObject {
  		};
  	}
  	_initialProps(props) {
@@ -387,15 +414,28 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8fd0991b6380fe3c5754e25d43bb86ca
 +		// to whatever the rendered text needed ("text out of canvas box").
 +		// Slide text frames have authoritative bounds from the source deck;
 +		// the renderer should keep them.
++		const _csOuterW = ((props === null || props === void 0 ? void 0 : props.width)) || ((contentSize === null || contentSize === void 0 ? void 0 : contentSize.width) || 0);
++		const _csOuterH = ((props === null || props === void 0 ? void 0 : props.height)) || ((contentSize === null || contentSize === void 0 ? void 0 : contentSize.height) || 0);
  		this.transformByState({
 -			width: (contentSize === null || contentSize === void 0 ? void 0 : contentSize.width) || 0,
 -			height: (contentSize === null || contentSize === void 0 ? void 0 : contentSize.height) || 0,
-+			width: ((props === null || props === void 0 ? void 0 : props.width)) || ((contentSize === null || contentSize === void 0 ? void 0 : contentSize.width) || 0),
-+			height: ((props === null || props === void 0 ? void 0 : props.height)) || ((contentSize === null || contentSize === void 0 ? void 0 : contentSize.height) || 0),
++			width: _csOuterW,
++			height: _csOuterH,
  			left: (props === null || props === void 0 ? void 0 : props.left) || 0,
  			top: (props === null || props === void 0 ? void 0 : props.top) || 0,
  			angle: props === null || props === void 0 ? void 0 : props.angle
-@@ -20747,11 +20851,17 @@ var RichText = class extends BaseObject {
+ 		});
++		// Casual Slides patch — propagate authored frame dimensions to
++		// the inner Documents so the docs anchor handler reads a
++		// non-zero height. Without this, MIDDLE-anchored text gets
++		// `(0 - pageHeight) / 2` and renders above the frame top.
++		if (this._documents) {
++			this._documents.transformByState({ width: _csOuterW, height: _csOuterH });
++		}
+ 		this.setProps(props);
+ 		this.makeDirty(true);
+ 	}
+@@ -20747,11 +20865,17 @@ var RichText = class extends BaseObject {
  	refreshDocumentByDocData() {
  		const docViewModel = new DocumentViewModel(this.documentModel = new DocumentDataModel(this._documentData));
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -416,7 +456,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8fd0991b6380fe3c5754e25d43bb86ca
  		this._documentSkeleton.calculate();
  	}
  	/**
-@@ -21301,6 +21411,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21301,6 +21425,15 @@ var FontAndBaseLine = class extends docExtension {
  			ctx.rotate(Math.PI / 2);
  			ctx.translate(-width / 2, (aba + abd) / 2 - abd);
  			ctx.fillText(content, 0, 0);
@@ -432,7 +472,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8fd0991b6380fe3c5754e25d43bb86ca
  			ctx.restore();
  		} else {
  			const CHECKED_GLYPH = "☑";
-@@ -21331,6 +21450,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21331,6 +21464,15 @@ var FontAndBaseLine = class extends docExtension {
  					y_offset = -(glyph.width - fontHeight) / 2;
  				}
  				ctx.fillText(content, spanPointWithFont.x + x_offset, spanPointWithFont.y + y_offset);
@@ -448,7 +488,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8fd0991b6380fe3c5754e25d43bb86ca
  			}
  		}
  	}
-@@ -24615,7 +24743,8 @@ var InputManager = class InputManager extends Disposable {
+@@ -24615,7 +24757,8 @@ var InputManager = class InputManager extends Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);

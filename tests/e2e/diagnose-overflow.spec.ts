@@ -17,6 +17,9 @@ test('diagnose: open "Your big idea.pptx" and dump text-frame state', async ({ p
 
   test.setTimeout(240_000);
 
+  await page.addInitScript(() => {
+    (window as unknown as { __csVerticalProbe?: unknown[] }).__csVerticalProbe = [];
+  });
   await page.goto('/');
   await page.waitForFunction(
     () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
@@ -168,6 +171,19 @@ test('diagnose: open "Your big idea.pptx" and dump text-frame state', async ({ p
   });
   // eslint-disable-next-line no-console
   console.log('\n=== RICHTEXT PROBE (slide 11) ===\n' + JSON.stringify(richTextProbe, null, 2));
+
+  // Pull the patched-in vertical probe — _verticalHandler calls grab
+  // this.height vs pageHeight at each draw. If `this.height` is the
+  // frame's authored bounds (428.8 for s11-el-2) we know
+  // transformByState applied correctly; if it's something else the
+  // patch isn't taking effect.
+  const probeData = await page.evaluate(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const arr = (window as any).__csVerticalProbe as Array<Record<string, unknown>> | undefined;
+    return arr ? arr.slice(0, 80) : [];
+  });
+  // eslint-disable-next-line no-console
+  console.log('\n=== _verticalHandler CALLS ===\n' + JSON.stringify(probeData, null, 2));
 
   // Measure the actual RichText runtime state — width/height + the
   // documentSkeleton's laid-out page count + per-page size. Reveals
