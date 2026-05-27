@@ -131,6 +131,88 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,300..700,0..1,-50..200&display=block"
     />
+
+    <!--
+      DECK-FONT PACK — load common PowerPoint deck fonts via Google
+      Fonts (and their metric-compatible open-source replacements for
+      proprietary Microsoft families). Without this, canvas ctx.font
+      requests like "Calibri" silently fall back to Arial on
+      non-Windows machines, collapsing every authored typeface to a
+      single visual font. Each family loads in 400 + 700 weight; italic
+      variants are derived synthetically by the renderer.
+    -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Carlito:ital,wght@0,400;0,700;1,400;1,700&family=Caladea:ital,wght@0,400;0,700;1,400;1,700&family=Open+Sans:ital,wght@0,400;0,700;1,400;1,700&family=Lato:ital,wght@0,400;0,700;1,400;1,700&family=Roboto:ital,wght@0,400;0,700;1,400;1,700&family=Source+Sans+3:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Sans:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Serif:ital,wght@0,400;0,700;1,400;1,700&family=Montserrat:ital,wght@0,400;0,700;1,400;1,700&family=Merriweather:ital,wght@0,400;0,700;1,400;1,700&family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&family=Roboto+Slab:wght@400;700&family=Roboto+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+    />
+
+    <!--
+      ALIAS @font-face DECLARATIONS — make Microsoft-proprietary deck
+      font names resolve to their metric-compatible open-source twins
+      via Google Fonts. `local()` first respects an installed copy on
+      Windows; the `url()` falls back to Carlito / Caladea served by
+      Google. Same approach LibreOffice + many web SaaS apps use.
+      Carlito ≈ Calibri (designed metric-identical by tyPoland).
+      Caladea ≈ Cambria (designed metric-identical by Huerta Tipográfica).
+    -->
+    <style>
+      @font-face {
+        font-family: 'Calibri';
+        font-weight: 400;
+        font-style: normal;
+        src: local('Calibri'),
+             url('https://fonts.gstatic.com/s/carlito/v3/3Jn9SDPw3m-pk039PDCLTXUETuE.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Calibri';
+        font-weight: 700;
+        font-style: normal;
+        src: local('Calibri Bold'),
+             url('https://fonts.gstatic.com/s/carlito/v3/3Jn4SDPw3m-pk039BIykaX0vSlIBSg.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Calibri';
+        font-weight: 400;
+        font-style: italic;
+        src: local('Calibri Italic'),
+             url('https://fonts.gstatic.com/s/carlito/v3/3Jn4SDPw3m-pk039AYykaX0vSnEJSg.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Calibri';
+        font-weight: 700;
+        font-style: italic;
+        src: local('Calibri Bold Italic'),
+             url('https://fonts.gstatic.com/s/carlito/v3/3Jn5SDPw3m-pk039DIymRl8DI4Mw3w.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Cambria';
+        font-weight: 400;
+        font-style: normal;
+        src: local('Cambria'),
+             url('https://fonts.gstatic.com/s/caladea/v7/kJEzBugZ7AAjhybUjR93-9IztOc.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Cambria';
+        font-weight: 700;
+        font-style: normal;
+        src: local('Cambria Bold'),
+             url('https://fonts.gstatic.com/s/caladea/v7/kJExBugZ7AAjhybUvR19__A3I80wuQ.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Cambria';
+        font-weight: 400;
+        font-style: italic;
+        src: local('Cambria Italic'),
+             url('https://fonts.gstatic.com/s/caladea/v7/kJExBugZ7AAjhybUvR15__A3I80wuQ.woff2') format('woff2');
+      }
+      @font-face {
+        font-family: 'Cambria';
+        font-weight: 700;
+        font-style: italic;
+        src: local('Cambria Bold Italic'),
+             url('https://fonts.gstatic.com/s/caladea/v7/kJEyBugZ7AAjhybUvR1FQ98S1yEwsi8.woff2') format('woff2');
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
