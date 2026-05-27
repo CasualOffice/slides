@@ -27,7 +27,10 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Filter out third-party noise (e.g. fonts.googleapis when offline).
     // Anything from a Univer or app file is signal.
     const appErrors = errors.filter(
-      (e) => !e.includes('fonts.googleapis') && !e.includes('favicon'),
+      (e) =>
+        !e.includes('fonts.googleapis') &&
+        !e.includes('fonts.gstatic') &&
+        !e.includes('favicon'),
     );
     expect(appErrors, `console errors during mount:\n${appErrors.join('\n')}`).toEqual([]);
   });
@@ -157,6 +160,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     const fatal = errors.filter(
       (e) =>
         !e.includes('fonts.googleapis') &&
+        !e.includes('fonts.gstatic') &&
         !e.includes('favicon') &&
         // Known secondary bug in @univerjs/slides-ui slide-editing render
         // controller — after disposeUnit, a doc-selection .activate() fires
