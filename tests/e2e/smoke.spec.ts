@@ -2407,10 +2407,17 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     const centerAngle = text.richText.rich?.documentStyle?.renderConfig?.centerAngle;
     expect(centerAngle, 'centerAngle reads rot in degrees').toBe(90);
 
-    // C13 — 24 pt * (80000 / 100000) = 19.2 pt.
+    // C13 — fontScale moved from import-time multiplication to
+    // render-time. The parsed fraction lives on
+    // `documentStyle.renderConfig.fontScale`; the engine-render
+    // glyph-creation step multiplies `ts.fs` by it at draw time. The
+    // run's stored `fs` stays at the authored 24 pt so re-importing
+    // our own exports no longer double-shrinks (was 19.2 → 15.36).
     const firstRun = text.richText.rich?.body?.textRuns?.[0];
     expect(firstRun, 'first ITextRun exists').toBeTruthy();
-    expect(firstRun.ts?.fs, 'fs scaled by fontScale').toBe(19.2);
+    expect(firstRun.ts?.fs, 'fs preserved at authored size (24)').toBe(24);
+    const fontScale = text.richText.rich?.documentStyle?.renderConfig?.fontScale;
+    expect(fontScale, 'fontScale stored on renderConfig (80000/100000)').toBeCloseTo(0.8, 3);
   });
 
   test('pptx import wave 7k — fork-patch enablement (B14 + D16 + I1 + I2 + J1)', async ({ page }) => {

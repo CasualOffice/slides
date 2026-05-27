@@ -1098,21 +1098,13 @@ function extractRichDoc(
       // defaults < this run's rPr.
       const rPr = findChild(r, 'a:rPr');
       const runStyle = parseRunProps(rPr, theme, isTitle);
-      // C13 — apply `<a:normAutofit fontScale>` to the run's font
-      // size at import. Scale both the explicit run override and the
-      // inherited fallback so frames that rely on placeholder defaults
-      // still shrink correctly. Round to 0.1 pt to keep numbers tidy.
-      if (fontScale !== 1) {
-        if (typeof runStyle.fs === 'number') {
-          runStyle.fs = Math.round(runStyle.fs * fontScale * 10) / 10;
-        }
-      }
+      // C13 — fontScale moved from import-time multiplication to
+      // render-time. The parsed `fontScale` is stored on
+      // `documentStyle.renderConfig.fontScale` (see below) and the
+      // engine-render's `getFontCreateConfig` multiplies textStyle.fs
+      // by it before computing the fontString. Result: re-importing
+      // our own exports no longer double-shrinks the text.
       const ts = { ...(fallbackProps ?? {}), ...runStyle };
-      if (fontScale !== 1 && typeof ts.fs === 'number' && runStyle.fs === undefined) {
-        // Run didn't override fs; scale the inherited value so the
-        // autofit shrink still applies.
-        ts.fs = Math.round(ts.fs * fontScale * 10) / 10;
-      }
 
       if (txt.length > 0) {
         textRuns.push({ st: cursor, ed: cursor + txt.length, ts });
@@ -1199,6 +1191,17 @@ function extractRichDoc(
   const bodyPr = findChild(txBody, 'a:bodyPr');
   const docStyle = parseBodyPr(bodyPr) ?? {};
 
+  // C13 — stash the parsed normAutofit fontScale on documentStyle.renderConfig
+  // so the engine-render side can multiply at draw time. Non-1 only;
+  // skip the no-op identity case to keep IDocumentData minimal.
+  if (fontScale !== 1) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (docStyle as any).renderConfig = {
+      ...((docStyle as { renderConfig?: object }).renderConfig ?? {}),
+      fontScale,
+    };
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rich: IDocumentData = {
     id: `${elementId}-doc`,
@@ -1213,16 +1216,14 @@ function extractRichDoc(
 
   // Flat fallback fields = layout/master defaults spread under first
   // run's overrides. Run-level wins by field.
+  // Note: fontScale (C13) is intentionally NOT applied here. It lives
+  // on documentStyle.renderConfig.fontScale and the engine-render
+  // glyph creation honors it at draw time. The flat `fs` on the
+  // legacy PptxGenJS export path then writes the original (un-shrunk)
+  // size back to OOXML, preserving the fontScale round-trip.
   const props: Partial<ISlideRichTextProps> = fallbackProps
     ? { ...fallbackProps, ...firstRunProps }
     : { ...firstRunProps };
-  // C13 — if the first run didn't carry an explicit fs but the
-  // placeholder fallback did, the flat `fs` exposed to legacy paths
-  // (PptxGenJS export + non-rich renderer) still needs to reflect the
-  // autofit shrink. Scale once at the end so we don't double-apply.
-  if (fontScale !== 1 && typeof props.fs === 'number' && firstRunProps.fs === undefined) {
-    props.fs = Math.round(props.fs * fontScale * 10) / 10;
-  }
 
   return { text: lines.join('\n'), props, rich };
 }
