@@ -355,11 +355,11 @@ button:disabled { cursor: not-allowed; }
   height: var(--cs-toolbar-h);
   padding: 0 12px;
   gap: 2px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
+  /* v2 toolbar uses .cs-toolbar2__row with overflow: hidden + a
+     ResizeObserver-driven "More" popover. Never horizontal-scroll. */
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
-.cs-toolbar__row::-webkit-scrollbar { display: none; }
 
 .cs-toolbar__btn {
   position: relative;

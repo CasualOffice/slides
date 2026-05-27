@@ -1,22 +1,19 @@
-// Icon component.
+// Inline SVG icon component.
 //
-// The legacy implementation (kept as the fallback path below) uses Material
-// Symbols Outlined as a font — `<span>name</span>` and the loaded font swaps
-// the glyph. Cheap, no per-icon imports, but the glyphs only render after
-// the font finishes loading (FOIT for the first ~50–200 ms on cold cache)
-// and the spans expose the raw glyph name to screen readers + a11y trees
-// before the font swap.
+// Every icon is a tuple of <outlined, filled?> SVG bodies rendered inside
+// a 24×24 viewBox. The `filled` prop on a call site picks the filled
+// variant when available — used for toolbar toggle "selected" states
+// (Bold/Italic/Underline/Strikethrough, alignment, list mode, etc.).
+// Icons without a filled variant fall back to the outlined one.
 //
-// Toolbar v2 ships its own SVG paths via the `ICONS` map below (Lucide
-// outline geometry, MIT). Names listed here render synchronously as inline
-// SVG with the requested pixel size; unknown names fall through to the
-// Material Symbols font path so the rest of the shell (TitleBar, dialogs,
-// SlideContextMenu, …) keeps rendering exactly as before. This dual mode
-// lets the v2 work land without a stylesheet rewrite of every consumer.
-//
-// New icon entries should mirror Lucide's 24-grid stroke=2 path data — the
-// `viewBox` is hard-coded to 0 0 24 24 below so each entry is just the
-// inner SVG.
+// Geometry follows Lucide outline (MIT) at stroke-width 2, line-cap/join
+// round. Filled variants use `fill="currentColor"` with no stroke, so the
+// icon renders as a solid silhouette in the same colour. No webfont, no
+// emoji, no text fallback — if a name isn't in the map, the user sees a
+// neutral square placeholder (never a string of text) and a dev console
+// warning.
+
+import { useEffect, useRef } from 'react';
 
 export interface IconProps {
   name: string;
@@ -25,249 +22,660 @@ export interface IconProps {
   className?: string;
 }
 
-// Inline SVG bodies. Each value renders inside an <svg viewBox="0 0 24 24"
-// fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-// stroke-linejoin="round">. Lucide-style geometry; same visual weight as the
-// Material Symbols outlined family the rest of the shell uses so the two
-// paths can coexist without looking mismatched.
-const ICONS: Record<string, JSX.Element> = {
-  // ── formatting toggles ─────────────────────────────────────────────
-  bold: (
-    <>
-      <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
-      <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
-    </>
-  ),
-  italic: (
-    <>
-      <line x1="19" y1="4" x2="10" y2="4" />
-      <line x1="14" y1="20" x2="5" y2="20" />
-      <line x1="15" y1="4" x2="9" y2="20" />
-    </>
-  ),
-  underline: (
-    <>
-      <path d="M6 4v6a6 6 0 0 0 12 0V4" />
-      <line x1="4" y1="20" x2="20" y2="20" />
-    </>
-  ),
-  strikethrough: (
-    <>
-      <path d="M16 4H9a3 3 0 0 0-2.83 4" />
-      <path d="M14 12a4 4 0 0 1 0 8H6" />
-      <line x1="4" y1="12" x2="20" y2="12" />
-    </>
-  ),
-  format_clear: (
-    <>
-      <path d="M4 7h6m4 0h6" />
-      <path d="M10 4v4l-4 12" />
-      <path d="m14 4-2 6" />
-      <line x1="4" y1="20" x2="20" y2="20" />
-      <line x1="3" y1="3" x2="21" y2="21" />
-    </>
-  ),
+type IconBody = JSX.Element | { outlined: JSX.Element; filled?: JSX.Element };
+
+const ICONS: Record<string, IconBody> = {
+  // ── chrome / actions ──────────────────────────────────────────────
+  folder_open: {
+    outlined: (
+      <>
+        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1" />
+        <path d="m3 9 1.5 9A2 2 0 0 0 6.5 20h11a2 2 0 0 0 2-1.5L21 9z" />
+      </>
+    ),
+  },
+  download: {
+    outlined: (
+      <>
+        <path d="M12 3v12" />
+        <path d="m7 10 5 5 5-5" />
+        <path d="M4 21h16" />
+      </>
+    ),
+  },
+  print: {
+    outlined: (
+      <>
+        <path d="M6 9V3h12v6" />
+        <rect x="6" y="13" width="12" height="8" rx="1" />
+        <path d="M6 17H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+      </>
+    ),
+  },
+  close: {
+    outlined: (
+      <>
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </>
+    ),
+  },
+  check: {
+    outlined: <polyline points="20 6 9 17 4 12" />,
+  },
+  add: {
+    outlined: (
+      <>
+        <line x1="12" y1="5" x2="12" y2="19" />
+        <line x1="5" y1="12" x2="19" y2="12" />
+      </>
+    ),
+  },
+  remove: { outlined: <line x1="5" y1="12" x2="19" y2="12" /> },
+  expand_more: { outlined: <polyline points="6 9 12 15 18 9" /> },
+  chevron_left: { outlined: <polyline points="15 18 9 12 15 6" /> },
+  chevron_right: { outlined: <polyline points="9 18 15 12 9 6" /> },
+  more_vert: {
+    outlined: (
+      <>
+        <circle cx="12" cy="6" r="1.4" />
+        <circle cx="12" cy="12" r="1.4" />
+        <circle cx="12" cy="18" r="1.4" />
+      </>
+    ),
+    filled: (
+      <>
+        <circle cx="12" cy="6" r="1.6" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="18" r="1.6" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
+  search: {
+    outlined: (
+      <>
+        <circle cx="11" cy="11" r="7" />
+        <line x1="21" y1="21" x2="16.5" y2="16.5" />
+      </>
+    ),
+  },
+  history: {
+    outlined: (
+      <>
+        <path d="M3 12a9 9 0 1 0 3-6.7" />
+        <polyline points="3 4 3 10 9 10" />
+        <polyline points="12 7 12 12 16 14" />
+      </>
+    ),
+  },
+  info: {
+    outlined: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <line x1="12" y1="11" x2="12" y2="17" />
+        <circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
+  error: {
+    outlined: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <line x1="12" y1="7" x2="12" y2="13" />
+        <circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
+  keyboard: {
+    outlined: (
+      <>
+        <rect x="2" y="6" width="20" height="12" rx="2" />
+        <line x1="6" y1="10" x2="6.01" y2="10" />
+        <line x1="10" y1="10" x2="10.01" y2="10" />
+        <line x1="14" y1="10" x2="14.01" y2="10" />
+        <line x1="18" y1="10" x2="18.01" y2="10" />
+        <line x1="7" y1="14" x2="17" y2="14" />
+      </>
+    ),
+  },
+  fullscreen: {
+    outlined: (
+      <>
+        <polyline points="4 9 4 4 9 4" />
+        <polyline points="20 9 20 4 15 4" />
+        <polyline points="4 15 4 20 9 20" />
+        <polyline points="20 15 20 20 15 20" />
+      </>
+    ),
+  },
+  person_add: {
+    outlined: (
+      <>
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <line x1="19" y1="8" x2="19" y2="14" />
+        <line x1="22" y1="11" x2="16" y2="11" />
+      </>
+    ),
+  },
+
+  // ── undo / redo ────────────────────────────────────────────────────
+  undo: {
+    outlined: (
+      <>
+        <polyline points="9 14 4 9 9 4" />
+        <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+      </>
+    ),
+  },
+  redo: {
+    outlined: (
+      <>
+        <polyline points="15 14 20 9 15 4" />
+        <path d="M4 20v-7a4 4 0 0 1 4-4h12" />
+      </>
+    ),
+  },
+
+  // ── slide / view modes ────────────────────────────────────────────
+  add_to_photos: {
+    outlined: (
+      <>
+        <rect x="3" y="3" width="14" height="14" rx="2" />
+        <path d="M7 21h12a2 2 0 0 0 2-2V9" />
+        <line x1="10" y1="10" x2="10" y2="14" />
+        <line x1="8" y1="12" x2="12" y2="12" />
+      </>
+    ),
+  },
+  content_copy: {
+    outlined: (
+      <>
+        <rect x="9" y="9" width="12" height="12" rx="2" />
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+      </>
+    ),
+  },
+  delete: {
+    outlined: (
+      <>
+        <polyline points="3 6 5 6 21 6" />
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+        <path d="M10 11v6M14 11v6" />
+        <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+      </>
+    ),
+  },
+  view_agenda: {
+    outlined: (
+      <>
+        <rect x="3" y="4" width="18" height="7" rx="1" />
+        <rect x="3" y="13" width="18" height="7" rx="1" />
+      </>
+    ),
+  },
+  view_module: {
+    outlined: (
+      <>
+        <rect x="3" y="4" width="7" height="7" rx="1" />
+        <rect x="14" y="4" width="7" height="7" rx="1" />
+        <rect x="3" y="13" width="7" height="7" rx="1" />
+        <rect x="14" y="13" width="7" height="7" rx="1" />
+      </>
+    ),
+  },
+  view_compact: {
+    outlined: (
+      <>
+        <rect x="3" y="4" width="18" height="6" rx="1" />
+        <rect x="3" y="12" width="8" height="8" rx="1" />
+        <rect x="13" y="12" width="8" height="8" rx="1" />
+      </>
+    ),
+  },
+  sticky_note_2: {
+    outlined: (
+      <>
+        <path d="M4 4h10l6 6v10a2 2 0 0 1-2 2H4z" />
+        <polyline points="14 4 14 10 20 10" />
+      </>
+    ),
+  },
+  slideshow: {
+    outlined: (
+      <>
+        <rect x="2" y="4" width="20" height="14" rx="2" />
+        <polygon points="10 9 16 11.5 10 14" fill="currentColor" stroke="none" />
+        <line x1="8" y1="22" x2="16" y2="22" />
+      </>
+    ),
+  },
+  play_arrow: {
+    outlined: <polygon points="6 4 20 12 6 20" fill="currentColor" stroke="none" />,
+    filled: <polygon points="6 4 20 12 6 20" fill="currentColor" stroke="none" />,
+  },
+
+  // ── insert ─────────────────────────────────────────────────────────
+  text_fields: {
+    outlined: (
+      <>
+        <polyline points="4 7 4 4 20 4 20 7" />
+        <line x1="9" y1="20" x2="15" y2="20" />
+        <line x1="12" y1="4" x2="12" y2="20" />
+      </>
+    ),
+  },
+  image: {
+    outlined: (
+      <>
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <circle cx="8.5" cy="9.5" r="1.5" />
+        <polyline points="21 15 16 10 5 21" />
+      </>
+    ),
+  },
+  category: {
+    outlined: (
+      <>
+        <polygon points="12 3 4 11 12 11" />
+        <rect x="13" y="13" width="8" height="8" rx="1" />
+        <circle cx="7" cy="17" r="3.5" />
+      </>
+    ),
+  },
+  horizontal_rule: { outlined: <line x1="4" y1="12" x2="20" y2="12" /> },
+  add_comment: {
+    outlined: (
+      <>
+        <path d="M21 11a8 8 0 0 1-8 8H7l-4 3V11a8 8 0 0 1 16 0Z" />
+        <line x1="12" y1="8" x2="12" y2="14" />
+        <line x1="9" y1="11" x2="15" y2="11" />
+      </>
+    ),
+  },
+  arrow_selector_tool: {
+    outlined: (
+      <>
+        <path d="M4 4l7 18 2-8 8-2z" />
+      </>
+    ),
+  },
+
+  // ── shapes ─────────────────────────────────────────────────────────
+  rectangle: { outlined: <rect x="3" y="6" width="18" height="12" rx="1" /> },
+  circle: { outlined: <circle cx="12" cy="12" r="9" /> },
+  change_history: { outlined: <polygon points="12 4 22 20 2 20" /> },
+  diamond: { outlined: <polygon points="12 2 22 12 12 22 2 12" /> },
+  pentagon: { outlined: <polygon points="12 3 22 10 18 21 6 21 2 10" /> },
+  hexagon: { outlined: <polygon points="6 3 18 3 22 12 18 21 6 21 2 12" /> },
+  shape_line: { outlined: <polygon points="12 2 21 8 21 16 12 22 3 16 3 8" /> },
+  star: {
+    outlined: (
+      <polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9" />
+    ),
+  },
+  double_arrow: {
+    outlined: (
+      <>
+        <polyline points="4 6 10 12 4 18" />
+        <polyline points="12 6 18 12 12 18" />
+      </>
+    ),
+  },
+  arrow_right_alt: {
+    outlined: (
+      <>
+        <line x1="3" y1="12" x2="20" y2="12" />
+        <polyline points="15 7 20 12 15 17" />
+      </>
+    ),
+  },
+  arrow_back: {
+    outlined: (
+      <>
+        <line x1="21" y1="12" x2="4" y2="12" />
+        <polyline points="9 7 4 12 9 17" />
+      </>
+    ),
+  },
+  arrow_upward: {
+    outlined: (
+      <>
+        <line x1="12" y1="20" x2="12" y2="4" />
+        <polyline points="6 10 12 4 18 10" />
+      </>
+    ),
+  },
+  arrow_downward: {
+    outlined: (
+      <>
+        <line x1="12" y1="4" x2="12" y2="20" />
+        <polyline points="6 14 12 20 18 14" />
+      </>
+    ),
+  },
+
+  // ── slide tools ────────────────────────────────────────────────────
+  palette: {
+    outlined: (
+      <>
+        <path d="M12 3a9 9 0 1 0 4 17 2 2 0 0 0 0-4h-1.5a1.5 1.5 0 0 1 0-3H17a4 4 0 0 0 4-4c0-3.6-4-6-9-6Z" />
+        <circle cx="7.5" cy="11.5" r="1.2" fill="currentColor" stroke="none" />
+        <circle cx="11" cy="7.5" r="1.2" fill="currentColor" stroke="none" />
+        <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
+  format_color_fill: {
+    outlined: (
+      <>
+        <path d="M7 4 4 7l8 8 8-8-3-3-5 5-5-5z" />
+        <path d="M5 18a3 3 0 0 0 6 0c0-2-3-5-3-5s-3 3-3 5z" />
+      </>
+    ),
+  },
+  format_color_text: {
+    outlined: (
+      <>
+        <path d="M6 18 12 4l6 14" />
+        <line x1="8" y1="14" x2="16" y2="14" />
+        <rect x="5" y="20" width="14" height="2" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
+  border_color: {
+    outlined: (
+      <>
+        <path d="M14 4 3 15v5h5L19 9z" />
+        <line x1="14" y1="4" x2="20" y2="10" />
+        <rect x="3" y="21" width="18" height="2" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
+  auto_awesome_motion: {
+    outlined: (
+      <>
+        <rect x="3" y="9" width="12" height="12" rx="1" />
+        <path d="M7 5h12a1 1 0 0 1 1 1v12" />
+        <path d="M11 1h8a1 1 0 0 1 1 1v8" />
+      </>
+    ),
+  },
+
+  // ── format toggles ─────────────────────────────────────────────────
+  bold: {
+    outlined: (
+      <>
+        <path d="M7 4h7a4 4 0 0 1 0 8H7zM7 12h8a4 4 0 0 1 0 8H7z" />
+      </>
+    ),
+    filled: (
+      <path
+        d="M7 4h7a4 4 0 0 1 0 8H7zM7 12h8a4 4 0 0 1 0 8H7z"
+        fill="currentColor"
+        stroke="none"
+      />
+    ),
+  },
+  italic: {
+    outlined: (
+      <>
+        <line x1="19" y1="4" x2="10" y2="4" />
+        <line x1="14" y1="20" x2="5" y2="20" />
+        <line x1="15" y1="4" x2="9" y2="20" />
+      </>
+    ),
+    filled: (
+      <path
+        d="M10 4h9v2.4h-3.6L11.8 17.6H15V20H6v-2.4h3.6L13.2 6.4H10z"
+        fill="currentColor"
+        stroke="none"
+      />
+    ),
+  },
+  underline: {
+    outlined: (
+      <>
+        <path d="M6 4v6a6 6 0 0 0 12 0V4" />
+        <line x1="4" y1="20" x2="20" y2="20" />
+      </>
+    ),
+    filled: (
+      <>
+        <path d="M6 4v6a6 6 0 0 0 12 0V4" fill="currentColor" stroke="none" />
+        <rect x="4" y="19" width="16" height="2" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
+  strikethrough: {
+    outlined: (
+      <>
+        <path d="M16 4H9a3 3 0 0 0-2.83 4" />
+        <path d="M14 12a4 4 0 0 1 0 8H6" />
+        <line x1="4" y1="12" x2="20" y2="12" />
+      </>
+    ),
+  },
+  format_clear: {
+    outlined: (
+      <>
+        <path d="M4 7h6m4 0h6" />
+        <path d="M10 4v4l-4 12" />
+        <path d="m14 4-2 6" />
+        <line x1="4" y1="20" x2="20" y2="20" />
+        <line x1="3" y1="3" x2="21" y2="21" />
+      </>
+    ),
+  },
 
   // ── paragraph alignment ───────────────────────────────────────────
-  format_align_left: (
-    <>
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <line x1="3" y1="12" x2="15" y2="12" />
-      <line x1="3" y1="18" x2="18" y2="18" />
-    </>
-  ),
-  format_align_center: (
-    <>
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <line x1="6" y1="12" x2="18" y2="12" />
-      <line x1="4" y1="18" x2="20" y2="18" />
-    </>
-  ),
-  format_align_right: (
-    <>
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <line x1="9" y1="12" x2="21" y2="12" />
-      <line x1="6" y1="18" x2="21" y2="18" />
-    </>
-  ),
-  format_align_justify: (
-    <>
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <line x1="3" y1="12" x2="21" y2="12" />
-      <line x1="3" y1="18" x2="21" y2="18" />
-    </>
-  ),
+  format_align_left: {
+    outlined: (
+      <>
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <line x1="3" y1="12" x2="15" y2="12" />
+        <line x1="3" y1="18" x2="18" y2="18" />
+      </>
+    ),
+  },
+  format_align_center: {
+    outlined: (
+      <>
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <line x1="6" y1="12" x2="18" y2="12" />
+        <line x1="4" y1="18" x2="20" y2="18" />
+      </>
+    ),
+  },
+  format_align_right: {
+    outlined: (
+      <>
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <line x1="9" y1="12" x2="21" y2="12" />
+        <line x1="6" y1="18" x2="21" y2="18" />
+      </>
+    ),
+  },
+  format_align_justify: {
+    outlined: (
+      <>
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <line x1="3" y1="12" x2="21" y2="12" />
+        <line x1="3" y1="18" x2="21" y2="18" />
+      </>
+    ),
+  },
 
-  // ── lists & indent ────────────────────────────────────────────────
-  format_list_bulleted: (
-    <>
-      <line x1="9" y1="6" x2="20" y2="6" />
-      <line x1="9" y1="12" x2="20" y2="12" />
-      <line x1="9" y1="18" x2="20" y2="18" />
-      <circle cx="4.5" cy="6" r="1.25" fill="currentColor" stroke="none" />
-      <circle cx="4.5" cy="12" r="1.25" fill="currentColor" stroke="none" />
-      <circle cx="4.5" cy="18" r="1.25" fill="currentColor" stroke="none" />
-    </>
-  ),
-  format_list_numbered: (
-    <>
-      <line x1="10" y1="6" x2="21" y2="6" />
-      <line x1="10" y1="12" x2="21" y2="12" />
-      <line x1="10" y1="18" x2="21" y2="18" />
-      <path d="M4 4h2v4" />
-      <path d="M4 10h2.5a1.5 1.5 0 0 1 0 3H4v1h3" />
-      <path d="M4 17h2a1.5 1.5 0 0 1 0 3H4" />
-    </>
-  ),
-  format_indent_increase: (
-    <>
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <line x1="3" y1="18" x2="21" y2="18" />
-      <line x1="11" y1="12" x2="21" y2="12" />
-      <path d="m3 9 4 3-4 3z" fill="currentColor" stroke="none" />
-    </>
-  ),
-  format_indent_decrease: (
-    <>
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <line x1="3" y1="18" x2="21" y2="18" />
-      <line x1="11" y1="12" x2="21" y2="12" />
-      <path d="m7 9-4 3 4 3z" fill="currentColor" stroke="none" />
-    </>
-  ),
-  format_line_spacing: (
-    <>
-      <path d="m4 6 2-2 2 2" />
-      <path d="m4 18 2 2 2-2" />
-      <line x1="6" y1="4" x2="6" y2="20" />
-      <line x1="12" y1="6" x2="21" y2="6" />
-      <line x1="12" y1="12" x2="21" y2="12" />
-      <line x1="12" y1="18" x2="21" y2="18" />
-    </>
-  ),
-
-  // ── colors / paint / link / more ─────────────────────────────────
-  format_paint: (
-    <>
-      <path d="M19 5V3H5v4h14V5z" />
-      <path d="M5 9v6h8v3a2 2 0 0 0 4 0v-3a4 4 0 0 0-4-4z" />
-    </>
-  ),
-  format_color_text: (
-    <>
-      <path d="m6 18 6-14 6 14" />
-      <line x1="8" y1="13" x2="16" y2="13" />
-      <line x1="4" y1="21" x2="20" y2="21" />
-    </>
-  ),
-  format_color_fill: (
-    <>
-      <path d="M19 11 8 22 3 17 14 6z" />
-      <path d="m5 2 5 5" />
-      <path d="M2 22h20" />
-    </>
-  ),
-  border_color: (
-    <>
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4z" />
-    </>
-  ),
-  link: (
-    <>
-      <path d="M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 1 0-7.07-7.07L11 5" />
-      <path d="M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 1 0 7.07 7.07L13 19" />
-    </>
-  ),
-  more_vert: (
-    <>
-      <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none" />
-    </>
-  ),
-
-  // ── font helpers used by the pickers ────────────────────────────
-  format_size: (
-    <>
-      <path d="M4 6h10" />
-      <path d="M9 6v14" />
-      <path d="M14 12h6" />
-      <path d="M17 12v8" />
-    </>
-  ),
-  font_download: (
-    <>
-      <path d="M5 5h14v14H5z" />
-      <path d="M8 16 12 6l4 10" />
-      <line x1="9.5" y1="13" x2="14.5" y2="13" />
-    </>
-  ),
-
-  // ── shared utilities the v2 toolbar needs as SVG too ──────────────
-  expand_more: (
-    <>
-      <polyline points="6 9 12 15 18 9" />
-    </>
-  ),
-  check: (
-    <>
-      <polyline points="20 6 9 17 4 12" />
-    </>
-  ),
-  close: (
-    <>
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </>
-  ),
-  add: (
-    <>
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </>
-  ),
-  remove: (
-    <>
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </>
-  ),
+  // ── lists ─────────────────────────────────────────────────────────
+  format_list_bulleted: {
+    outlined: (
+      <>
+        <circle cx="5" cy="6" r="1.2" fill="currentColor" stroke="none" />
+        <circle cx="5" cy="12" r="1.2" fill="currentColor" stroke="none" />
+        <circle cx="5" cy="18" r="1.2" fill="currentColor" stroke="none" />
+        <line x1="9" y1="6" x2="20" y2="6" />
+        <line x1="9" y1="12" x2="20" y2="12" />
+        <line x1="9" y1="18" x2="20" y2="18" />
+      </>
+    ),
+  },
+  format_list_numbered: {
+    outlined: (
+      <>
+        <line x1="9" y1="6" x2="20" y2="6" />
+        <line x1="9" y1="12" x2="20" y2="12" />
+        <line x1="9" y1="18" x2="20" y2="18" />
+        <path d="M4 4v4h2" />
+        <path d="M4 12h3a1 1 0 0 1 1 1v1l-3 2v0h3" />
+        <path d="M5 18h2a1 1 0 0 1 0 2H5m0 0h2a1 1 0 0 0 0-2H5" />
+      </>
+    ),
+  },
+  format_indent_increase: {
+    outlined: (
+      <>
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <line x1="3" y1="12" x2="11" y2="12" />
+        <line x1="3" y1="18" x2="21" y2="18" />
+        <polyline points="14 9 17 12 14 15" />
+      </>
+    ),
+  },
+  format_indent_decrease: {
+    outlined: (
+      <>
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <line x1="11" y1="12" x2="21" y2="12" />
+        <line x1="3" y1="18" x2="21" y2="18" />
+        <polyline points="7 9 4 12 7 15" />
+      </>
+    ),
+  },
+  format_line_spacing: {
+    outlined: (
+      <>
+        <polyline points="6 5 3 8 6 8" />
+        <polyline points="6 19 3 16 6 16" />
+        <line x1="3" y1="8" x2="3" y2="16" />
+        <line x1="9" y1="6" x2="20" y2="6" />
+        <line x1="9" y1="12" x2="20" y2="12" />
+        <line x1="9" y1="18" x2="20" y2="18" />
+      </>
+    ),
+  },
+  format_paint: {
+    outlined: (
+      <>
+        <rect x="4" y="3" width="16" height="4" rx="1" />
+        <path d="M4 7v3h12V7" />
+        <rect x="10" y="10" width="4" height="6" rx="1" />
+        <path d="M10 16v3a2 2 0 0 0 4 0v-3" />
+      </>
+    ),
+  },
+  format_size: {
+    outlined: (
+      <>
+        <path d="M3 16 8 4l5 12" />
+        <line x1="5" y1="12" x2="11" y2="12" />
+        <path d="M15 18 18 10l3 8" />
+        <line x1="16.2" y1="16" x2="19.8" y2="16" />
+      </>
+    ),
+  },
+  font_download: {
+    outlined: (
+      <>
+        <path d="m6 18 6-14 6 14" />
+        <line x1="8" y1="13" x2="16" y2="13" />
+      </>
+    ),
+  },
+  link: {
+    outlined: (
+      <>
+        <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 1 0-7-7l-1 1" />
+        <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" />
+      </>
+    ),
+  },
 };
 
+// Render-time map from the (deprecated) Material Symbols name space we used
+// pre-Wave 2 to canonical Lucide-style names. Kept short — only entries that
+// are still referenced in the codebase. Adding a new alias here is cheaper
+// than renaming every call site.
+const ALIASES: Record<string, string> = {
+  shapes: 'category',
+};
+
+function isPair(
+  v: IconBody,
+): v is { outlined: JSX.Element; filled?: JSX.Element } {
+  return typeof v === 'object' && v !== null && 'outlined' in (v as object);
+}
+
+function bodyFor(name: string, filled: boolean): JSX.Element | null {
+  const key = ALIASES[name] ?? name;
+  const entry = ICONS[key];
+  if (!entry) return null;
+  if (isPair(entry)) {
+    return filled ? (entry.filled ?? entry.outlined) : entry.outlined;
+  }
+  return entry;
+}
+
+const WARNED: Set<string> = new Set();
+
 export function Icon({ name, size = 18, filled = false, className }: IconProps) {
-  const svgBody = ICONS[name];
-  if (svgBody) {
+  // Dev warn ONCE per missing name so the gap is obvious in the console
+  // without flooding it on every render.
+  const warnedRef = useRef(false);
+  useEffect(() => {
+    const key = ALIASES[name] ?? name;
+    if (!ICONS[key] && !WARNED.has(key) && !warnedRef.current) {
+      WARNED.add(key);
+      warnedRef.current = true;
+      // eslint-disable-next-line no-console
+      console.warn(`[Icon] missing SVG for name "${key}". Add it to apps/web/src/shell/icons.tsx.`);
+    }
+  }, [name]);
+
+  const body = bodyFor(name, filled);
+  if (!body) {
+    // Neutral placeholder — never raw text. 16×16 outlined square.
     return (
       <svg
-        className={`cs-icon ${className ?? ''}`}
+        className={`cs-icon cs-icon--missing ${className ?? ''}`}
         width={size}
         height={size}
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
         strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
         aria-hidden="true"
         focusable="false"
+        data-icon-missing={name}
       >
-        {svgBody}
+        <rect x="4" y="4" width="16" height="16" rx="2" />
       </svg>
     );
   }
-  // Legacy Material Symbols glyph path — preserved so existing call sites
-  // (TitleBar, SlideContextMenu, dialogs, status bar) keep rendering until
-  // each one is migrated to its own SVG entry.
   return (
-    <span
-      className={`cs-icon material-symbols-outlined ${className ?? ''}`}
-      style={{
-        fontSize: size,
-        fontVariationSettings: `'FILL' ${filled ? 1 : 0}, 'wght' 400, 'opsz' 24`,
-      }}
+    <svg
+      className={`cs-icon ${filled ? 'cs-icon--filled' : ''} ${className ?? ''}`}
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
       aria-hidden="true"
+      focusable="false"
     >
-      {name}
-    </span>
+      {body}
+    </svg>
   );
 }
