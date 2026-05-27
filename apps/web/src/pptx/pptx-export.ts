@@ -340,6 +340,11 @@ interface PptxRawPayload {
   // the author-defined custom metadata. The bucket is keyed by zip-path
   // so the inject pass writes it verbatim.
   customProps?: Record<string, string>;
+  // K6 — binary parts (audio / video media + chart-embedded xlsx +
+  // OLE payloads). Values are base64-encoded since JSON can't carry
+  // raw bytes; the inject pass decodes back to binary before writing
+  // to the zip.
+  mediaBin?: Record<string, string>;
 }
 
 async function restorePassthrough(blob: Blob, snapshot: ISlideData): Promise<Blob> {
@@ -358,11 +363,14 @@ async function restorePassthrough(blob: Blob, snapshot: ISlideData): Promise<Blo
   // Restore only the categories PptxGenJS doesn't generate. Skipping
   // layouts/masters/themes preserves PptxGenJS's wired rels.
   const restorableBuckets: Array<keyof PptxRawPayload> = ['notesSlides', 'comments', 'diagrams', 'ink', 'charts', 'rels', 'customProps'];
-  let hasAny = false;
-  for (const key of restorableBuckets) {
-    if (payload[key] && Object.keys(payload[key] ?? {}).length > 0) {
-      hasAny = true;
-      break;
+  const hasBinary = payload.mediaBin && Object.keys(payload.mediaBin).length > 0;
+  let hasAny = hasBinary;
+  if (!hasAny) {
+    for (const key of restorableBuckets) {
+      if (payload[key] && Object.keys(payload[key] ?? {}).length > 0) {
+        hasAny = true;
+        break;
+      }
     }
   }
   if (!hasAny) return blob;
@@ -383,6 +391,23 @@ async function restorePassthrough(blob: Blob, snapshot: ISlideData): Promise<Blo
           if (isSkipped) continue;
         }
         zip.file(zipPath, content);
+      }
+    }
+  }
+
+  // K6 — binary parts: decode base64 → Uint8Array, then write as bytes.
+  // JSZip auto-detects binary input and stores without text encoding.
+  if (payload.mediaBin) {
+    for (const [zipPath, b64] of Object.entries(payload.mediaBin)) {
+      if (typeof b64 !== 'string' || b64.length === 0) continue;
+      try {
+        const binStr = atob(b64);
+        const bytes = new Uint8Array(binStr.length);
+        for (let i = 0; i < binStr.length; i += 1) bytes[i] = binStr.charCodeAt(i);
+        zip.file(zipPath, bytes);
+      } catch {
+        // Bad base64 — skip the entry; the zip ships without it
+        // rather than corrupting other parts.
       }
     }
   }

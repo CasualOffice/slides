@@ -3508,6 +3508,15 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
   // preserves authored charts even though our IChart only stores the rId.
   const rawCharts: Record<string, string> = {};
   const rawRels: Record<string, string> = {};
+  // K6 — binary parts (audio / video media + chart-embedded xlsx).
+  // Captured as base64 because the resources slot is JSON-stringified
+  // and JSON can't carry raw bytes. `restorePassthrough` decodes back
+  // to binary before writing to the exported zip. Covers
+  // `ppt/media/*` (images are also under here, but they're already
+  // captured per-element via processPicNode → contentUrl; the
+  // duplication here is fine — zip.file() overwrites) and
+  // `ppt/embeddings/*` (chart data xlsx + ole-object payloads).
+  const rawMediaBin: Record<string, string> = {};
 
   for (let i = 0; i < sldIds.length; i += 1) {
     const sldId = sldIds[i] as XmlNode;
@@ -3659,12 +3668,32 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
       rawInk[zipPath] = '';
     } else if (zipPath.startsWith('ppt/charts/') && zipPath.endsWith('.xml')) {
       rawCharts[zipPath] = '';
+    } else if (
+      // K6 — audio / video media (anything under ppt/media/ that
+      // ISN'T already captured as an image data URI on the element).
+      // Excluding common image extensions keeps the payload lean
+      // since processPicNode already preserves them per-element.
+      (zipPath.startsWith('ppt/media/') && !/\.(png|jpg|jpeg|gif|bmp|svg|webp)$/i.test(zipPath)) ||
+      // Chart-embedded xlsx + OLE object payloads.
+      zipPath.startsWith('ppt/embeddings/')
+    ) {
+      rawMediaBin[zipPath] = '';
     }
   });
   const readAll = async (bucket: Record<string, string>) => {
     await Promise.all(
       Object.keys(bucket).map(async (p) => {
         bucket[p] = (await zip.file(p)?.async('string')) ?? '';
+      }),
+    );
+  };
+  // K6 — binary parts read as base64 since JSON can't carry raw bytes.
+  // `restorePassthrough` on the export side decodes back to binary
+  // before writing to the produced zip.
+  const readAllBinary = async (bucket: Record<string, string>) => {
+    await Promise.all(
+      Object.keys(bucket).map(async (p) => {
+        bucket[p] = (await zip.file(p)?.async('base64')) ?? '';
       }),
     );
   };
@@ -3678,6 +3707,7 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     readAll(rawInk),
     readAll(rawCharts),
     readAll(rawRels),
+    readAllBinary(rawMediaBin),
   ]);
 
   const hasCustomProps = customPropsXml !== undefined && customPropsXml.length > 0;
@@ -3690,6 +3720,7 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     Object.keys(rawDiagrams).length > 0 ||
     Object.keys(rawInk).length > 0 ||
     Object.keys(rawCharts).length > 0 ||
+    Object.keys(rawMediaBin).length > 0 ||
     hasCustomProps;
 
   // K1 — prefer the deck-authored title from docProps/core.xml; fall
@@ -3716,6 +3747,13 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
                 ink: rawInk,
                 charts: rawCharts,
                 rels: rawRels,
+                // K6 — base64-encoded binary parts (audio / video media +
+                // chart-embedded xlsx + OLE payloads). restorePassthrough
+                // decodes back to binary before injecting into the
+                // exported zip.
+                ...(Object.keys(rawMediaBin).length > 0
+                  ? { mediaBin: rawMediaBin }
+                  : {}),
                 // K2 — opaque passthrough of docProps/custom.xml. Only
                 // emitted when the source deck carried one so most
                 // pptxs (which omit custom.xml entirely) stay lean.

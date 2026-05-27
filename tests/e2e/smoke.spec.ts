@@ -2853,6 +2853,102 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(result.exportedInk, 'ink present in exported zip').toContain('inkml:ink');
   });
 
+  test('pptx import + export wave 12 — binary media passthrough (K6 audio / video)', async ({ page }) => {
+    // K6 — binary parts under ppt/media/ (mp3 / mp4 / etc.) and
+    // ppt/embeddings/ (chart-data xlsx / OLE) need base64 encoding to
+    // ride the JSON-stringified resources slot. restorePassthrough
+    // decodes back to bytes before writing them to the exported zip.
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(600);
+
+    const result = await page.evaluate(async () => {
+      // Fake mp4 + xlsx contents — just identifiable byte patterns. The
+      // round-trip only cares about preserving bytes verbatim, not
+      // playing the media or parsing the xlsx.
+      const fakeMp4 = new Uint8Array([0, 0, 0, 32, 102, 116, 121, 112, 105, 115, 111, 109, 1, 2, 3, 4]); // "....ftypisom...."
+      const fakeXlsx = new Uint8Array([80, 75, 3, 4, 20, 0, 8, 8, 8, 0, 9, 9, 9, 9]); // PK signature + filler
+
+      const presentation =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:sldSz cx="9144000" cy="6858000"/>` +
+        `<p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst>` +
+        `</p:presentation>`;
+      const presRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/>` +
+        `</Relationships>`;
+      const slide =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">` +
+        `<p:cSld><p:spTree>` +
+        `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+        `<p:grpSpPr/>` +
+        `</p:spTree></p:cSld>` +
+        `</p:sld>`;
+      const emptyRels =
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1?bundle')).default;
+      const zip = new JSZip();
+      zip.file('ppt/presentation.xml', presentation);
+      zip.file('ppt/_rels/presentation.xml.rels', presRels);
+      zip.file('ppt/slides/slide1.xml', slide);
+      zip.file('ppt/slides/_rels/slide1.xml.rels', emptyRels);
+      zip.file('ppt/media/video1.mp4', fakeMp4);
+      zip.file('ppt/embeddings/Microsoft_Excel_Worksheet.xlsx', fakeXlsx);
+      const buf = await zip.generateAsync({ type: 'arraybuffer' });
+
+      type W = {
+        __casualSlides_getPptxClient: () => {
+          import(file: ArrayBuffer, fileName: string): Promise<unknown>;
+          export(snapshot: unknown): Promise<{ blob: Blob; fileName: string }>;
+        };
+      };
+      const client = (window as unknown as W).__casualSlides_getPptxClient();
+      const snapshot = await client.import(buf, 'wave12.pptx');
+
+      // Re-export and pull the binary parts back out for byte-equality assertion.
+      const { blob } = await client.export(snapshot);
+      const reZip = await JSZip.loadAsync(await blob.arrayBuffer());
+      const exportedMp4 = await reZip.file('ppt/media/video1.mp4')?.async('uint8array');
+      const exportedXlsx = await reZip.file('ppt/embeddings/Microsoft_Excel_Worksheet.xlsx')?.async('uint8array');
+
+      return {
+        snapshot,
+        mp4Bytes: exportedMp4 ? Array.from(exportedMp4) : null,
+        xlsxBytes: exportedXlsx ? Array.from(exportedXlsx) : null,
+      };
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = result.snapshot;
+    const resources: Array<{ name: string; data: string }> | undefined = r.resources;
+    expect(resources, 'resources slot populated').toBeTruthy();
+    const passthrough = resources!.find((e) => e.name === 'CASUAL_SLIDES_PPTX_RAW');
+    expect(passthrough, 'CASUAL_SLIDES_PPTX_RAW resource exists').toBeTruthy();
+    const raw = JSON.parse(passthrough!.data);
+    expect(raw.mediaBin, 'mediaBin bucket emitted').toBeTruthy();
+    expect(Object.keys(raw.mediaBin), 'mp4 captured').toContain('ppt/media/video1.mp4');
+    expect(Object.keys(raw.mediaBin), 'xlsx captured').toContain('ppt/embeddings/Microsoft_Excel_Worksheet.xlsx');
+
+    // Byte-equality check on the round-trip — the mp4 magic bytes survive
+    // the base64 encode → JSON stringify → JSON parse → base64 decode trip.
+    expect(result.mp4Bytes, 'mp4 restored on export').toEqual(
+      [0, 0, 0, 32, 102, 116, 121, 112, 105, 115, 111, 109, 1, 2, 3, 4],
+    );
+    expect(result.xlsxBytes, 'embedded xlsx restored on export').toEqual(
+      [80, 75, 3, 4, 20, 0, 8, 8, 8, 0, 9, 9, 9, 9],
+    );
+  });
+
   test('pptx import wave 7o — table + chart Gap 3 (G1-G4 + H1)', async ({ page }) => {
     // Slide carries a 2x2 table with one merged cell and a chart
     // graphicFrame referencing ppt/charts/chart1.xml. After import:

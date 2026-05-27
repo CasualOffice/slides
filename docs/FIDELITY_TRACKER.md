@@ -12,7 +12,7 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 
 ## Snapshot — 2026-05-27 (post wave 9a-9f + renderer effects + image filter wave)
 
-**92 ✅ / 0 ⚠️ / 7 ❌ deferred** (out of 99 tracked items — earlier snapshots used a stale "87" total).
+**93 ✅ / 0 ⚠️ / 6 ❌ deferred** (out of 99 tracked items — wave 12 closes K6 audio/video binary passthrough via base64 in `CASUAL_SLIDES_PPTX_RAW.mediaBin`).
 
 **Parser side — wave 9a-9f closes out the remaining gaps:**
 - **K4** — `<p:hf>` opt-outs of service placeholders
@@ -29,14 +29,13 @@ Visual impact = how noticeable the gap is in a typical business deck. Complexity
 - **`IImageProperties.effectLst`** slot added to `@univerjs/core` (re-uses `IEffectList` from the shape side) so the parser has a typed channel for `<a:effectLst>` payloads on `<p:pic>` (commit `b48748a`).
 - **ImageAdaptor** honours `imageProperties.effectLst.outerShdw` / `.glow` (mirrors ShapeAdaptor's decoder) + `imageProperties.brightness` / `.contrast` (CSS filter string) + `imageProperties.transparency` (engine-render Image `opacity = 1 - transparency`) (commit `a9b6a83`).
 
-The 7 remaining `❌ deferred` items are explicitly out of v0 editor scope:
+The 6 remaining `❌ deferred` items are explicitly out of v0 editor scope:
 - **A7** Slide transitions — playback-only
 - **A8** Slide animations — playback-only
 - **D10** Pattern fill — needs IColorStyle widening + canvas pattern API (vanishingly rare in modern decks)
 - **D11** Picture fill on shape — needs IShapeProperties widening (negligible impact)
 - **D20** 3D rotation / extrusion — vanishingly rare; renderer cost is high
 - **J4** Format scheme defaults — only relevant when shapes use `<a:styleRef>` indirection; modern PowerPoint inlines
-- **K6** Audio / video — needs binary-part passthrough; playback feature
 
 Round-trip fidelity is preserved for every deferred item via the passthrough resources slot — none drop bytes on import/export, they just lack a structured model.
 
@@ -230,7 +229,7 @@ Wave 7c (preceding): F3 (`<p:cxnSp>` connector lines reuse the SHAPE branch) and
 | K3 | Default text style (`<p:defaultTextStyle>`) | ✅ | Med | Med | Wave 8e — `extractDeckDefaultRunProps` reads `<p:presentation><p:defaultTextStyle><a:lvl1pPr><a:defRPr>` into `ImageRegistry.deckDefaultRunProps`. The processSpTree text branch spreads it under the placeholder-inherited defaults so layout/master still wins on top, but free-floating text frames now pick up the deck-level fallback. lvl2+ deferred (matches the I4 lvl1-only stance). |
 | K4 | Headers / footers | ✅ | Low | Med | Wave 9a — `extractSlideHfOptOuts` reads `<p:sld><p:hf ftr dt sldNum>` and returns the set of types the slide opts out of (any flag set to `"0"`). The I5 service-placeholder synthesis loop honours the opt-outs so a slide that disables (e.g.) the page number doesn't get one painted from the master. Default (everything visible) flows through unchanged. |
 | K5 | Comments (`<p:cm>`) | ✅ | Med | Med | Wave 7n — every `ppt/comments/*.xml` part (+ rels) captured into `CASUAL_SLIDES_PPTX_RAW.comments` and re-injected on export. Native UI for comments still TODO (P3 feature work). |
-| K6 | Audio / video | ❌ deferred | Low | Med | Out of v0 editor scope — binary-part passthrough (mp3 / mp4 / etc.) is not yet wired into the resources slot which only captures text/xml. Audio / video are playback features; we ship an editor, not a presenter. |
+| K6 | Audio / video | ✅ | Low | Med | Wave 12 — binary parts (`ppt/media/*.mp3 / *.mp4 / *.wav / ...` excluding image MIMEs already preserved per-element, plus `ppt/embeddings/*` chart-data xlsx + OLE payloads) read as base64 via `zip.file(p)?.async('base64')`, stashed under `CASUAL_SLIDES_PPTX_RAW.mediaBin`. `restorePassthrough` decodes back to `Uint8Array` and injects into the produced zip. Byte-equality round-trip verified in e2e. Playback / preview UI still TODO (presenter feature). |
 | K7 | SmartArt (`<a:graphicData>` diagram) | ✅ | Med | High | Wave 7n — every `ppt/diagrams/*.xml` part (+ rels) captured into `CASUAL_SLIDES_PPTX_RAW.diagrams` and re-injected on export. Renderer support deferred. |
 | K8 | Ink | ✅ | Low | High | Wave 7n — every `ppt/ink/*.xml` part (+ rels) captured into `CASUAL_SLIDES_PPTX_RAW.ink` and re-injected on export. Renderer support deferred. |
 
