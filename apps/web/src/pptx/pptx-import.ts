@@ -647,11 +647,19 @@ function parseRunProps(
     if (Number.isFinite(sz)) out.fs = sz / 100;
   }
 
+  // Bold / italic are tri-state: present-and-truthy, present-and-false,
+  // or absent. We MUST emit explicit `bl: 0` / `it: 0` when the deck
+  // sets `b="0"` / `i="0"` so it can OVERRIDE an inherited
+  // bold-by-default (e.g. master title placeholder has `b="1"` and the
+  // slide body explicitly opts out via `b="0"`). Absent stays absent so
+  // inheritance keeps flowing.
   const b = node['@b'];
   if (b === '1' || b === 1 || b === 'true') out.bl = 1;
+  else if (b === '0' || b === 0 || b === 'false') out.bl = 0;
 
   const i = node['@i'];
   if (i === '1' || i === 1 || i === 'true') out.it = 1;
+  else if (i === '0' || i === 0 || i === 'false') out.it = 0;
 
   const u = node['@u'];
   if (typeof u === 'string' && u !== 'none') {
@@ -1795,22 +1803,47 @@ interface PlaceholderRect {
 // We key on `${type}|${idx}` with missing values as empty strings, so
 // the same placeholder in slide / layout / master always resolves to
 // the same string.
-function placeholderKey(ph: XmlNode | undefined): string | null {
-  if (!ph) return null;
-  const type = ph['@type'];
-  const idx = ph['@idx'];
-  if (type === undefined && idx === undefined) {
-    // Bare `<p:ph/>` — treat as idx="0" by OOXML convention.
-    return '|0';
-  }
-  return `${type ?? ''}|${idx ?? ''}`;
-}
 
-function getPlaceholderKey(sp: unknown): string | null {
+// Slide-side placeholder lookup with the same key-fan-out as the
+// indexer's `indexUnderAllKeys`. A slide-side `<p:ph idx="N" type="T">`
+// tries, in order:
+//   `T|N`  exact
+//   `T|`   type-only (master/layout often omit idx)
+//   `|N`   idx-only (slides sometimes drop @type for numbered slots)
+//   `|0`   bare default
+// This unblocks decks like the sample one where slide 2's title uses
+// `<p:ph idx="4294967295" type="title">` while master defines just
+// `<p:ph type="title">` (no idx). Without the fan-out the exact key
+// missed and the slide lost its inherited bold + Raleway font.
+function getPlaceholderInherited(
+  map: Map<string, PlaceholderRect>,
+  sp: unknown,
+): PlaceholderRect | null {
   const nvSpPr = findChild(sp, 'p:nvSpPr');
   const nvPr = findChild(nvSpPr, 'p:nvPr');
   const ph = findChild(nvPr, 'p:ph') as XmlNode | undefined;
-  return placeholderKey(ph);
+  if (!ph) return null;
+  const type = ph['@type'];
+  const idx = ph['@idx'];
+  const t = type === undefined ? '' : String(type);
+  const i = idx === undefined ? '' : String(idx);
+  const candidates: string[] = [];
+  if (t || i) candidates.push(`${t}|${i}`);
+  if (t) candidates.push(`${t}|`);
+  if (i) candidates.push(`|${i}`);
+  if (!t && !i) candidates.push('|0');
+  // Also try class aliases (title↔ctrTitle, body↔subTitle).
+  if (t && PLACEHOLDER_TYPE_ALIASES[t]) {
+    for (const alias of PLACEHOLDER_TYPE_ALIASES[t]) {
+      if (i) candidates.push(`${alias}|${i}`);
+      candidates.push(`${alias}|`);
+    }
+  }
+  for (const key of candidates) {
+    const hit = map.get(key);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 // Layout/master placeholder lookup is tolerant to (type, idx) shape
@@ -2405,8 +2438,7 @@ async function processSpTree(
     // off. Without this, placeholders end up at (0, 0) sized (0, 0)
     // with default-rendered text — the dominant cause of "imported
     // decks look empty / unstyled".
-    const phKey = getPlaceholderKey(sp);
-    const phInherited = phKey ? reg.placeholderRects.get(phKey) : null;
+    const phInherited = getPlaceholderInherited(reg.placeholderRects, sp);
     if (!xfrm && phInherited) {
       rawLeft = phInherited.left;
       rawTop = phInherited.top;
