@@ -230,6 +230,25 @@ Scope: `Toolbar.tsx` + new components. Industry-standard format controls.
 
 ---
 
+## Critical canvas regression — RESOLVED (fd2f3ca, 2026-05-29)
+
+**Symptom:** main slide `<canvas>` computed to width 0 — blank editing surface
+(chrome/toolbar/rail all rendered fine). Blocked the chart/table fidelity work.
+
+**Root cause:** the Wave-4 slide rail hid Univer's native sidebar with
+`[data-u-comp="left-sidebar"] { display: none }`. `display:none` pulled the
+sidebar out of Univer's internal flex layout; the render engine then sized the
+main canvas at width 0. Bisected: canvas = 1232 at 29c5834 (pre-Wave-1), 0 at
+HEAD; toggling that single rule flipped it 0 → 1220.
+
+**Fix:** hide the native sidebar by collapsing it (width/min/max 0 + overflow
+hidden + opacity 0 + pointer-events none) instead of `display:none`, keeping it
+in the flex flow so the canvas gets full width. Verified the slide renders at
+1220 px. Also reverted the over-aggressive `#root`/workspace/mount layout clamps
+to the known-good baseline, and removed `overflow:hidden` from `.cs-titlebar`
+(it was clipping the File/Edit/View dropdowns behind the toolbar — now uses
+position:relative + z-index:60; verified the dropdown paints on top).
+
 ## Bug-fix pass (2026-05-29)
 
 Verified against a headless browser on both dev + a production build:
