@@ -670,6 +670,158 @@ const ICONS: Record<string, IconBody> = {
       </>
     ),
   },
+
+  // ── format pane ────────────────────────────────────────────────────
+  lock: {
+    outlined: (
+      <>
+        <rect x="4" y="11" width="16" height="10" rx="2" />
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </>
+    ),
+    filled: (
+      <>
+        <rect x="4" y="11" width="16" height="10" rx="2" fill="currentColor" stroke="none" />
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </>
+    ),
+  },
+  lock_open: {
+    outlined: (
+      <>
+        <rect x="4" y="11" width="16" height="10" rx="2" />
+        <path d="M8 11V7a4 4 0 0 1 8 0" />
+      </>
+    ),
+  },
+  chevron_double_right: {
+    outlined: (
+      <>
+        <polyline points="7 6 13 12 7 18" />
+        <polyline points="13 6 19 12 13 18" />
+      </>
+    ),
+  },
+  chevron_down: { outlined: <polyline points="6 9 12 15 18 9" /> },
+  chevron_up: { outlined: <polyline points="6 15 12 9 18 15" /> },
+  vertical_align_top: {
+    outlined: (
+      <>
+        <line x1="4" y1="3" x2="20" y2="3" />
+        <polyline points="8 11 12 7 16 11" />
+        <line x1="12" y1="7" x2="12" y2="21" />
+      </>
+    ),
+  },
+  vertical_align_center: {
+    outlined: (
+      <>
+        <line x1="4" y1="12" x2="20" y2="12" />
+        <polyline points="8 7 12 3 16 7" />
+        <polyline points="8 17 12 21 16 17" />
+      </>
+    ),
+  },
+  vertical_align_bottom: {
+    outlined: (
+      <>
+        <line x1="4" y1="21" x2="20" y2="21" />
+        <polyline points="8 13 12 17 16 13" />
+        <line x1="12" y1="3" x2="12" y2="17" />
+      </>
+    ),
+  },
+  shadow: {
+    outlined: (
+      <>
+        <rect x="4" y="4" width="13" height="13" rx="1" />
+        <path d="M8 17v3h12V8h-3" />
+      </>
+    ),
+  },
+  opacity: {
+    outlined: <path d="M12 3 6 11a7 7 0 1 0 12 0z" />,
+  },
+  straighten: {
+    outlined: (
+      <>
+        <rect x="2" y="9" width="20" height="6" rx="1" />
+        <line x1="6" y1="9" x2="6" y2="12" />
+        <line x1="10" y1="9" x2="10" y2="13" />
+        <line x1="14" y1="9" x2="14" y2="13" />
+        <line x1="18" y1="9" x2="18" y2="12" />
+      </>
+    ),
+  },
+
+  // ── slideshow / presenter view ─────────────────────────────────────
+  pause: {
+    outlined: (
+      <>
+        <rect x="6" y="4" width="4" height="16" rx="1" />
+        <rect x="14" y="4" width="4" height="16" rx="1" />
+      </>
+    ),
+    filled: (
+      <>
+        <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" />
+        <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
+  present_to_all: {
+    outlined: (
+      <>
+        <rect x="2" y="4" width="20" height="14" rx="1" />
+        <polyline points="9 12 12 9 15 12" />
+        <line x1="12" y1="9" x2="12" y2="16" />
+        <line x1="6" y1="22" x2="18" y2="22" />
+      </>
+    ),
+    filled: (
+      <>
+        <rect x="2" y="4" width="20" height="14" rx="1" fill="currentColor" stroke="none" />
+        <polyline points="9 12 12 9 15 12" stroke="rgba(255,255,255,0.95)" />
+        <line x1="12" y1="9" x2="12" y2="16" stroke="rgba(255,255,255,0.95)" />
+        <line x1="6" y1="22" x2="18" y2="22" />
+      </>
+    ),
+  },
+  timer: {
+    outlined: (
+      <>
+        <circle cx="12" cy="13" r="8" />
+        <polyline points="12 9 12 13 15 15" />
+        <line x1="9" y1="3" x2="15" y2="3" />
+      </>
+    ),
+  },
+  note: {
+    outlined: (
+      <>
+        <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+        <polyline points="14 3 14 9 20 9" />
+        <line x1="8" y1="13" x2="16" y2="13" />
+        <line x1="8" y1="17" x2="14" y2="17" />
+      </>
+    ),
+  },
+  next_plan: {
+    outlined: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <polyline points="10 8 14 12 10 16" />
+      </>
+    ),
+  },
+  keyboard_double_arrow_right: {
+    outlined: (
+      <>
+        <polyline points="7 6 13 12 7 18" />
+        <polyline points="13 6 19 12 13 18" />
+      </>
+    ),
+  },
 };
 
 // Render-time map from the (deprecated) Material Symbols name space we used

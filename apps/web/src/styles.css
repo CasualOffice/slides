@@ -2435,3 +2435,493 @@ button.cs-statusbar__zoom-value:focus-visible {
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
+/* ================ Format pane ================ */
+/*
+ * Right-edge contextual format panel. Mounted as a sibling of <App /> in
+ * main.tsx — anchors via position: fixed to the right of the viewport.
+ *
+ * Layout: the pane is 280 px wide and stretches between the toolbar
+ * bottom and the status-bar top. When visible, document.body carries a
+ * `.cs-format-pane-open` class so the workspace + notes + status bar
+ * shrink their right edge by 280 px. Smooth 180 ms transitions match
+ * the Material Design 3 motion tokens used elsewhere.
+ *
+ * Anchor offsets (top/bottom) are derived empirically from existing
+ * chrome heights (TitleBar 48 + Toolbar 44 = 92; StatusBar 28).
+ * If chrome heights change later, update the two CSS vars below.
+ */
+
+.cs-format-pane {
+  --cs-fp-width: 280px;
+  --cs-fp-top: 92px;
+  --cs-fp-bottom: 28px;
+  position: fixed;
+  top: var(--cs-fp-top);
+  right: 0;
+  bottom: var(--cs-fp-bottom);
+  width: var(--cs-fp-width);
+  background: var(--cs-surface);
+  border-left: 1px solid var(--cs-border-2);
+  box-shadow: var(--cs-shadow-1);
+  display: flex;
+  flex-direction: column;
+  z-index: 40;
+  transform: translateX(0);
+  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+  font-size: 12px;
+  color: var(--cs-text);
+}
+
+.cs-format-pane.is-hidden {
+  display: none;
+}
+
+/* Shrink siblings of the App tree (workspace, notes, status bar) so the
+ * pane never overlaps content. Driven by the body class the provider
+ * toggles when a selection exists. */
+body.cs-format-pane-open .cs-workspace,
+body.cs-format-pane-open .cs-notes,
+body.cs-format-pane-open .cs-statusbar {
+  margin-right: 280px;
+  transition: margin-right 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cs-format-pane__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--cs-border-2);
+  background: var(--cs-surface-2, var(--cs-surface));
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--cs-text);
+  flex-shrink: 0;
+}
+
+.cs-format-pane__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.cs-format-pane__section {
+  border-bottom: 1px solid var(--cs-border-2);
+}
+
+.cs-format-pane__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--cs-text);
+  text-align: left;
+  transition: background-color 120ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cs-format-pane__section-header:hover {
+  background: var(--cs-hover, rgba(60, 64, 67, 0.06));
+}
+
+.cs-format-pane__section-header:focus-visible {
+  outline: 2px solid var(--cs-accent);
+  outline-offset: -2px;
+}
+
+.cs-format-pane__section-body {
+  padding: 4px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cs-format-pane__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.cs-format-pane__row--col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.cs-format-pane__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.cs-format-pane__field.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cs-format-pane__field-label {
+  font-size: 11px;
+  color: var(--cs-text-mute);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.cs-format-pane__input {
+  height: 28px;
+  border: 1px solid var(--cs-border);
+  border-radius: 4px;
+  padding: 0 8px;
+  background: var(--cs-surface);
+  color: var(--cs-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 120ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 120ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cs-format-pane__input:focus {
+  outline: none;
+  border-color: var(--cs-accent);
+  box-shadow: 0 0 0 2px var(--cs-accent-bg);
+}
+
+.cs-format-pane__input:disabled {
+  background: var(--cs-bg);
+  color: var(--cs-text-dim);
+  cursor: not-allowed;
+}
+
+.cs-format-pane__lock {
+  height: 28px;
+  width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--cs-border);
+  border-radius: 4px;
+  color: var(--cs-text-mute);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 120ms cubic-bezier(0.4, 0, 0.2, 1),
+              color 120ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 120ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cs-format-pane__lock:hover {
+  background: var(--cs-hover, rgba(60, 64, 67, 0.06));
+  color: var(--cs-text);
+}
+
+.cs-format-pane__lock.is-locked {
+  background: var(--cs-accent-bg);
+  border-color: var(--cs-accent);
+  color: var(--cs-accent);
+}
+
+.cs-format-pane__lock:focus-visible {
+  outline: 2px solid var(--cs-accent);
+  outline-offset: 1px;
+}
+
+.cs-format-pane__color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cs-format-pane__color-row.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cs-format-pane__color-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cs-format-pane__color-input input[type="color"] {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--cs-border);
+  border-radius: 4px;
+  background: var(--cs-surface);
+  cursor: pointer;
+}
+
+.cs-format-pane__color-input input[type="color"]:disabled {
+  cursor: not-allowed;
+}
+
+.cs-format-pane__color-hex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--cs-text-mute);
+}
+
+.cs-format-pane__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--cs-text);
+  cursor: pointer;
+}
+
+.cs-format-pane__toggle input[type="checkbox"] {
+  accent-color: var(--cs-accent);
+}
+
+.cs-format-pane__toggle input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.cs-format-pane__segmented {
+  display: inline-flex;
+  border: 1px solid var(--cs-border);
+  border-radius: 4px;
+  overflow: hidden;
+  width: fit-content;
+}
+
+.cs-format-pane__seg {
+  background: transparent;
+  border: 0;
+  padding: 0 10px;
+  height: 24px;
+  font-size: 11px;
+  color: var(--cs-text-mute);
+  cursor: pointer;
+  border-right: 1px solid var(--cs-border);
+  transition: background-color 120ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cs-format-pane__seg:last-child {
+  border-right: 0;
+}
+
+.cs-format-pane__seg.is-active {
+  background: var(--cs-accent-bg);
+  color: var(--cs-accent);
+}
+
+.cs-format-pane__seg:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.cs-format-pane__opacity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cs-format-pane__opacity-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--cs-text-mute);
+}
+
+.cs-format-pane__opacity {
+  width: 100%;
+  accent-color: var(--cs-accent);
+}
+
+.cs-format-pane__opacity:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+
+/* ================ Slideshow + presenter ================ */
+/* Stubs for W3-G classes that the SlideShow + PresenterView components
+   render. Minimal styling — match the existing dark slideshow toolbar
+   language, MD3 elevation tokens, brand cyan accent. */
+
+.cs-slideshow__btn--active {
+  background: rgba(8, 145, 178, 0.25);
+  color: #fff;
+}
+.cs-slideshow__btn--ghost {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+}
+.cs-slideshow__btn--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.cs-slideshow__counter--hidden {
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.cs-slideshow--cursor-hidden,
+.cs-slideshow--cursor-hidden * {
+  cursor: none !important;
+}
+
+/* Blackscreen / whitescreen overlay covers the stage but leaves the
+   toolbar usable. */
+.cs-slideshow__blackscreen {
+  position: absolute;
+  inset: 0 0 56px 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.cs-slideshow__blackscreen--black { background: #000; }
+.cs-slideshow__blackscreen--white { background: #fff; }
+
+/* Jump-to-slide floating input. Centred bottom, above the toolbar. */
+.cs-slideshow__jump {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: rgba(20, 22, 26, 0.95);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  min-width: 240px;
+}
+.cs-slideshow__jump-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+}
+.cs-slideshow__jump-input {
+  height: 36px;
+  padding: 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--cs-accent);
+  border-radius: 6px;
+  outline: 0;
+}
+.cs-slideshow__jump-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Presenter view: two-pane split — 60% current slide / 40% sidebar. */
+.cs-slideshow__presenter {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 20px;
+  padding: 24px;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #0a0c10;
+  color: #fff;
+}
+.cs-slideshow__presenter-current {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+.cs-slideshow__presenter-sidebar {
+  display: grid;
+  grid-template-rows: minmax(0, 40%) minmax(0, 1fr) auto;
+  gap: 16px;
+  min-width: 0;
+}
+.cs-slideshow__presenter-next {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.cs-slideshow__presenter-next-label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.cs-slideshow__presenter-next-frame {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1a1d23;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.cs-slideshow__presenter-next-empty {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
+.cs-slideshow__presenter-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.cs-slideshow__presenter-notes-label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.cs-slideshow__presenter-notes-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  white-space: pre-wrap;
+}
+.cs-slideshow__presenter-notes-empty {
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
+.cs-slideshow__presenter-timer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.cs-slideshow__presenter-timer-value {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
