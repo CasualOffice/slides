@@ -51,10 +51,8 @@ html, body, #root {
 
 #root {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--cs-titlebar-h) var(--cs-toolbar-h) 1fr auto var(--cs-statusbar-h);
   min-height: 0;
-  min-width: 0;
 }
 
 /* Grid items default to min-width: auto (= intrinsic content size), which
@@ -107,7 +105,12 @@ button:disabled { cursor: not-allowed; }
   border-bottom: 1px solid var(--cs-border);
   user-select: none;
   min-width: 0;
-  overflow: hidden;
+  /* NO overflow:hidden here — the File/Edit/View dropdown menus are
+     children of the titlebar and open DOWNWARD past its bottom edge;
+     clipping the titlebar hid them behind the toolbar. Horizontal bleed
+     is prevented by min-width:0 + the inner cells' own clamping. */
+  position: relative;
+  z-index: 60;
 }
 
 /* Every direct child of the titlebar respects the grid cell width so a
@@ -458,7 +461,6 @@ button:disabled { cursor: not-allowed; }
   position: relative;
   background: var(--cs-stage);
   min-height: 0;
-  min-width: 0;
   overflow: hidden;
   display: flex;
 }
@@ -466,10 +468,8 @@ button:disabled { cursor: not-allowed; }
 .univer-mount {
   flex: 1 1 auto;
   min-height: 0;
-  min-width: 0;
   position: relative;
   background: var(--cs-stage);
-  overflow: hidden;
 }
 
 /* ============================================================= Notes panel */
@@ -3179,7 +3179,19 @@ button.cs-statusbar__zoom-value:focus-visible {
 /* Hide Univer's native slide bar — we render our own. Scoped to the
    univer mount so our rail (which reuses data-u-comp="left-sidebar" for
    the context-menu hook) is NOT hidden. */
-.univer-mount [data-u-comp="left-sidebar"] { display: none !important; }
+/* Hide Univer's native sidebar WITHOUT display:none — display:none removed
+   it from Univer's internal flex layout and the render engine then computed
+   the main slide canvas at width 0 ("no canvas"). Collapsing it to zero
+   width + clipping keeps it in the flow so the canvas area gets the full
+   remaining width, while the sidebar itself is invisible. */
+.univer-mount [data-u-comp="left-sidebar"] {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
 
 .cs-slide-rail {
   position: fixed;
