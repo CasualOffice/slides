@@ -2925,3 +2925,245 @@ body.cs-format-pane-open .cs-statusbar {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
 }
+/* ================ Find & replace ================ */
+
+/* Floating popover anchored top-right of the workspace, 380 px wide,
+   slide-in from the right. Persistent until dismissed (matches Google
+   Slides / Word for the Web — clicking the canvas keeps the popover
+   visible so the user can keep navigating matches). */
+
+@keyframes cs-findreplace-slide-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes cs-findreplace-flash {
+  0%   { opacity: 0;   box-shadow: 0 0 0 2px var(--cs-accent), 0 0 0 6px rgba(8, 145, 178, 0.25); }
+  20%  { opacity: 1; }
+  100% { opacity: 0;   box-shadow: 0 0 0 2px var(--cs-accent), 0 0 0 6px rgba(8, 145, 178, 0); }
+}
+
+.cs-findreplace {
+  position: fixed;
+  top: calc(var(--cs-titlebar-h) + var(--cs-toolbar-h) + 12px);
+  right: 16px;
+  z-index: 940;
+  width: 380px;
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: cs-findreplace-slide-in 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cs-findreplace__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 12px;
+  border-bottom: 1px solid var(--cs-border-2);
+}
+
+.cs-findreplace__title {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+  color: var(--cs-text);
+}
+
+.cs-findreplace__close {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cs-radius);
+  color: var(--cs-text-mute);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.cs-findreplace__close:hover { background: var(--cs-hover); color: var(--cs-text); }
+.cs-findreplace__close:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: 1px;
+}
+
+.cs-findreplace__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+}
+
+.cs-findreplace__row + .cs-findreplace__row {
+  padding-top: 0;
+}
+
+.cs-findreplace__row--replace {
+  border-top: 1px dashed var(--cs-border-2);
+  padding-top: 8px;
+  margin-top: 0;
+}
+
+.cs-findreplace__expand {
+  width: 16px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--cs-text-mute);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.cs-findreplace__expand:hover { color: var(--cs-text); }
+.cs-findreplace__expand .cs-icon { transition: transform 160ms ease; }
+.cs-findreplace__expand .is-open { transform: rotate(-180deg); }
+
+.cs-findreplace__input-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.cs-findreplace__input {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  color: var(--cs-text);
+  background: var(--cs-surface-2);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius);
+  padding: 6px 60px 6px 10px;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.cs-findreplace__input::placeholder { color: var(--cs-text-dim); }
+.cs-findreplace__input:focus {
+  border-color: var(--cs-accent);
+  box-shadow: 0 0 0 2px rgba(8, 145, 178, 0.18);
+}
+.cs-findreplace__input.is-error {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.18);
+}
+
+.cs-findreplace__count {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--cs-text-mute);
+  pointer-events: none;
+  background: var(--cs-surface-2);
+  padding: 0 4px;
+}
+
+.cs-findreplace__toggles {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.cs-findreplace__toggle {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--cs-radius);
+  background: transparent;
+  color: var(--cs-text-mute);
+  cursor: pointer;
+  padding: 0;
+}
+.cs-findreplace__toggle:hover { background: var(--cs-hover); color: var(--cs-text); }
+.cs-findreplace__toggle.is-active {
+  background: var(--cs-accent-bg);
+  color: var(--cs-accent);
+  border-color: rgba(8, 145, 178, 0.32);
+}
+.cs-findreplace__toggle:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: 1px;
+}
+
+.cs-findreplace__nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 2px;
+  border-left: 1px solid var(--cs-border-2);
+  padding-left: 6px;
+}
+
+.cs-findreplace__navbtn {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--cs-text-mute);
+  border-radius: var(--cs-radius);
+  cursor: pointer;
+  padding: 0;
+}
+.cs-findreplace__navbtn:hover:not(:disabled) { background: var(--cs-hover); color: var(--cs-text); }
+.cs-findreplace__navbtn:disabled { opacity: 0.4; cursor: default; }
+.cs-findreplace__navbtn:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: 1px;
+}
+
+.cs-findreplace__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.cs-findreplace__action {
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: var(--cs-radius);
+  border: 1px solid var(--cs-border-2);
+  cursor: pointer;
+}
+.cs-findreplace__action:disabled { opacity: 0.45; cursor: default; }
+
+.cs-findreplace__status,
+.cs-findreplace__error {
+  margin: 0;
+  padding: 4px 12px 10px;
+  font-size: 11px;
+  color: var(--cs-text-mute);
+}
+.cs-findreplace__error { color: #b91c1c; }
+
+/* Transient highlight that flashes over the slide stage when the
+   current match changes. `pointer-events: none` keeps it from
+   intercepting clicks. */
+.cs-findreplace-flash {
+  position: fixed;
+  z-index: 935;
+  pointer-events: none;
+  border-radius: 4px;
+  opacity: 0;
+}
+.cs-findreplace-flash--play {
+  animation: cs-findreplace-flash 600ms cubic-bezier(0.4, 0, 0.2, 1);
+}

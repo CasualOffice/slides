@@ -545,6 +545,30 @@
         "aria": "Opacity (percent)",
         "percent": "{{value}}%"
       }
+    },
+    "findReplace": {
+      "title": "Find and replace",
+      "ariaLabel": "Find and replace",
+      "closeTooltip": "Close (Esc)",
+      "close": "Close",
+      "findPlaceholder": "Find in deck",
+      "findAriaLabel": "Find text",
+      "replacePlaceholder": "Replace with",
+      "replaceAriaLabel": "Replace text",
+      "toggleReplace": "Show replace",
+      "hideReplace": "Hide replace",
+      "matchCase": "Match case",
+      "matchWholeWord": "Match whole word",
+      "useRegex": "Use regular expression",
+      "previous": "Previous match",
+      "next": "Next match",
+      "replaceOne": "Replace",
+      "replaceAll": "Replace all",
+      "countNone": "No results",
+      "countOf": "{{current}} of {{total}}",
+      "regexInvalid": "Invalid regular expression",
+      "replacedCount_one": "Replaced {{count}} match",
+      "replacedCount_other": "Replaced {{count}} matches"
     }
   },
   "slideshow": {

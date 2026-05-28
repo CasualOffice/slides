@@ -2,6 +2,7 @@ import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import { ShortcutsProvider } from './shell/ShortcutsDialog';
 import { FormatPaneProvider } from './shell/FormatPane';
+import { FindReplaceProvider } from './shell/FindReplaceDialog';
 // i18n must initialise before any React component mounts so the first
 // render of <App /> already sees the configured `t()` instance — otherwise
 // components would fall back to raw keys for one tick.
@@ -37,5 +38,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
     <ShortcutsProvider />
     <FormatPaneProvider />
+    <FindReplaceProvider />
   </>,
 );

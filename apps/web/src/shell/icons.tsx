@@ -822,6 +822,70 @@ const ICONS: Record<string, IconBody> = {
       </>
     ),
   },
+
+  // ── find &amp; replace ────────────────────────────────────────────────
+  find_replace: {
+    outlined: (
+      <>
+        <circle cx="9" cy="9" r="5" />
+        <line x1="13" y1="13" x2="17" y2="17" />
+        <polyline points="14 19 17 22 20 19" />
+        <path d="M17 22V14" />
+      </>
+    ),
+  },
+  match_case: {
+    outlined: (
+      <>
+        <path d="M3 18 7 6l4 12" />
+        <line x1="4.5" y1="14" x2="9.5" y2="14" />
+        <circle cx="16.5" cy="15" r="3.2" />
+        <line x1="19.7" y1="12" x2="19.7" y2="18" />
+      </>
+    ),
+    filled: (
+      <>
+        <path d="M3 18 7 6l4 12" stroke="currentColor" />
+        <rect x="4.5" y="13" width="5" height="2" fill="currentColor" stroke="none" />
+        <circle cx="16.5" cy="15" r="3.2" fill="currentColor" stroke="none" />
+        <rect x="18.7" y="12" width="2" height="6" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
+  regex: {
+    outlined: (
+      <>
+        <line x1="12" y1="4" x2="12" y2="14" />
+        <line x1="7.6" y1="6.5" x2="16.4" y2="11.5" />
+        <line x1="16.4" y1="6.5" x2="7.6" y2="11.5" />
+        <circle cx="6.5" cy="18" r="1.4" fill="currentColor" stroke="none" />
+      </>
+    ),
+    filled: (
+      <>
+        <line x1="12" y1="4" x2="12" y2="14" stroke="currentColor" />
+        <line x1="7.6" y1="6.5" x2="16.4" y2="11.5" stroke="currentColor" />
+        <line x1="16.4" y1="6.5" x2="7.6" y2="11.5" stroke="currentColor" />
+        <circle cx="6.5" cy="18" r="1.8" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
+  text_format: {
+    outlined: (
+      <>
+        <polyline points="3 6 11 6 7 6 7 16" />
+        <polyline points="13 9 19 9 16 9 16 16" />
+        <line x1="3" y1="20" x2="19" y2="20" />
+      </>
+    ),
+    filled: (
+      <>
+        <polyline points="3 6 11 6 7 6 7 16" stroke="currentColor" />
+        <polyline points="13 9 19 9 16 9 16 16" stroke="currentColor" />
+        <rect x="3" y="19" width="16" height="2" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
 };
 
 // Render-time map from the (deprecated) Material Symbols name space we used
@@ -830,6 +894,10 @@ const ICONS: Record<string, IconBody> = {
 // than renaming every call site.
 const ALIASES: Record<string, string> = {
   shapes: 'category',
+  // Find dialog uses the same magnifier as the shortcuts search.
+  find_in_page: 'search',
+  // PowerPoint/Material name for the "expand more" caret.
+  arrow_drop_down: 'expand_more',
 };
 
 function isPair(
