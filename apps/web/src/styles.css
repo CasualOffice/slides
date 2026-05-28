@@ -3360,3 +3360,47 @@ body.cs-slide-rail-open .cs-notes {
   background: var(--cs-hover);
   color: var(--cs-text);
 }
+
+/* ================ Responsive + polish ================ */
+
+/* CANVAS SAFETY on narrow viewports. With the slide rail (≈220px) on the
+   left, squeezing the canvas by another 280px for the format pane can drive
+   the slide width toward zero on small laptops. Below 1024px the pane stops
+   squeezing and overlays the right edge instead, so the canvas keeps a
+   usable width. (Desktop-first editor; phones aren't a target, but the app
+   must never collapse to a blank canvas.) */
+@media (max-width: 1024px) {
+  body.cs-format-pane-open .cs-workspace,
+  body.cs-format-pane-open .cs-notes {
+    margin-right: 0;
+  }
+}
+
+/* Consistent keyboard focus ring across the interactive chrome — a visible
+   focus indicator is a WCAG 2.2 requirement and reads as "professional". */
+.cs-btn:focus-visible,
+.cs-toolbar2__btn:focus-visible,
+.cs-menu__trigger:focus-visible,
+.cs-menu__item:focus-visible,
+.cs-statusbar__view-btn:focus-visible,
+.cs-statusbar__zoom-btn:focus-visible,
+.cs-statusbar__zoom-value:focus-visible,
+.cs-slide-rail__thumb:focus-visible,
+.cs-slide-rail__add:focus-visible,
+.cs-slide-context__item:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: 1px;
+  border-radius: var(--cs-radius);
+}
+
+/* Honour the OS "reduce motion" setting — kill the slide/zoom transitions
+   for users who request it (vestibular safety, industry standard). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
