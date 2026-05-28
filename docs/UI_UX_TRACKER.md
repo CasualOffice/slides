@@ -230,6 +230,14 @@ Scope: `Toolbar.tsx` + new components. Industry-standard format controls.
 
 ---
 
+## Bug-fix pass (2026-05-29)
+
+Verified against a headless browser on both dev + a production build:
+- **Toolbar raw `toolbar.<key>` labels** (e9fad5e) — wrong i18n separator; `t('toolbar.X')` → `t('toolbar:X')` across Toolbar + all toolbar/* pickers. Verified buttons render "Undo"/"Bold".
+- **Canvas collapse on selection** (e9fad5e) — FormatPane's `margin-right` shift (stacked on the rail's `margin-left`) drove Univer's column width negative ("column width less than 0"), zeroing the canvas. FormatPane is now a pure overlay; top offset corrected to `calc(titlebar+toolbar)`; `#root` grid no longer clamps the canvas cell.
+- **File → Open** — confirmed working (chooser opens, clean build imports "Loaded · N slides"); the "pptx worker error" was a transient HMR artifact. Added real worker error detail.
+- **Slide rail stale thumbnails after import** (aa2c2b8) — rail now polls the live unitId and re-wires to the new model on deck swap. Verified 3→0 thumbnails on a 0-slide import.
+
 ## Done
 
 - **Wave 1 (2026-05-28, commit 5551714)** — Z (i18n foundation, ~210 keys) + A (45 SVG icons replacing Material Symbols webfont) + B (real Univer scene.scale zoom, SlideDataModel.activePage$ subscription, dirty-state Saved indicator, full Edit/View/Insert menu wiring, dismissible status/error pills) + C (slide context Move up/down/Hide, drag-and-drop .pptx import, disabled toolbar stubs removed). Pushed to origin/main.
