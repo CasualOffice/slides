@@ -32,7 +32,6 @@ import { FontSizePicker } from './toolbar/FontSizePicker';
 import { ColorPicker } from './toolbar/ColorPicker';
 import { AlignPicker, type AlignValue } from './toolbar/AlignPicker';
 import { ListPicker, type ListMode } from './toolbar/ListPicker';
-import { LineSpacingPicker } from './toolbar/LineSpacingPicker';
 import { OverflowPopover } from './toolbar/OverflowPopover';
 
 // ============================================================ shapes ===
@@ -337,17 +336,8 @@ export function Toolbar() {
       >
         <Icon name="print" size={18} />
       </button>
-      <button
-        type="button"
-        className="cs-toolbar2__btn"
-        title={t('toolbar:paintFormat')}
-        aria-label={t('toolbar:paintFormat')}
-        // TODO(univer): no paint-format pipe exists. Implementation would
-        // snapshot the active selection's run style + push it onto the
-        // next mouse-up. Inert.
-      >
-        <Icon name="format_paint" size={18} />
-      </button>
+      {/* Paint format omitted until Univer exposes a copy-format pipe — a
+          dead button is worse UX than no button. TODO(univer). */}
     </>
   );
 
@@ -554,32 +544,10 @@ export function Toolbar() {
       >
         <Icon name="format_indent_increase" size={18} />
       </button>
-      <LineSpacingPicker
-        value={format.lineSpacing}
-        onChange={(lineSpacing) => setFormat((p) => ({ ...p, lineSpacing }))}
-      />
-      <button
-        type="button"
-        className="cs-toolbar2__btn"
-        title={t('toolbar:clearFormatting')}
-        aria-label={t('toolbar:clearFormatting')}
-        // TODO(univer): docs-ui has no `clear-formatting` command in
-        // v0.24.0. Implementation reuses RichTextEditingMutation to wipe
-        // `textRun.ts` over the selection. Inert until the patch lands.
-      >
-        <Icon name="format_clear" size={18} />
-      </button>
-      <button
-        type="button"
-        className="cs-toolbar2__btn"
-        title={t('toolbar:insertLinkShortcut')}
-        aria-label={t('toolbar:insertLink')}
-        // TODO(univer): hyperlink inline format is not exposed as a
-        // docs-ui command in 0.24.0. Univer ships a HYPERLINK custom-range
-        // type but no UI command id. Inert.
-      >
-        <Icon name="link" size={18} />
-      </button>
+      {/* Line spacing, Clear formatting, Insert link omitted until Univer
+          v0.24.0 exposes the matching commands — they were inert (no-op)
+          buttons, which read as broken. Re-add when the fork patch lands.
+          TODO(univer). */}
     </>
   );
 
@@ -627,10 +595,13 @@ export function Toolbar() {
         {group3}
         <span className="cs-toolbar__sep" aria-hidden="true" />
         {group5}
+        {/* Character formatting (font / size / B I U S / colours) is ALWAYS
+            visible — never hidden behind "More". Only the secondary paragraph
+            group (align / list / indent) collapses when space is tight. */}
+        <span className="cs-toolbar__sep" aria-hidden="true" />
+        {group6}
         {!overflow && (
           <>
-            <span className="cs-toolbar__sep" aria-hidden="true" />
-            {group6}
             <span className="cs-toolbar__sep" aria-hidden="true" />
             {group7}
           </>
@@ -674,8 +645,6 @@ export function Toolbar() {
 
       {overflow && overflowAnchor && (
         <OverflowPopover anchor={overflowAnchor} onClose={() => setOverflowAnchor(null)}>
-          {group6}
-          <span className="cs-toolbar__sep" aria-hidden="true" />
           {group7}
         </OverflowPopover>
       )}
