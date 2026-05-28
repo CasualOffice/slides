@@ -147,8 +147,8 @@ Scope: NEW `FindReplaceDialog.tsx` + `<FindReplaceProvider />` self-mount in `ma
 
 ## Wave 4 — in flight (parallel agents, isolated worktrees)
 
-### Bucket W4-Rail — Left slide rail with rendered thumbnails
-Owner: Agent-W4Rail (worktree, running)
+### Bucket W4-Rail — Left slide rail with rendered thumbnails ✅ shipped (b27d8d1)
+Owner: built in-house (both agents stalled on infra)
 Scope: NEW `SlideRail.tsx` + `SlideRailThumbnail.tsx`, self-mount via `<SlideRailProvider />` in `main.tsx`, new `chrome.slideRail.*` i18n, styles.css append.
 - [~] Rendered thumbnails (reuse `SlideTile` with `transform: scale`).
 - [~] Click → activate; Cmd/Ctrl-click toggle; Shift-click range; Esc clears.
@@ -158,12 +158,12 @@ Scope: NEW `SlideRail.tsx` + `SlideRailThumbnail.tsx`, self-mount via `<SlideRai
 - [~] Hide Univer's `[data-u-comp="left-sidebar"]` via CSS.
 - [~] `body.cs-slide-rail-open` toggles 220 px margin-left on workspace.
 
-### Bucket W4-F — Picker improvements
-Owner: Agent-W4F (worktree, running)
-Scope: `ThemePicker.tsx`, `BackgroundPicker.tsx`, `LayoutPicker.tsx`, `layouts.ts`, `en.json` keys, styles.css append.
-- [~] ThemePicker cascades font + accent + text-color across every slide.
-- [~] BackgroundPicker "No fill", "Image…" (PNG/JPEG), optional gradient.
-- [~] LayoutPicker Insert vs Apply-to-current segmented control.
+### Bucket W4-F — Picker improvements (partial ✅ 7420124)
+Owner: built in-house (agent stalled on infra)
+- [x] ThemePicker cascades headingFont + bodyFont + accent + heading/body text colour across every slide; live "Aa" preview chip per card.
+- [x] BackgroundPicker "No fill" button.
+- [ ] BackgroundPicker "Image…" (PNG/JPEG) + gradient tab — deferred.
+- [ ] LayoutPicker Insert vs Apply-to-current segmented control — deferred.
 
 ---
 
