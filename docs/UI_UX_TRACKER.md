@@ -5,7 +5,7 @@ Constraint: **SVG icons only, no emoji, no icon fonts**.
 
 Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked · `[-]` won't fix
 
-Last update: 2026-05-28 — **Waves 1 + 2 pushed** (5551714, 75a4eab, 9ba5c5f, e018737, 93aa6bb). Brand fully cyan. Icons have outlined+filled variants wired on every toggle. Toolbar overflow measures real scrollWidth. Wave 3 dispatched: Format pane, Slideshow presenter, Find &amp; replace — three parallel agents in worktrees.
+Last update: 2026-05-28 — **Waves 1 + 2 + 3 pushed**. Latest commits: a572cbb (Format pane + Slideshow presenter), 2266296 (Find &amp; Replace). Layout clamp fix `0dc12d6` resolves the right-edge trim. Wave 3 agents leaked into main mid-flight; W1b agent was stopped, will be redone serially.
 
 ---
 
@@ -212,6 +212,8 @@ Scope: `Toolbar.tsx` + new components. Industry-standard format controls.
 
 - **Wave 1 (2026-05-28, commit 5551714)** — Z (i18n foundation, ~210 keys) + A (45 SVG icons replacing Material Symbols webfont) + B (real Univer scene.scale zoom, SlideDataModel.activePage$ subscription, dirty-state Saved indicator, full Edit/View/Insert menu wiring, dismissible status/error pills) + C (slide context Move up/down/Hide, drag-and-drop .pptx import, disabled toolbar stubs removed). Pushed to origin/main.
 - **Wave 2 (2026-05-28, commit 75a4eab)** — W2-D (Google Slides toolbar with font family, size ±, B/I/U/S, text+fill+border color, align, list, indent ±, line spacing, link, paint format, clear formatting, ResizeObserver overflow popover, 8 new toolbar/* components, ~70 toolbar i18n keys) + W2-KB (Ctrl+/ shortcut overview dialog with search, platform-aware kbd chips, self-mounting ShortcutsProvider). Plus full brand-to-cyan repaint: CSS tokens + favicon.svg + TitleBar/AboutDialog SVG logos + `<meta name="theme-color">`. Univer command gaps recorded as TODO(univer) on inert buttons (paint format, clear formatting, link, line spacing, shape fill/outline, vertical align).
+- **Wave 2 polish (commits 9ba5c5f / e018737 / 93aa6bb / 0dc12d6)** — Killed the Material Symbols text-fallback (icon names appearing as raw text). Added 45+ Lucide-style outlined SVG bodies and filled variants for state-bearing icons. Wired `filled={isActive}` on every toggle (Bold/Italic/Underline/Strikethrough, AlignPicker, ListPicker, StatusBar view + notes). Bumped icon sizes to Google Slides spec (18 px formatting, 16 px chrome, 14 px carets). Toolbar overflow detection now measures real scrollWidth vs clientWidth. Layout clamp at every chrome region (`#root` grid + cs-titlebar + cs-toolbar + cs-statusbar + cs-workspace get `min-width: 0` + `overflow: hidden`) so the app can never bleed past viewport.
+- **Wave 3 (commits a572cbb + 2266296)** — Right-side Format pane (W3-E) selection-aware with Position/Size/Fill/Border/Shadow/Opacity sections (transform props wire end-to-end via `UpdateSlideElementOperation`; non-transform props left TODO(univer) until the v0.24.0 whitelist widens). Slideshow + presenter view (W3-G) with two-pane current+next+notes+timer, B/W blackscreen, touch swipe, deferred fullscreen, jump-to-slide, cursor auto-hide. Integrated Find &amp; Replace (W3-J) with match-case/word/regex toggles, animated cyan ring highlight, replace-one + replace-all (direct snapshot write — TODO(collab) until Univer text-run mutation is reachable).
 
 ---
 
