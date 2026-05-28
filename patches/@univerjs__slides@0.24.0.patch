@@ -744,7 +744,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1490791e402bf1ec3a819381d32b23ca
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..366010b0a5eaf76ad993f652adc38df64133089d 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..d7879045b29b60a46628ea9690f359894f6bc1d1 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
@@ -910,7 +910,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..366010b0a5eaf76ad993f652adc38df6
  	}
  };
  var ImageAdaptorFactory = class {
-@@ -666,6 +782,405 @@ var ImageAdaptorFactory = class {
+@@ -666,6 +782,397 @@ var ImageAdaptorFactory = class {
  };
  CanvasObjectProviderRegistry.add(new ImageAdaptorFactory());
  
@@ -1155,36 +1155,28 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..366010b0a5eaf76ad993f652adc38df6
 +
 +		try {
 +			if (isPie && series.length > 0) {
-+				// Pie / doughnut — first series; one slice per category.
++				// Pie / doughnut. Arc Paths can't render inside a Group
++				// (Group's reCalculateObjects resets child scale/transform,
++				// which Path + rotated shapes depend on; plain axis-aligned
++				// Rect/Circle/RichText survive). So we show the proportions
++				// as a horizontal 100%-stacked bar — honest about each
++				// category's share + color + %. A circular pie needs a
++				// working Path-in-Group (separate follow-up).
 +				const vals = series[0].values || [];
 +				const total = vals.reduce((a, b) => a + (b > 0 ? b : 0), 0) || 1;
-+				const cx = left + w / 2;
-+				const cy = top + h / 2;
-+				const radius = Math.max(4, Math.min(w, h) / 2 - 12);
-+				const inner = chartType === "doughnut" ? radius * 0.55 : 0;
-+				let a0 = -Math.PI / 2; // start at 12 o'clock
 +				const pointCols = series[0].pointColors || [];
++				const barLeft = left + 16, barTop = top + Math.max(8, h / 2 - 26);
++				const barW = Math.max(10, w - 32), barH = 44;
++				let cursorX = barLeft;
 +				for (let i = 0; i < vals.length; i++) {
 +					const v = vals[i] > 0 ? vals[i] : 0;
 +					const frac = v / total;
-+					const a1 = a0 + frac * Math.PI * 2;
-+					const x0 = cx + radius * Math.cos(a0), y0 = cy + radius * Math.sin(a0);
-+					const x1 = cx + radius * Math.cos(a1), y1 = cy + radius * Math.sin(a1);
-+					const largeArc = (a1 - a0) > Math.PI ? 1 : 0;
-+					// Pie path is relative to the Path's own bbox; Path
-+					// normalises via _setFixBoundingBox, so use absolute
-+					// slide coords here and let it offset.
-+					let dStr;
-+					if (inner > 0) {
-+						const ix0 = cx + inner * Math.cos(a0), iy0 = cy + inner * Math.sin(a0);
-+						const ix1 = cx + inner * Math.cos(a1), iy1 = cy + inner * Math.sin(a1);
-+						dStr = `M ${x0} ${y0} A ${radius} ${radius} 0 ${largeArc} 1 ${x1} ${y1} L ${ix1} ${iy1} A ${inner} ${inner} 0 ${largeArc} 0 ${ix0} ${iy0} Z`;
-+					} else {
-+						dStr = `M ${cx} ${cy} L ${x0} ${y0} A ${radius} ${radius} 0 ${largeArc} 1 ${x1} ${y1} Z`;
-+					}
++					const segW = frac * barW;
 +					const col = pointCols[i] ? "#" + pointCols[i] : seriesColor(i);
-+					addPath(`${id}-slice-${i}`, dStr, { fill: col, stroke: "rgba(255,255,255,1)", strokeWidth: 1 });
-+					a0 = a1;
++					addRect(`${id}-slice-${i}`, { left: cursorX, top: barTop, width: Math.max(1, segW), height: barH, fill: col, stroke: "rgba(255,255,255,1)", strokeWidth: 1 });
++					if (segW > 28) addLabel(`${id}-pct-${i}`, Math.round(frac * 100) + "%", cursorX, barTop + barH / 2 - 7, segW, 14, 9, "#ffffff", 2);
++					if (segW > 20 && categories[i]) addLabel(`${id}-pcat-${i}`, categories[i], cursorX, barTop + barH + 2, segW, 14, 8, "#595959", 2);
++					cursorX += segW;
 +				}
 +			} else if ((isBar || isLine || isArea) && series.length > 0) {
 +				// Cartesian plot. Reserve margins for axis labels.
@@ -1237,10 +1229,10 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..366010b0a5eaf76ad993f652adc38df6
 +						if (isArea) {
 +							const base = yOf(minV < 0 ? 0 : minV);
 +							let d = `M ${pts[0][0]} ${base} L ` + pts.map((p) => `${p[0]} ${p[1]}`).join(" L ") + ` L ${pts[pts.length - 1][0]} ${base} Z`;
-+							addPath(`${id}-area-${si}`, d, { fill: col + "", opacity: 0.5, stroke: col, strokeWidth: 1 });
++							void d; for (let pi = 0; pi < pts.length - 1; pi++) { const ax1 = pts[pi][0], ay1 = pts[pi][1], ax2 = pts[pi + 1][0], ay2 = pts[pi + 1][1]; const acols = Math.max(1, Math.round(ax2 - ax1)); for (let ac = 0; ac < acols; ac++) { const at = ac / acols; const axx = ax1 + (ax2 - ax1) * at; const ayy = ay1 + (ay2 - ay1) * at; addRect(`${id}-ac-${si}-${pi}-${ac}`, { left: axx, top: Math.min(ayy, base), width: 2, height: Math.abs(base - ayy), fill: col, opacity: 0.45 }); } }
 +						} else {
 +							let d = "M " + pts.map((p) => `${p[0]} ${p[1]}`).join(" L ");
-+							addPath(`${id}-line-${si}`, d, { fill: "rgba(0,0,0,0)", stroke: col, strokeWidth: 2 });
++							for (let pi = 0; pi < pts.length - 1; pi++) { const lx1 = pts[pi][0], ly1 = pts[pi][1], lx2 = pts[pi + 1][0], ly2 = pts[pi + 1][1]; const seglen = Math.hypot(lx2 - lx1, ly2 - ly1) || 1; const steps = Math.max(1, Math.round(seglen / 3)); for (let s = 0; s <= steps; s++) { const t = s / steps; addRect(`${id}-ld-${si}-${pi}-${s}`, { left: lx1 + (lx2 - lx1) * t - 1.5, top: ly1 + (ly2 - ly1) * t - 1.5, width: 3, height: 3, fill: col }); } } void d;
 +							// point markers
 +							for (let pi = 0; pi < pts.length; pi++) {
 +								addRect(`${id}-pt-${si}-${pi}`, { left: pts[pi][0] - 2, top: pts[pi][1] - 2, width: 4, height: 4, fill: col });
@@ -1316,7 +1308,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..366010b0a5eaf76ad993f652adc38df6
  //#endregion
  //#region src/views/render/adaptors/rich-text-adaptor.ts
  let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
-@@ -698,7 +1213,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -698,7 +1205,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  			forceRender: true
  		};
  		let isNotNull = false;
@@ -1331,7 +1323,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..366010b0a5eaf76ad993f652adc38df6
  			config = {
  				...config,
  				text,
-@@ -714,12 +1235,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -714,12 +1227,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  				cl
  			};
  			isNotNull = true;
@@ -1344,7 +1336,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..366010b0a5eaf76ad993f652adc38df6
  		}
  		if (isNotNull === false) return;
  		return new RichText(this._localeService, id, config);
-@@ -755,10 +1270,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -755,10 +1262,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -1462,7 +1454,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..366010b0a5eaf76ad993f652adc38df6
  		if (shapeType === "rect") return new Rect(id, {
  			fill,
  			top,
-@@ -774,7 +1395,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -774,7 +1387,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipX,
  			flipY,
  			forceRender: true,
@@ -1472,7 +1464,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..366010b0a5eaf76ad993f652adc38df6
  		});
  		if (shapeType === "roundRect") return new Rect(id, {
  			fill,
-@@ -792,10 +1414,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -792,10 +1406,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipY,
  			forceRender: true,
  			radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -1485,7 +1477,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..366010b0a5eaf76ad993f652adc38df6
  			return new Circle(id, {
  				fill,
  				top,
-@@ -812,9 +1434,220 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -812,9 +1426,220 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
