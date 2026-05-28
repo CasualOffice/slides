@@ -208,7 +208,9 @@ button:disabled { cursor: not-allowed; }
   font-size: 11px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  text-transform: lowercase;
+  /* Capitalize for legibility + screen readers — the label text is
+     already supplied in proper case ("Live", "Connecting"). */
+  text-transform: capitalize;
   letter-spacing: 0.01em;
   border: 1px solid var(--cs-border-2);
   background: var(--cs-surface-2);

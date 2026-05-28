@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Icon } from './icons';
+import { useFocusTrap } from './use-focus-trap';
 
 // Help → About modal. Static content — version, license, repo, the
 // open-source dependencies we ship on top of. Same backdrop / centred-
@@ -58,6 +59,7 @@ const ATTRIBUTIONS: Attribution[] = [
 
 export function AboutDialog({ open, onClose }: AboutDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(open, dialogRef);
 
   useEffect(() => {
     if (!open) return;
@@ -78,8 +80,8 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
   if (!open) return null;
 
   return (
-    <div className="cs-about__backdrop" role="dialog" aria-label="About Casual Slides">
-      <div className="cs-about" ref={dialogRef} data-testid="about-dialog">
+    <div className="cs-about__backdrop" role="dialog" aria-modal="true" aria-label="About Casual Slides">
+      <div className="cs-about" ref={dialogRef} data-testid="about-dialog" tabIndex={-1}>
         <header className="cs-about__header">
           <Icon name="info" size={16} />
           <h2 className="cs-about__title">About Casual Slides</h2>

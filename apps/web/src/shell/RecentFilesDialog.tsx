@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RecentMeta } from '../storage/recent-files';
 import { clearRecents, listRecents, loadRecent, removeRecent } from '../storage/recent-files';
 import { Icon } from './icons';
+import { useFocusTrap } from './use-focus-trap';
 
 // File → Recent files modal. Lists up to 10 recently opened decks from
 // IndexedDB; selecting one reopens it through the same import path the
@@ -36,6 +37,7 @@ function formatRelative(epoch: number): string {
 
 export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(open, dialogRef);
   const [entries, setEntries] = useState<RecentMeta[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,8 +117,8 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
   if (!open) return null;
 
   return (
-    <div className="cs-recent__backdrop" role="dialog" aria-label="Recent files">
-      <div className="cs-recent" ref={dialogRef} data-testid="recent-dialog">
+    <div className="cs-recent__backdrop" role="dialog" aria-modal="true" aria-label="Recent files">
+      <div className="cs-recent" ref={dialogRef} data-testid="recent-dialog" tabIndex={-1}>
         <header className="cs-recent__header">
           <Icon name="history" size={16} />
           <h2 className="cs-recent__title">Recent files</h2>

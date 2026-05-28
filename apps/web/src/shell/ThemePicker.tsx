@@ -6,6 +6,7 @@ import { PageElementType } from '@univerjs/slides';
 import { dispatchSlideCommand } from '../univer/commands';
 import { useTranslation } from '../i18n';
 import { Icon } from './icons';
+import { useFocusTrap } from './use-focus-trap';
 
 // Curated theme catalog. A theme is a full design system — background +
 // heading font + body font + accent + default text colour — cascaded
@@ -102,6 +103,7 @@ async function applyTheme(theme: Theme) {
 export function ThemePicker({ open, onClose }: ThemePickerProps) {
   const { t } = useTranslation('dialogs');
   const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(open, dialogRef);
 
   // Close on outside click + Escape.
   useEffect(() => {
@@ -128,8 +130,8 @@ export function ThemePicker({ open, onClose }: ThemePickerProps) {
   if (!open) return null;
 
   return (
-    <div className="cs-themepicker__backdrop" role="dialog" aria-label={t('theme.ariaLabel')}>
-      <div className="cs-themepicker" ref={dialogRef}>
+    <div className="cs-themepicker__backdrop" role="dialog" aria-modal="true" aria-label={t('theme.ariaLabel')}>
+      <div className="cs-themepicker" ref={dialogRef} tabIndex={-1}>
         <header className="cs-themepicker__header">
           <Icon name="palette" size={16} />
           <h2 className="cs-themepicker__title">{t('theme.title')}</h2>

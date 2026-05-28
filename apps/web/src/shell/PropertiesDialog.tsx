@@ -4,6 +4,7 @@ import { IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { ISlideData, SlideDataModel } from '@univerjs/slides';
 import { PageElementType } from '@univerjs/slides';
 import { Icon } from './icons';
+import { useFocusTrap } from './use-focus-trap';
 
 // File → Properties modal. Read-only metadata about the active deck.
 // Same backdrop / centred-card idiom as ThemePicker; key/value rows
@@ -72,6 +73,7 @@ function formatInches(px: number): string {
 
 export function PropertiesDialog({ open, onClose, fallback }: PropertiesDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(open, dialogRef);
 
   // Read the snapshot ONCE when the dialog opens; static for the dialog's
   // lifetime. Re-open to refresh after edits.
@@ -99,8 +101,8 @@ export function PropertiesDialog({ open, onClose, fallback }: PropertiesDialogPr
   if (!open || !stats) return null;
 
   return (
-    <div className="cs-properties__backdrop" role="dialog" aria-label="Deck properties">
-      <div className="cs-properties" ref={dialogRef} data-testid="properties-dialog">
+    <div className="cs-properties__backdrop" role="dialog" aria-modal="true" aria-label="Deck properties">
+      <div className="cs-properties" ref={dialogRef} data-testid="properties-dialog" tabIndex={-1}>
         <header className="cs-properties__header">
           <Icon name="info" size={16} />
           <h2 className="cs-properties__title">Properties</h2>
