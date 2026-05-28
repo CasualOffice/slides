@@ -49,21 +49,21 @@ interface ShapeMenuItem {
 // dispatch pipeline intact so the renderer/exporter pieces don't need to
 // change. Labels go through i18n (`toolbar.shape_*`).
 const SHAPES_MENU: ShapeMenuItem[] = [
-  { id: 'rect',       labelKey: 'toolbar.shape_rect',       icon: 'add',            cmd: 'slide.command.insert-float-shape.rectangle' },
-  { id: 'ellipse',    labelKey: 'toolbar.shape_ellipse',    icon: 'add',            cmd: 'slide.command.insert-float-shape.ellipse' },
-  { id: 'line',       labelKey: 'toolbar.shape_line',       icon: 'remove',         shapeType: 'line' },
-  { id: 'rightArrow', labelKey: 'toolbar.shape_rightArrow', icon: 'add',            shapeType: 'rightArrow' },
-  { id: 'leftArrow',  labelKey: 'toolbar.shape_leftArrow',  icon: 'add',            shapeType: 'leftArrow' },
-  { id: 'upArrow',    labelKey: 'toolbar.shape_upArrow',    icon: 'add',            shapeType: 'upArrow' },
-  { id: 'downArrow',  labelKey: 'toolbar.shape_downArrow',  icon: 'add',            shapeType: 'downArrow' },
-  { id: 'triangle',   labelKey: 'toolbar.shape_triangle',   icon: 'add',            shapeType: 'triangle' },
-  { id: 'diamond',    labelKey: 'toolbar.shape_diamond',    icon: 'add',            shapeType: 'diamond' },
-  { id: 'pentagon',   labelKey: 'toolbar.shape_pentagon',   icon: 'add',            shapeType: 'pentagon' },
-  { id: 'hexagon',    labelKey: 'toolbar.shape_hexagon',    icon: 'add',            shapeType: 'hexagon' },
-  { id: 'octagon',    labelKey: 'toolbar.shape_octagon',    icon: 'add',            shapeType: 'octagon' },
-  { id: 'chevron',    labelKey: 'toolbar.shape_chevron',    icon: 'add',            shapeType: 'chevron' },
-  { id: 'plus',       labelKey: 'toolbar.shape_plus',       icon: 'add',            shapeType: 'plus' },
-  { id: 'star5',      labelKey: 'toolbar.shape_star5',      icon: 'add',            shapeType: 'star5' },
+  { id: 'rect',       labelKey: 'toolbar:shape_rect',       icon: 'add',            cmd: 'slide.command.insert-float-shape.rectangle' },
+  { id: 'ellipse',    labelKey: 'toolbar:shape_ellipse',    icon: 'add',            cmd: 'slide.command.insert-float-shape.ellipse' },
+  { id: 'line',       labelKey: 'toolbar:shape_line',       icon: 'remove',         shapeType: 'line' },
+  { id: 'rightArrow', labelKey: 'toolbar:shape_rightArrow', icon: 'add',            shapeType: 'rightArrow' },
+  { id: 'leftArrow',  labelKey: 'toolbar:shape_leftArrow',  icon: 'add',            shapeType: 'leftArrow' },
+  { id: 'upArrow',    labelKey: 'toolbar:shape_upArrow',    icon: 'add',            shapeType: 'upArrow' },
+  { id: 'downArrow',  labelKey: 'toolbar:shape_downArrow',  icon: 'add',            shapeType: 'downArrow' },
+  { id: 'triangle',   labelKey: 'toolbar:shape_triangle',   icon: 'add',            shapeType: 'triangle' },
+  { id: 'diamond',    labelKey: 'toolbar:shape_diamond',    icon: 'add',            shapeType: 'diamond' },
+  { id: 'pentagon',   labelKey: 'toolbar:shape_pentagon',   icon: 'add',            shapeType: 'pentagon' },
+  { id: 'hexagon',    labelKey: 'toolbar:shape_hexagon',    icon: 'add',            shapeType: 'hexagon' },
+  { id: 'octagon',    labelKey: 'toolbar:shape_octagon',    icon: 'add',            shapeType: 'octagon' },
+  { id: 'chevron',    labelKey: 'toolbar:shape_chevron',    icon: 'add',            shapeType: 'chevron' },
+  { id: 'plus',       labelKey: 'toolbar:shape_plus',       icon: 'add',            shapeType: 'plus' },
+  { id: 'star5',      labelKey: 'toolbar:shape_star5',      icon: 'add',            shapeType: 'star5' },
 ];
 
 // Manual `slide.mutation.insert-element` payload for shape types the
@@ -311,8 +311,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.undoShortcut')}
-        aria-label={t('toolbar.undo')}
+        title={t('toolbar:undoShortcut')}
+        aria-label={t('toolbar:undo')}
         disabled={undos === 0}
         onClick={() => void dispatchSlideCommand('univer.command.undo')}
       >
@@ -321,8 +321,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.redoShortcut')}
-        aria-label={t('toolbar.redo')}
+        title={t('toolbar:redoShortcut')}
+        aria-label={t('toolbar:redo')}
         disabled={redos === 0}
         onClick={() => void dispatchSlideCommand('univer.command.redo')}
       >
@@ -331,8 +331,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.printShortcut')}
-        aria-label={t('toolbar.print')}
+        title={t('toolbar:printShortcut')}
+        aria-label={t('toolbar:print')}
         onClick={() => void dispatchSlideCommand('casual-slides.command.print')}
       >
         <Icon name="print" size={18} />
@@ -340,8 +340,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.paintFormat')}
-        aria-label={t('toolbar.paintFormat')}
+        title={t('toolbar:paintFormat')}
+        aria-label={t('toolbar:paintFormat')}
         // TODO(univer): no paint-format pipe exists. Implementation would
         // snapshot the active selection's run style + push it onto the
         // next mouse-up. Inert.
@@ -356,8 +356,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.textBox')}
-        aria-label={t('toolbar.textBox')}
+        title={t('toolbar:textBox')}
+        aria-label={t('toolbar:textBox')}
         onClick={() => void dispatchSlideCommand('slide.command.add-text')}
       >
         <Icon name="text_fields" size={18} />
@@ -365,8 +365,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.image')}
-        aria-label={t('toolbar.image')}
+        title={t('toolbar:image')}
+        aria-label={t('toolbar:image')}
         onClick={() => void dispatchSlideCommand('slide.command.insert-float-image')}
       >
         <Icon name="image" size={18} />
@@ -375,8 +375,8 @@ export function Toolbar() {
         <button
           type="button"
           className="cs-toolbar2__btn cs-toolbar2__btn--with-caret"
-          title={t('toolbar.shape')}
-          aria-label={t('toolbar.shape')}
+          title={t('toolbar:shape')}
+          aria-label={t('toolbar:shape')}
           aria-haspopup="menu"
           aria-expanded={!!shapesAnchor}
           onClick={(e) =>
@@ -390,8 +390,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.line')}
-        aria-label={t('toolbar.line')}
+        title={t('toolbar:line')}
+        aria-label={t('toolbar:line')}
         onClick={() => insertShapeOfType('line')}
       >
         <Icon name="horizontal_rule" size={18} />
@@ -404,8 +404,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.newSlideShortcut')}
-        aria-label={t('toolbar.newSlide')}
+        title={t('toolbar:newSlideShortcut')}
+        aria-label={t('toolbar:newSlide')}
         onClick={() => void dispatchSlideCommand('slide.operation.append-slide')}
       >
         <Icon name="add_to_photos" size={18} />
@@ -413,8 +413,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.layout')}
-        aria-label={t('toolbar.layout')}
+        title={t('toolbar:layout')}
+        aria-label={t('toolbar:layout')}
         onClick={(e) =>
           setLayoutAnchor(layoutAnchor ? null : e.currentTarget.getBoundingClientRect())
         }
@@ -424,8 +424,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.theme')}
-        aria-label={t('toolbar.theme')}
+        title={t('toolbar:theme')}
+        aria-label={t('toolbar:theme')}
         onClick={() =>
           (window as Window & { __casualSlides_openThemes?: () => void }).__casualSlides_openThemes?.()
         }
@@ -435,8 +435,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.background')}
-        aria-label={t('toolbar.background')}
+        title={t('toolbar:background')}
+        aria-label={t('toolbar:background')}
         onClick={(e) =>
           setBgAnchor(bgAnchor ? null : e.currentTarget.getBoundingClientRect())
         }
@@ -459,8 +459,8 @@ export function Toolbar() {
       <button
         type="button"
         className={`cs-toolbar2__btn ${format.bold ? 'is-active' : ''}`}
-        title={t('toolbar.boldShortcut')}
-        aria-label={t('toolbar.bold')}
+        title={t('toolbar:boldShortcut')}
+        aria-label={t('toolbar:bold')}
         aria-pressed={format.bold}
         onClick={() => toggleFormat('bold', 'doc.command.set-inline-format-bold')}
       >
@@ -469,8 +469,8 @@ export function Toolbar() {
       <button
         type="button"
         className={`cs-toolbar2__btn ${format.italic ? 'is-active' : ''}`}
-        title={t('toolbar.italicShortcut')}
-        aria-label={t('toolbar.italic')}
+        title={t('toolbar:italicShortcut')}
+        aria-label={t('toolbar:italic')}
         aria-pressed={format.italic}
         onClick={() => toggleFormat('italic', 'doc.command.set-inline-format-italic')}
       >
@@ -479,8 +479,8 @@ export function Toolbar() {
       <button
         type="button"
         className={`cs-toolbar2__btn ${format.underline ? 'is-active' : ''}`}
-        title={t('toolbar.underlineShortcut')}
-        aria-label={t('toolbar.underline')}
+        title={t('toolbar:underlineShortcut')}
+        aria-label={t('toolbar:underline')}
         aria-pressed={format.underline}
         onClick={() => toggleFormat('underline', 'doc.command.set-inline-format-underline')}
       >
@@ -489,8 +489,8 @@ export function Toolbar() {
       <button
         type="button"
         className={`cs-toolbar2__btn ${format.strikethrough ? 'is-active' : ''}`}
-        title={t('toolbar.strikethroughShortcut')}
-        aria-label={t('toolbar.strikethrough')}
+        title={t('toolbar:strikethroughShortcut')}
+        aria-label={t('toolbar:strikethrough')}
         aria-pressed={format.strikethrough}
         onClick={() => toggleFormat('strikethrough', 'doc.command.set-inline-format-strikethrough')}
       >
@@ -501,7 +501,7 @@ export function Toolbar() {
         value={format.textColor}
         onPick={applyTextColor}
         icon="format_color_text"
-        label={t('toolbar.textColor')}
+        label={t('toolbar:textColor')}
       />
       <ColorPicker
         scope="fill"
@@ -509,7 +509,7 @@ export function Toolbar() {
         onPick={applyFillColor}
         onClear={() => applyFillColor('rgba(0,0,0,0)')}
         icon="format_color_fill"
-        label={t('toolbar.fillColor')}
+        label={t('toolbar:fillColor')}
       />
       <ColorPicker
         scope="border"
@@ -517,7 +517,7 @@ export function Toolbar() {
         onPick={applyBorderColor}
         onClear={() => applyBorderColor('rgba(0,0,0,0)')}
         icon="border_color"
-        label={t('toolbar.borderColor')}
+        label={t('toolbar:borderColor')}
       />
     </>
   );
@@ -535,8 +535,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.indentDecrease')}
-        aria-label={t('toolbar.indentDecrease')}
+        title={t('toolbar:indentDecrease')}
+        aria-label={t('toolbar:indentDecrease')}
         onClick={() =>
           void dispatchSlideCommand('doc.command.change-list-nesting-level', { type: 'decrease' })
         }
@@ -546,8 +546,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.indentIncrease')}
-        aria-label={t('toolbar.indentIncrease')}
+        title={t('toolbar:indentIncrease')}
+        aria-label={t('toolbar:indentIncrease')}
         onClick={() =>
           void dispatchSlideCommand('doc.command.change-list-nesting-level', { type: 'increase' })
         }
@@ -561,8 +561,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.clearFormatting')}
-        aria-label={t('toolbar.clearFormatting')}
+        title={t('toolbar:clearFormatting')}
+        aria-label={t('toolbar:clearFormatting')}
         // TODO(univer): docs-ui has no `clear-formatting` command in
         // v0.24.0. Implementation reuses RichTextEditingMutation to wipe
         // `textRun.ts` over the selection. Inert until the patch lands.
@@ -572,8 +572,8 @@ export function Toolbar() {
       <button
         type="button"
         className="cs-toolbar2__btn"
-        title={t('toolbar.insertLinkShortcut')}
-        aria-label={t('toolbar.insertLink')}
+        title={t('toolbar:insertLinkShortcut')}
+        aria-label={t('toolbar:insertLink')}
         // TODO(univer): hyperlink inline format is not exposed as a
         // docs-ui command in 0.24.0. Univer ships a HYPERLINK custom-range
         // type but no UI command id. Inert.
@@ -595,7 +595,7 @@ export function Toolbar() {
             : undefined
         }
         role="menu"
-        aria-label={t('toolbar.shape')}
+        aria-label={t('toolbar:shape')}
         onMouseDown={(e) => e.stopPropagation()}
       >
         {SHAPES_MENU.map((item) => (
@@ -621,7 +621,7 @@ export function Toolbar() {
 
   return (
     <div className="cs-toolbar" ref={rootRef}>
-      <div className="cs-toolbar2__row" role="toolbar" aria-label={t('toolbar.group.actions')}>
+      <div className="cs-toolbar2__row" role="toolbar" aria-label={t('toolbar:group.actions')}>
         {group1}
         <span className="cs-toolbar__sep" aria-hidden="true" />
         {group3}
@@ -641,8 +641,8 @@ export function Toolbar() {
             <button
               type="button"
               className="cs-toolbar2__btn"
-              title={t('toolbar.moreActions')}
-              aria-label={t('toolbar.moreActions')}
+              title={t('toolbar:moreActions')}
+              aria-label={t('toolbar:moreActions')}
               aria-haspopup="dialog"
               aria-expanded={!!overflowAnchor}
               onClick={(e) =>
@@ -657,8 +657,8 @@ export function Toolbar() {
         <button
           type="button"
           className="cs-btn cs-btn--accent"
-          title={t('toolbar.slideshowShortcut')}
-          aria-label={t('toolbar.slideshow')}
+          title={t('toolbar:slideshowShortcut')}
+          aria-label={t('toolbar:slideshow')}
           onClick={() => {
             const open = (window as Window & { __casualSlides_openSlideshow?: () => void })
               .__casualSlides_openSlideshow;
@@ -666,7 +666,7 @@ export function Toolbar() {
           }}
         >
           <Icon name="play_arrow" size={18} />
-          <span>{t('toolbar.slideshow')}</span>
+          <span>{t('toolbar:slideshow')}</span>
         </button>
       </div>
 

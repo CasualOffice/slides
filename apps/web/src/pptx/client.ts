@@ -38,7 +38,15 @@ class PptxClient {
         }
       };
       this.worker.onerror = (event) => {
-        const err = new Error(event.message || 'pptx worker error');
+        // Surface where the worker died — an empty `message` usually means
+        // the worker module threw at load time (a bad import or top-level
+        // statement), so the filename:line is the only useful signal.
+        const detail =
+          event.message ||
+          (event.filename ? `worker crashed at ${event.filename}:${event.lineno}:${event.colno}` : 'pptx worker error');
+        // eslint-disable-next-line no-console
+        console.error('[pptx worker] onerror:', detail, event.error ?? event);
+        const err = new Error(detail);
         for (const { reject } of this.pending.values()) reject(err);
         this.pending.clear();
       };

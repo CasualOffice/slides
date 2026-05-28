@@ -148,7 +148,7 @@ export function ColorPicker({ scope, value, onPick, onClear, icon, label, shortc
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className="cs-toolbar2__popover-section-label">
-            {t('toolbar.color.themeColors')}
+            {t('toolbar:color.themeColors')}
           </div>
           <div className="cs-toolbar2__color-grid">
             {PALETTE.map((chip) => (
@@ -166,7 +166,7 @@ export function ColorPicker({ scope, value, onPick, onClear, icon, label, shortc
           {recent.length > 0 && (
             <>
               <div className="cs-toolbar2__popover-section-label">
-                {t('toolbar.color.recent')}
+                {t('toolbar:color.recent')}
               </div>
               <div className="cs-toolbar2__color-grid">
                 {recent.map((rgb) => (
@@ -190,9 +190,9 @@ export function ColorPicker({ scope, value, onPick, onClear, icon, label, shortc
                 value={hex}
                 onChange={(e) => setHex(e.target.value)}
                 className="cs-toolbar2__color-custom-input"
-                aria-label={t('toolbar.color.custom')}
+                aria-label={t('toolbar:color.custom')}
               />
-              <span>{t('toolbar.color.custom')}</span>
+              <span>{t('toolbar:color.custom')}</span>
             </label>
             <input
               type="text"
@@ -202,7 +202,7 @@ export function ColorPicker({ scope, value, onPick, onClear, icon, label, shortc
                 if (e.key === 'Enter') applyCustom();
               }}
               className="cs-toolbar2__color-hex"
-              aria-label={t('toolbar.color.hexLabel')}
+              aria-label={t('toolbar:color.hexLabel')}
               spellCheck={false}
             />
             <button
@@ -210,7 +210,7 @@ export function ColorPicker({ scope, value, onPick, onClear, icon, label, shortc
               className="cs-btn cs-btn--primary cs-toolbar2__color-apply-btn"
               onClick={applyCustom}
             >
-              {t('toolbar.color.apply')}
+              {t('toolbar:color.apply')}
             </button>
           </div>
           {onClear && (
@@ -223,7 +223,7 @@ export function ColorPicker({ scope, value, onPick, onClear, icon, label, shortc
               }}
             >
               <Icon name="close" size={14} />
-              <span>{t('toolbar.color.noFill')}</span>
+              <span>{t('toolbar:color.noFill')}</span>
             </button>
           )}
         </div>

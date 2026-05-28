@@ -32,8 +32,8 @@ export function ListPicker({ mode, onChange }: ListPickerProps) {
       <button
         type="button"
         className={`cs-toolbar2__btn ${mode === 'bullet' ? 'is-active' : ''}`}
-        title={t('toolbar.listBulleted')}
-        aria-label={t('toolbar.listBulleted')}
+        title={t('toolbar:listBulleted')}
+        aria-label={t('toolbar:listBulleted')}
         aria-pressed={mode === 'bullet'}
         onClick={() => toggle('bullet')}
       >
@@ -42,8 +42,8 @@ export function ListPicker({ mode, onChange }: ListPickerProps) {
       <button
         type="button"
         className={`cs-toolbar2__btn ${mode === 'number' ? 'is-active' : ''}`}
-        title={t('toolbar.listNumbered')}
-        aria-label={t('toolbar.listNumbered')}
+        title={t('toolbar:listNumbered')}
+        aria-label={t('toolbar:listNumbered')}
         aria-pressed={mode === 'number'}
         onClick={() => toggle('number')}
       >

@@ -23,7 +23,7 @@ export function OverflowPopover({ anchor, onClose, children }: OverflowPopoverPr
       ref={popoverRef}
       className="cs-toolbar2__popover cs-toolbar2__popover--overflow"
       role="dialog"
-      aria-label={t('toolbar.moreActions')}
+      aria-label={t('toolbar:moreActions')}
       style={{ top: pos.top, left: pos.left }}
       onMouseDown={(e) => e.stopPropagation()}
     >

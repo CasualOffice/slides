@@ -15,12 +15,12 @@ import { useTranslation } from '../../i18n';
 import { anchorPosition, useDismiss } from './popover-utils';
 
 const PRESETS: { value: number; labelKey: string }[] = [
-  { value: 1.0,  labelKey: 'toolbar.spacing.single' },
-  { value: 1.15, labelKey: 'toolbar.spacing.preset1_15' },
-  { value: 1.5,  labelKey: 'toolbar.spacing.preset1_5' },
-  { value: 2.0,  labelKey: 'toolbar.spacing.double' },
-  { value: 2.5,  labelKey: 'toolbar.spacing.preset2_5' },
-  { value: 3.0,  labelKey: 'toolbar.spacing.preset3' },
+  { value: 1.0,  labelKey: 'toolbar:spacing.single' },
+  { value: 1.15, labelKey: 'toolbar:spacing.preset1_15' },
+  { value: 1.5,  labelKey: 'toolbar:spacing.preset1_5' },
+  { value: 2.0,  labelKey: 'toolbar:spacing.double' },
+  { value: 2.5,  labelKey: 'toolbar:spacing.preset2_5' },
+  { value: 3.0,  labelKey: 'toolbar:spacing.preset3' },
 ];
 
 export interface LineSpacingPickerProps {
@@ -44,8 +44,8 @@ export function LineSpacingPicker({ value, onChange }: LineSpacingPickerProps) {
         ref={triggerRef}
         type="button"
         className="cs-toolbar2__btn cs-toolbar2__btn--with-caret"
-        title={t('toolbar.lineSpacing')}
-        aria-label={t('toolbar.lineSpacing')}
+        title={t('toolbar:lineSpacing')}
+        aria-label={t('toolbar:lineSpacing')}
         aria-haspopup="dialog"
         aria-expanded={!!anchor}
         onClick={() => setAnchor(anchor ? null : triggerRef.current!.getBoundingClientRect())}
@@ -58,7 +58,7 @@ export function LineSpacingPicker({ value, onChange }: LineSpacingPickerProps) {
           ref={popoverRef}
           className="cs-toolbar2__popover cs-toolbar2__popover--spacing"
           role="dialog"
-          aria-label={t('toolbar.lineSpacing')}
+          aria-label={t('toolbar:lineSpacing')}
           style={{ top: pos.top, left: pos.left }}
           onMouseDown={(e) => e.stopPropagation()}
         >

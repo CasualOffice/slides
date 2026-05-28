@@ -29,7 +29,7 @@ interface FontSection {
 
 const SECTIONS: FontSection[] = [
   {
-    labelKey: 'toolbar.font.sectionPopular',
+    labelKey: 'toolbar:font.sectionPopular',
     fonts: [
       { name: 'Inter' },
       { name: 'Roboto' },
@@ -43,7 +43,7 @@ const SECTIONS: FontSection[] = [
     ],
   },
   {
-    labelKey: 'toolbar.font.sectionSans',
+    labelKey: 'toolbar:font.sectionSans',
     fonts: [
       { name: 'Open Sans' },
       { name: 'Lato' },
@@ -75,7 +75,7 @@ const SECTIONS: FontSection[] = [
     ],
   },
   {
-    labelKey: 'toolbar.font.sectionSerif',
+    labelKey: 'toolbar:font.sectionSerif',
     fonts: [
       { name: 'Merriweather' },
       { name: 'Playfair Display' },
@@ -91,7 +91,7 @@ const SECTIONS: FontSection[] = [
     ],
   },
   {
-    labelKey: 'toolbar.font.sectionMono',
+    labelKey: 'toolbar:font.sectionMono',
     fonts: [
       { name: 'Roboto Mono' },
       { name: 'Inconsolata' },
@@ -122,7 +122,7 @@ export function FontFamilyPicker({ value, onChange }: FontFamilyPickerProps) {
     const q = filter.toLowerCase();
     const hits = ALL_FONTS.filter((f) => f.name.toLowerCase().includes(q));
     return hits.length
-      ? [{ labelKey: 'toolbar.font.sectionPopular', fonts: hits }]
+      ? [{ labelKey: 'toolbar:font.sectionPopular', fonts: hits }]
       : [];
   }, [filter]);
 
@@ -144,8 +144,8 @@ export function FontFamilyPicker({ value, onChange }: FontFamilyPickerProps) {
         ref={triggerRef}
         type="button"
         className="cs-toolbar2__combo-trigger"
-        title={t('toolbar.fontFamilyAria')}
-        aria-label={t('toolbar.fontFamilyAria')}
+        title={t('toolbar:fontFamilyAria')}
+        aria-label={t('toolbar:fontFamilyAria')}
         aria-haspopup="listbox"
         aria-expanded={!!anchor}
         onClick={() => setAnchor(anchor ? null : triggerRef.current!.getBoundingClientRect())}
@@ -160,7 +160,7 @@ export function FontFamilyPicker({ value, onChange }: FontFamilyPickerProps) {
           ref={popoverRef}
           className="cs-toolbar2__popover cs-toolbar2__popover--fonts"
           role="dialog"
-          aria-label={t('toolbar.fontFamily')}
+          aria-label={t('toolbar:fontFamily')}
           style={{ top: pos.top, left: pos.left }}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -168,11 +168,11 @@ export function FontFamilyPicker({ value, onChange }: FontFamilyPickerProps) {
             <input
               type="text"
               value={filter}
-              placeholder={t('toolbar.fontFamily')}
+              placeholder={t('toolbar:fontFamily')}
               onChange={(e) => setFilter(e.target.value)}
               className="cs-toolbar2__popover-search-input"
               autoFocus
-              aria-label={t('toolbar.fontFamily')}
+              aria-label={t('toolbar:fontFamily')}
             />
           </div>
           <div className="cs-toolbar2__popover-scroll" role="listbox">

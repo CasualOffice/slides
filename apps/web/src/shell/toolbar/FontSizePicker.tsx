@@ -50,8 +50,8 @@ export function FontSizePicker({ value, onChange }: FontSizePickerProps) {
         type="button"
         className="cs-toolbar2__step"
         onClick={() => commit(value - 1, onChange)}
-        title={t('toolbar.fontSizeDecrease')}
-        aria-label={t('toolbar.fontSizeDecrease')}
+        title={t('toolbar:fontSizeDecrease')}
+        aria-label={t('toolbar:fontSizeDecrease')}
       >
         <Icon name="remove" size={14} />
       </button>
@@ -61,7 +61,7 @@ export function FontSizePicker({ value, onChange }: FontSizePickerProps) {
         inputMode="numeric"
         className="cs-toolbar2__size-input"
         value={draft}
-        aria-label={t('toolbar.fontSize')}
+        aria-label={t('toolbar:fontSize')}
         onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ''))}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
@@ -84,8 +84,8 @@ export function FontSizePicker({ value, onChange }: FontSizePickerProps) {
         type="button"
         className="cs-toolbar2__step"
         onClick={() => commit(value + 1, onChange)}
-        title={t('toolbar.fontSizeIncrease')}
-        aria-label={t('toolbar.fontSizeIncrease')}
+        title={t('toolbar:fontSizeIncrease')}
+        aria-label={t('toolbar:fontSizeIncrease')}
       >
         <Icon name="add" size={14} />
       </button>
@@ -93,8 +93,8 @@ export function FontSizePicker({ value, onChange }: FontSizePickerProps) {
         ref={triggerRef}
         type="button"
         className="cs-toolbar2__combo-caret"
-        title={t('toolbar.fontSize')}
-        aria-label={t('toolbar.fontSize')}
+        title={t('toolbar:fontSize')}
+        aria-label={t('toolbar:fontSize')}
         aria-haspopup="listbox"
         aria-expanded={!!anchor}
         onClick={() => setAnchor(anchor ? null : triggerRef.current!.getBoundingClientRect())}
@@ -106,7 +106,7 @@ export function FontSizePicker({ value, onChange }: FontSizePickerProps) {
           ref={popoverRef}
           className="cs-toolbar2__popover cs-toolbar2__popover--sizes"
           role="dialog"
-          aria-label={t('toolbar.fontSize')}
+          aria-label={t('toolbar:fontSize')}
           style={{ top: pos.top, left: pos.left }}
           onMouseDown={(e) => e.stopPropagation()}
         >

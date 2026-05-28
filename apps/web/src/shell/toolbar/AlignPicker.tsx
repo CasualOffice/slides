@@ -21,10 +21,10 @@ interface AlignEntry {
 }
 
 const ALIGNS: AlignEntry[] = [
-  { value: 'left',    icon: 'format_align_left',    labelKey: 'toolbar.alignLeft',    cmd: 'doc.command.align-left' },
-  { value: 'center',  icon: 'format_align_center',  labelKey: 'toolbar.alignCenter',  cmd: 'doc.command.align-center' },
-  { value: 'right',   icon: 'format_align_right',   labelKey: 'toolbar.alignRight',   cmd: 'doc.command.align-right' },
-  { value: 'justify', icon: 'format_align_justify', labelKey: 'toolbar.alignJustify', cmd: 'doc.command.align-justify' },
+  { value: 'left',    icon: 'format_align_left',    labelKey: 'toolbar:alignLeft',    cmd: 'doc.command.align-left' },
+  { value: 'center',  icon: 'format_align_center',  labelKey: 'toolbar:alignCenter',  cmd: 'doc.command.align-center' },
+  { value: 'right',   icon: 'format_align_right',   labelKey: 'toolbar:alignRight',   cmd: 'doc.command.align-right' },
+  { value: 'justify', icon: 'format_align_justify', labelKey: 'toolbar:alignJustify', cmd: 'doc.command.align-justify' },
 ];
 
 export interface AlignPickerProps {
@@ -55,8 +55,8 @@ export function AlignPicker({ value, onChange }: AlignPickerProps) {
         ref={triggerRef}
         type="button"
         className="cs-toolbar2__btn cs-toolbar2__btn--with-caret"
-        title={t('toolbar.align')}
-        aria-label={t('toolbar.align')}
+        title={t('toolbar:align')}
+        aria-label={t('toolbar:align')}
         aria-haspopup="dialog"
         aria-expanded={!!anchor}
         onClick={() => setAnchor(anchor ? null : triggerRef.current!.getBoundingClientRect())}
@@ -69,7 +69,7 @@ export function AlignPicker({ value, onChange }: AlignPickerProps) {
           ref={popoverRef}
           className="cs-toolbar2__popover cs-toolbar2__popover--align"
           role="dialog"
-          aria-label={t('toolbar.align')}
+          aria-label={t('toolbar:align')}
           style={{ top: pos.top, left: pos.left }}
           onMouseDown={(e) => e.stopPropagation()}
         >

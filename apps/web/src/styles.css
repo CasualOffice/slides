@@ -60,8 +60,14 @@ html, body, #root {
 /* Grid items default to min-width: auto (= intrinsic content size), which
    lets a wide flex row push the entire row track past the viewport. Clamp
    every row child so the grid cell stays at the column width and inner
-   overflow handlers do their job. */
-#root > * {
+   overflow handlers do their job.
+   NOTE: do NOT clamp the workspace row here — max-width on the grid cell
+   that hosts the Univer canvas can starve its measured width at init and
+   leave the canvas 0-wide. The workspace clamps itself via min-width:0
+   + overflow:hidden in its own rule. */
+#root > .cs-titlebar,
+#root > .cs-toolbar,
+#root > .cs-statusbar {
   min-width: 0;
   max-width: 100%;
 }
@@ -2455,22 +2461,20 @@ button.cs-statusbar__zoom-value:focus-visible {
 
 .cs-format-pane {
   --cs-fp-width: 280px;
-  --cs-fp-top: 92px;
-  --cs-fp-bottom: 28px;
+  /* Anchored to the real chrome heights via the shared CSS vars, NOT a
+     hardcoded estimate — the previous 92px started the pane 16px under
+     the toolbar bottom (titlebar 64 + toolbar 44 = 108), overlapping it. */
   position: fixed;
-  top: var(--cs-fp-top);
+  top: calc(var(--cs-titlebar-h) + var(--cs-toolbar-h));
   right: 0;
-  bottom: var(--cs-fp-bottom);
+  bottom: var(--cs-statusbar-h);
   width: var(--cs-fp-width);
   background: var(--cs-surface);
-  border-left: 1px solid var(--cs-border-2);
-  box-shadow: var(--cs-shadow-1);
+  border-left: 1px solid var(--cs-border);
+  box-shadow: var(--cs-shadow-2);
   display: flex;
   flex-direction: column;
-  z-index: 40;
-  transform: translateX(0);
-  transition: transform 180ms cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: transform;
+  z-index: 45;
   font-size: 12px;
   color: var(--cs-text);
 }
@@ -2479,15 +2483,12 @@ button.cs-statusbar__zoom-value:focus-visible {
   display: none;
 }
 
-/* Shrink siblings of the App tree (workspace, notes, status bar) so the
- * pane never overlaps content. Driven by the body class the provider
- * toggles when a selection exists. */
-body.cs-format-pane-open .cs-workspace,
-body.cs-format-pane-open .cs-notes,
-body.cs-format-pane-open .cs-statusbar {
-  margin-right: 280px;
-  transition: margin-right 180ms cubic-bezier(0.4, 0, 0.2, 1);
-}
+/* The pane is a pure overlay — it does NOT push the canvas. Shifting the
+ * workspace margin resized the Univer container on every selection, which
+ * jerked the canvas around and re-ran the centering math. Overlaying on
+ * the right edge keeps the canvas perfectly still. (Objects near the right
+ * edge sit under the panel; that's the accepted trade-off for a stable
+ * canvas — same as PowerPoint's floating Format pane.) */
 
 .cs-format-pane__title {
   display: flex;
