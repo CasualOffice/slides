@@ -99,19 +99,24 @@ export function SlideRail() {
   // heuristic App.tsx uses for its dirty flag).
   useEffect(() => {
     let disposed = false;
-    let retry: number | null = null;
     let unsubActive: (() => void) | null = null;
     let cmdDisposer: { dispose?: () => void } | null = null;
+    let wiredUnitId: string | null = null;
 
-    const wire = () => {
-      if (disposed) return;
+    const teardownSubs = () => {
+      unsubActive?.();
+      unsubActive = null;
+      cmdDisposer?.dispose?.();
+      cmdDisposer = null;
+    };
+
+    // Subscribe to a specific model + its command bus. Returns false if the
+    // model/instance isn't ready yet so the watcher can retry.
+    const wireTo = (): boolean => {
       const model = getModel();
       const w = window as unknown as { univer?: Univer };
       const univer = w.univer;
-      if (!model || !univer) {
-        retry = window.setTimeout(wire, 200);
-        return;
-      }
+      if (!model || !univer) return false;
       refresh();
       try {
         const sub = model.activePage$.subscribe(() => {
@@ -125,16 +130,34 @@ export function SlideRail() {
           refresh();
         });
         cmdDisposer = { dispose: () => d?.dispose?.() };
+        wiredUnitId = model.getUnitId();
+        return true;
       } catch {
-        retry = window.setTimeout(wire, 200);
+        teardownSubs();
+        return false;
       }
     };
-    wire();
+
+    // Opening a .pptx swaps in a fresh Univer instance (UniverSlide is keyed
+    // on snapshot.id), which disposes the model we subscribed to. activePage$
+    // on the old model goes silent, so the rail would keep painting the old
+    // deck. Poll the live unitId; when it changes (or first appears), tear
+    // down the stale subscription and re-wire to the new model. 400 ms is
+    // cheap and only does work on an actual swap.
+    const watch = () => {
+      if (disposed) return;
+      const liveUnitId = getModel()?.getUnitId() ?? null;
+      if (liveUnitId && liveUnitId !== wiredUnitId) {
+        teardownSubs();
+        wireTo();
+      }
+    };
+    wireTo();
+    const interval = window.setInterval(watch, 400);
     return () => {
       disposed = true;
-      if (retry != null) window.clearTimeout(retry);
-      unsubActive?.();
-      cmdDisposer?.dispose?.();
+      window.clearInterval(interval);
+      teardownSubs();
     };
   }, [refresh]);
 
