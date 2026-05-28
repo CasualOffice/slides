@@ -463,6 +463,9 @@ button:disabled { cursor: not-allowed; }
   min-height: 0;
   overflow: hidden;
   display: flex;
+  /* Animate both margins so the slide rail (left) and format pane (right)
+     slide the canvas in/out smoothly. */
+  transition: margin 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .univer-mount {
@@ -483,7 +486,8 @@ button:disabled { cursor: not-allowed; }
   min-height: 0;
   overflow: hidden;
   transition: height 180ms cubic-bezier(0.4, 0, 0.2, 1),
-              border-top-color 180ms ease;
+              border-top-color 180ms ease,
+              margin 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .cs-notes.is-hidden {
@@ -2483,12 +2487,20 @@ button.cs-statusbar__zoom-value:focus-visible {
   display: none;
 }
 
-/* The pane is a pure overlay — it does NOT push the canvas. Shifting the
- * workspace margin resized the Univer container on every selection, which
- * jerked the canvas around and re-ran the centering math. Overlaying on
- * the right edge keeps the canvas perfectly still. (Objects near the right
- * edge sit under the panel; that's the accepted trade-off for a stable
- * canvas — same as PowerPoint's floating Format pane.) */
+/* The pane SQUEEZES the canvas instead of overlaying it (Google Slides UX):
+ * when open, the workspace + notes + status bar shrink their right edge by
+ * the pane width, so the slide stays fully visible beside the panel. The
+ * earlier canvas-jump that made this look bad was the display:none sidebar
+ * bug (fixed) — with that resolved, the container resize is smooth and
+ * Univer's ResizeObserver (UniverSlide.tsx) re-fits the canvas.
+ *
+ *   panel closed:  canvas = viewport − slideRail
+ *   panel open:    canvas = viewport − slideRail − formatPane
+ */
+body.cs-format-pane-open .cs-workspace,
+body.cs-format-pane-open .cs-notes {
+  margin-right: 280px;
+}
 
 .cs-format-pane__title {
   display: flex;
