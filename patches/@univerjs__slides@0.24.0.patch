@@ -744,7 +744,7 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1490791e402bf1ec3a819381d32b23ca
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..573f6bace0b7d158e042c2e7520c4c603bbeb14d 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..366010b0a5eaf76ad993f652adc38df64133089d 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
@@ -910,7 +910,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..573f6bace0b7d158e042c2e7520c4c60
  	}
  };
  var ImageAdaptorFactory = class {
-@@ -666,6 +782,266 @@ var ImageAdaptorFactory = class {
+@@ -666,6 +782,405 @@ var ImageAdaptorFactory = class {
  };
  CanvasObjectProviderRegistry.add(new ImageAdaptorFactory());
  
@@ -1100,56 +1100,195 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..573f6bace0b7d158e042c2e7520c4c60
 +		return this;
 +	}
 +	convert(pageElement) {
-+		// Wave 13 — ChartAdaptor now renders a Group of (placeholder Rect
-+		// + informational RichText overlay) so the user can SEE what kind
-+		// of chart sits there at a glance, even though we don't render the
-+		// chart geometry yet. Pulls chartType / series / categories from
-+		// the structured IChart fields populated by wave 9d's parseChartXml.
++		// Casual Slides patch (H5) — render the chart geometry natively
++		// from the structured IChart (chartType / series / categories /
++		// colors). Bars, lines, pie slices, scatter dots are drawn as
++		// Rect / Path / Circle children of a Group; axes + labels as
++		// RichText. Not a full chart engine (no gridlines / legends /
++		// secondary axes) but a faithful at-a-glance render that beats
++		// the old placeholder card.
 +		const { id, zIndex, left = 0, top = 0, width, height, angle, scaleX, scaleY, skewX, skewY, flipX, flipY, chart } = pageElement;
 +		const w = width || 0;
 +		const h = height || 0;
-+		const bg = new Rect(`${id}-bg`, {
-+			fill: "rgba(239, 246, 255, 1)",
-+			stroke: "rgba(59, 130, 246, 1)",
-+			strokeWidth: 1,
-+			left, top, width: w, height: h,
-+			zIndex: 0,
-+			forceRender: true
-+		});
-+		const children = [bg];
 +		const chartType = chart && typeof chart.chartType === "string" ? chart.chartType : null;
-+		const seriesCount = chart && Array.isArray(chart.series) ? chart.series.length : 0;
-+		const catCount = chart && Array.isArray(chart.categories) ? chart.categories.length : 0;
-+		const summary = [];
-+		const niceType = chartType
-+			? chartType.charAt(0).toUpperCase() + chartType.slice(1) + " chart"
-+			: "Chart";
-+		summary.push(niceType);
-+		if (seriesCount > 0) summary.push(`${seriesCount} ${seriesCount === 1 ? "series" : "series"}`);
-+		if (catCount > 0) summary.push(`${catCount} ${catCount === 1 ? "category" : "categories"}`);
-+		const label = "📊 " + summary.join(" · ");
-+		// Centre the label vertically inside the placeholder rect via a
-+		// nested RichText. The docs-engine handles wrap + alignment from
-+		// the IDocumentData renderConfig.
-+		const labelTop = top + Math.max(0, h / 2 - 14);
-+		const labelDoc = {
-+			id: `${id}-label-doc`,
-+			body: {
-+				dataStream: label + "\r\n",
-+				textRuns: [{ st: 0, ed: label.length, ts: { fs: 12, cl: { rgb: "#1d4ed8" }, bl: 1 } }],
-+				paragraphs: [{ startIndex: label.length, paragraphStyle: { horizontalAlign: 2 } }]
-+			},
-+			documentStyle: { renderConfig: { verticalAlign: 1 } }
++		const series = chart && Array.isArray(chart.series) ? chart.series : [];
++		const categories = chart && Array.isArray(chart.categories) ? chart.categories : [];
++		// Office default series palette (accent1..6 of the default theme).
++		const PALETTE = ["4472C4", "ED7D31", "A5A5A5", "FFC000", "5B9BD5", "70AD47", "264478", "9E480E", "636363", "997300"];
++		const seriesColor = (i, fallback) => {
++			const s = series[i];
++			const c = s && typeof s.color === "string" ? s.color : null;
++			return "#" + (c || PALETTE[i % PALETTE.length] || fallback || "4472C4");
 +		};
-+		children.push(new RichText(this._localeService, `${id}-label`, {
-+			left,
-+			top: labelTop,
-+			width: w,
-+			height: 28,
-+			zIndex: 1,
-+			richText: labelDoc,
-+			forceRender: true
++		const children = [];
++		// White chart background so it reads on any slide fill.
++		children.push(new Rect(`${id}-bg`, {
++			fill: "rgba(255,255,255,1)", left, top, width: w, height: h,
++			zIndex: 0, forceRender: true,
 +		}));
++
++		const isBar = chartType === "bar" || chartType === "bar3D";
++		const isLine = chartType === "line" || chartType === "line3D";
++		const isArea = chartType === "area" || chartType === "area3D";
++		const isPie = chartType === "pie" || chartType === "pie3D" || chartType === "doughnut";
++		const isScatter = chartType === "scatter" || chartType === "bubble";
++		const isRadar = chartType === "radar";
++
++		let z = 1;
++		const addRect = (rid, props) => { children.push(new Rect(rid, { zIndex: z++, forceRender: true, ...props })); };
++		const addPath = (pid, dataStr, props) => { children.push(new Path(pid, { data: dataStr, zIndex: z++, forceRender: true, ...props })); };
++		const addLabel = (lid, txt, lx, ly, lw, lh, fs, color, alignH) => {
++			const t = String(txt);
++			children.push(new RichText(this._localeService, lid, {
++				left: lx, top: ly, width: lw, height: lh, zIndex: z++, forceRender: true,
++				richText: {
++					id: `${lid}-d`,
++					body: {
++						dataStream: t + "\r\n",
++						textRuns: [{ st: 0, ed: t.length, ts: { fs: fs || 9, cl: { rgb: color || "#595959" } } }],
++						paragraphs: [{ startIndex: t.length, paragraphStyle: { horizontalAlign: alignH == null ? 2 : alignH } }],
++					},
++					documentStyle: { renderConfig: { verticalAlign: 2 } },
++				},
++			}));
++		};
++
++		try {
++			if (isPie && series.length > 0) {
++				// Pie / doughnut — first series; one slice per category.
++				const vals = series[0].values || [];
++				const total = vals.reduce((a, b) => a + (b > 0 ? b : 0), 0) || 1;
++				const cx = left + w / 2;
++				const cy = top + h / 2;
++				const radius = Math.max(4, Math.min(w, h) / 2 - 12);
++				const inner = chartType === "doughnut" ? radius * 0.55 : 0;
++				let a0 = -Math.PI / 2; // start at 12 o'clock
++				const pointCols = series[0].pointColors || [];
++				for (let i = 0; i < vals.length; i++) {
++					const v = vals[i] > 0 ? vals[i] : 0;
++					const frac = v / total;
++					const a1 = a0 + frac * Math.PI * 2;
++					const x0 = cx + radius * Math.cos(a0), y0 = cy + radius * Math.sin(a0);
++					const x1 = cx + radius * Math.cos(a1), y1 = cy + radius * Math.sin(a1);
++					const largeArc = (a1 - a0) > Math.PI ? 1 : 0;
++					// Pie path is relative to the Path's own bbox; Path
++					// normalises via _setFixBoundingBox, so use absolute
++					// slide coords here and let it offset.
++					let dStr;
++					if (inner > 0) {
++						const ix0 = cx + inner * Math.cos(a0), iy0 = cy + inner * Math.sin(a0);
++						const ix1 = cx + inner * Math.cos(a1), iy1 = cy + inner * Math.sin(a1);
++						dStr = `M ${x0} ${y0} A ${radius} ${radius} 0 ${largeArc} 1 ${x1} ${y1} L ${ix1} ${iy1} A ${inner} ${inner} 0 ${largeArc} 0 ${ix0} ${iy0} Z`;
++					} else {
++						dStr = `M ${cx} ${cy} L ${x0} ${y0} A ${radius} ${radius} 0 ${largeArc} 1 ${x1} ${y1} Z`;
++					}
++					const col = pointCols[i] ? "#" + pointCols[i] : seriesColor(i);
++					addPath(`${id}-slice-${i}`, dStr, { fill: col, stroke: "rgba(255,255,255,1)", strokeWidth: 1 });
++					a0 = a1;
++				}
++			} else if ((isBar || isLine || isArea) && series.length > 0) {
++				// Cartesian plot. Reserve margins for axis labels.
++				const padL = 34, padR = 8, padT = 10, padB = 20;
++				const plotX = left + padL, plotY = top + padT;
++				const plotW = Math.max(10, w - padL - padR);
++				const plotH = Math.max(10, h - padT - padB);
++				// Value range across all series (include 0 baseline).
++				let maxV = 0, minV = 0;
++				for (const s of series) for (const v of (s.values || [])) { if (v > maxV) maxV = v; if (v < minV) minV = v; }
++				if (maxV === minV) maxV = minV + 1;
++				const range = maxV - minV;
++				const yOf = (v) => plotY + plotH - ((v - minV) / range) * plotH;
++				const catN = Math.max(1, categories.length || (series[0].values || []).length);
++				// Axis baseline + left axis line.
++				addRect(`${id}-axisX`, { left: plotX, top: plotY + plotH, width: plotW, height: 1, fill: "rgba(170,170,170,1)" });
++				addRect(`${id}-axisY`, { left: plotX, top: plotY, width: 1, height: plotH, fill: "rgba(170,170,170,1)" });
++				// Min/max value labels on the Y axis.
++				addLabel(`${id}-ymax`, Math.round(maxV), left, plotY - 6, padL - 3, 12, 8, "#595959", 3);
++				addLabel(`${id}-ymin`, Math.round(minV), left, plotY + plotH - 6, padL - 3, 12, 8, "#595959", 3);
++				const slot = plotW / catN;
++				if (isBar) {
++					const groupW = slot * 0.7;
++					const barW = groupW / series.length;
++					const gx0 = (slot - groupW) / 2;
++					for (let si = 0; si < series.length; si++) {
++						const vals = series[si].values || [];
++						const col = seriesColor(si);
++						for (let ci = 0; ci < catN; ci++) {
++							const v = vals[ci] || 0;
++							const bx = plotX + ci * slot + gx0 + si * barW;
++							const yTop = yOf(Math.max(v, minV < 0 ? 0 : minV));
++							const yBase = yOf(minV < 0 ? 0 : minV);
++							const bh = Math.abs(yBase - yOf(v));
++							addRect(`${id}-bar-${si}-${ci}`, { left: bx, top: Math.min(yTop, yBase), width: Math.max(1, barW - 1), height: Math.max(1, bh), fill: col });
++						}
++					}
++				} else {
++					// line / area — polyline through points, centered per slot.
++					for (let si = 0; si < series.length; si++) {
++						const vals = series[si].values || [];
++						const col = seriesColor(si);
++						const pts = [];
++						for (let ci = 0; ci < catN; ci++) {
++							const cx = plotX + ci * slot + slot / 2;
++							const cy = yOf(vals[ci] || 0);
++							pts.push([cx, cy]);
++						}
++						if (pts.length === 0) continue;
++						if (isArea) {
++							const base = yOf(minV < 0 ? 0 : minV);
++							let d = `M ${pts[0][0]} ${base} L ` + pts.map((p) => `${p[0]} ${p[1]}`).join(" L ") + ` L ${pts[pts.length - 1][0]} ${base} Z`;
++							addPath(`${id}-area-${si}`, d, { fill: col + "", opacity: 0.5, stroke: col, strokeWidth: 1 });
++						} else {
++							let d = "M " + pts.map((p) => `${p[0]} ${p[1]}`).join(" L ");
++							addPath(`${id}-line-${si}`, d, { fill: "rgba(0,0,0,0)", stroke: col, strokeWidth: 2 });
++							// point markers
++							for (let pi = 0; pi < pts.length; pi++) {
++								addRect(`${id}-pt-${si}-${pi}`, { left: pts[pi][0] - 2, top: pts[pi][1] - 2, width: 4, height: 4, fill: col });
++							}
++						}
++					}
++				}
++				// Category labels along the X axis.
++				for (let ci = 0; ci < catN && ci < categories.length; ci++) {
++					addLabel(`${id}-cat-${ci}`, categories[ci], plotX + ci * slot, top + h - padB + 2, slot, padB - 2, 8, "#595959", 2);
++				}
++			} else if (isScatter && series.length > 0) {
++				const padL = 30, padR = 8, padT = 10, padB = 18;
++				const plotX = left + padL, plotY = top + padT;
++				const plotW = Math.max(10, w - padL - padR), plotH = Math.max(10, h - padT - padB);
++				// X from categories (numeric), Y from values.
++				const xs = (categories || []).map((c) => parseFloat(c)).filter((n) => !isNaN(n));
++				let xMin = Math.min(...(xs.length ? xs : [0])), xMax = Math.max(...(xs.length ? xs : [1]));
++				let yMin = 0, yMax = 0;
++				for (const s of series) for (const v of (s.values || [])) { if (v > yMax) yMax = v; if (v < yMin) yMin = v; }
++				if (xMax === xMin) xMax = xMin + 1;
++				if (yMax === yMin) yMax = yMin + 1;
++				addRect(`${id}-axisX`, { left: plotX, top: plotY + plotH, width: plotW, height: 1, fill: "rgba(170,170,170,1)" });
++				addRect(`${id}-axisY`, { left: plotX, top: plotY, width: 1, height: plotH, fill: "rgba(170,170,170,1)" });
++				for (let si = 0; si < series.length; si++) {
++					const vals = series[si].values || [];
++					const col = seriesColor(si);
++					for (let pi = 0; pi < vals.length; pi++) {
++						const xv = xs[pi] != null ? xs[pi] : pi;
++						const px = plotX + ((xv - xMin) / (xMax - xMin)) * plotW;
++						const py = plotY + plotH - ((vals[pi] - yMin) / (yMax - yMin)) * plotH;
++						children.push(new Circle(`${id}-dot-${si}-${pi}`, { left: px - 3, top: py - 3, radius: 3, fill: col, zIndex: z++, forceRender: true }));
++					}
++				}
++			} else {
++				// Unknown / unsupported chart type — keep a labeled card so
++				// the slot isn't empty.
++				children.push(new Rect(`${id}-bg2`, { fill: "rgba(244,247,252,1)", stroke: "rgba(180,200,230,1)", strokeWidth: 1, left, top, width: w, height: h, zIndex: z++, forceRender: true }));
++				const niceType = chartType ? chartType.charAt(0).toUpperCase() + chartType.slice(1) + " chart" : "Chart";
++				addLabel(`${id}-label`, niceType, left, top + h / 2 - 10, w, 20, 12, "#1d4ed8", 2);
++			}
++		} catch (e) {
++			// Any geometry error → fall back to a labeled card rather than
++			// crashing the whole slide render.
++			children.length = 1; // keep the bg
++			children.push(new Rect(`${id}-errbg`, { fill: "rgba(244,247,252,1)", stroke: "rgba(180,200,230,1)", strokeWidth: 1, left, top, width: w, height: h, zIndex: 1, forceRender: true }));
++		}
++
 +		const group = new Group(id, ...children);
 +		group.zIndex = zIndex;
 +		if (typeof angle === "number") group.angle = angle;
@@ -1177,7 +1316,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..573f6bace0b7d158e042c2e7520c4c60
  //#endregion
  //#region src/views/render/adaptors/rich-text-adaptor.ts
  let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
-@@ -698,7 +1074,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -698,7 +1213,13 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  			forceRender: true
  		};
  		let isNotNull = false;
@@ -1192,7 +1331,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..573f6bace0b7d158e042c2e7520c4c60
  			config = {
  				...config,
  				text,
-@@ -714,12 +1096,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
+@@ -714,12 +1235,6 @@ let RichTextAdaptor = class RichTextAdaptor extends ObjectAdaptor {
  				cl
  			};
  			isNotNull = true;
@@ -1205,7 +1344,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..573f6bace0b7d158e042c2e7520c4c60
  		}
  		if (isNotNull === false) return;
  		return new RichText(this._localeService, id, config);
-@@ -755,10 +1131,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -755,10 +1270,116 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  		const outline = shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.outline;
  		const strokeStyle = {};
  		if (outline) {
@@ -1323,7 +1462,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..573f6bace0b7d158e042c2e7520c4c60
  		if (shapeType === "rect") return new Rect(id, {
  			fill,
  			top,
-@@ -774,7 +1256,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -774,7 +1395,8 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipX,
  			flipY,
  			forceRender: true,
@@ -1333,7 +1472,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..573f6bace0b7d158e042c2e7520c4c60
  		});
  		if (shapeType === "roundRect") return new Rect(id, {
  			fill,
-@@ -792,10 +1275,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -792,10 +1414,10 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  			flipY,
  			forceRender: true,
  			radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
@@ -1346,7 +1485,7 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..573f6bace0b7d158e042c2e7520c4c60
  			return new Circle(id, {
  				fill,
  				top,
-@@ -812,9 +1295,220 @@ var ShapeAdaptor = class extends ObjectAdaptor {
+@@ -812,9 +1434,220 @@ var ShapeAdaptor = class extends ObjectAdaptor {
  				flipY,
  				forceRender: true,
  				radius: (shapeProperties === null || shapeProperties === void 0 ? void 0 : shapeProperties.radius) || 0,
