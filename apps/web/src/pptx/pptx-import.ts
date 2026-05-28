@@ -3209,6 +3209,15 @@ const CHART_TYPE_TAGS = [
 interface IChartSeries {
   name?: string;
   values: number[];
+  // H4 — series fill color from `<c:ser><c:spPr><a:solidFill>` (bar /
+  // area / pie-slice fill) or `<c:spPr><a:ln>` (line / scatter stroke).
+  // Hex without '#'. When absent the renderer falls back to a default
+  // Office-style palette indexed by series position.
+  color?: string;
+  // H4 — pie / doughnut charts color each DATA POINT (category), not
+  // each series. `<c:dPt>` per-point overrides land here, indexed by
+  // category position.
+  pointColors?: (string | undefined)[];
 }
 
 interface IChartStructured {
@@ -3255,7 +3264,7 @@ function readChartCellValues(ref: unknown, cacheKey: string): { values: string[]
   return { values, numeric };
 }
 
-function parseChartXml(chartXml: string, chartId: string, chartPath?: string): IChartStructured {
+function parseChartXml(chartXml: string, chartId: string, chartPath?: string, theme: ThemeMap | null = null): IChartStructured {
   const out: IChartStructured = { chartId, ...(chartPath ? { chartPath } : {}) };
   const parsed = parser.parse(chartXml) as XmlNode;
   const chartSpace = findChild(parsed, 'c:chartSpace');
@@ -3287,6 +3296,37 @@ function parseChartXml(chartXml: string, chartId: string, chartPath?: string): I
   for (const ser of sers) {
     if (!ser || typeof ser !== 'object') continue;
     const s: IChartSeries = { values: [] };
+
+    // H4 — series color. Fill (bar/area/pie) lives at
+    // <c:ser><c:spPr><a:solidFill>; line/scatter use the <a:ln> stroke.
+    const serSpPr = findChild(ser, 'c:spPr');
+    if (serSpPr) {
+      const fillColor = readColor(serSpPr, theme) ?? parseSrgbColor(serSpPr);
+      if (fillColor) {
+        s.color = fillColor.replace(/^#/, '');
+      } else {
+        const ln = findChild(serSpPr, 'a:ln') as XmlNode | undefined;
+        if (ln) {
+          const lnColor = readColor(ln, theme) ?? parseSrgbColor(ln);
+          if (lnColor) s.color = lnColor.replace(/^#/, '');
+        }
+      }
+    }
+    // H4 — per-data-point colors (pie / doughnut color each slice).
+    // <c:dPt><c:idx val="N"/><c:spPr><a:solidFill>…
+    const dPts = toArray(findChild(ser, 'c:dPt'));
+    if (dPts.length > 0) {
+      const pointColors: (string | undefined)[] = [];
+      for (const dPt of dPts) {
+        if (!dPt || typeof dPt !== 'object') continue;
+        const idxNode = findChild(dPt, 'c:idx') as XmlNode | undefined;
+        const idx = parseInt(String(idxNode?.['@val'] ?? ''), 10);
+        const dptSpPr = findChild(dPt, 'c:spPr');
+        const c = dptSpPr ? (readColor(dptSpPr, theme) ?? parseSrgbColor(dptSpPr)) : null;
+        if (Number.isFinite(idx) && c) pointColors[idx] = c.replace(/^#/, '');
+      }
+      if (pointColors.length > 0) s.pointColors = pointColors;
+    }
 
     // Series name — <c:tx> wraps either <c:strRef> (cell ref + cached
     // string) or a literal <c:v>.
@@ -3410,7 +3450,7 @@ async function processGraphicFrame(
       const chartXml = await reg.zip.file(chartPath)?.async('string');
       if (chartXml) {
         try {
-          structured = parseChartXml(chartXml, chartId, chartTarget);
+          structured = parseChartXml(chartXml, chartId, chartTarget, reg.theme);
         } catch {
           // Malformed chart XML — fall back to id-only. Authored payload
           // still survives via passthrough so the export round-trip is
