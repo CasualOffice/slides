@@ -147,6 +147,15 @@ export function BackgroundPicker({ anchorRect, onClose }: BackgroundPickerProps)
     >
       <div className="cs-bg-picker__header">
         <span className="cs-bg-picker__title">Background</span>
+        <button
+          type="button"
+          className="cs-bg-picker__nofill"
+          onClick={() => void apply('', applyAll)}
+          title="No fill"
+        >
+          <Icon name="format_color_reset" size={14} />
+          <span>No fill</span>
+        </button>
       </div>
       <div className="cs-bg-picker__grid" role="listbox" aria-label="Color presets">
         {PALETTE.map((chip) => (

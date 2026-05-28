@@ -886,6 +886,27 @@ const ICONS: Record<string, IconBody> = {
       </>
     ),
   },
+
+  // ── picker upgrades ────────────────────────────────────────────────
+  format_color_reset: {
+    outlined: (
+      <>
+        <path d="M7 4 4 7l8 8 8-8-3-3-5 5-5-5z" />
+        <path d="M5 18a3 3 0 0 0 6 0c0-2-3-5-3-5s-3 3-3 5z" />
+        <line x1="3" y1="3" x2="21" y2="21" />
+      </>
+    ),
+  },
+  gradient: {
+    outlined: (
+      <>
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <line x1="3" y1="9" x2="21" y2="9" opacity="0.7" />
+        <line x1="3" y1="13" x2="21" y2="13" opacity="0.4" />
+        <line x1="3" y1="17" x2="21" y2="17" opacity="0.2" />
+      </>
+    ),
+  },
 };
 
 // Render-time map from the (deprecated) Material Symbols name space we used

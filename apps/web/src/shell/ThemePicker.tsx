@@ -2,34 +2,40 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { Univer } from '@univerjs/core';
 import { IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
+import { PageElementType } from '@univerjs/slides';
 import { dispatchSlideCommand } from '../univer/commands';
+import { useTranslation } from '../i18n';
 import { Icon } from './icons';
 
-// Curated theme catalog — 8 cards. Each theme applies a page background
-// fill across all slides in the deck via slide.mutation.update-page.
-//
-// Future cascades (text-on-dark contrast, accent-coloured shapes, font
-// family swap) need additional element-level updates; tracked on the
-// Design tab roadmap. For now, theme = background. Visual win without
-// the multi-element-mutation batch.
+// Curated theme catalog. A theme is a full design system — background +
+// heading font + body font + accent + default text colour — cascaded
+// across every slide. Background goes through slide.mutation.update-page;
+// the text cascade writes richText.ff / .cl on each TEXT element directly
+// on the snapshot (Univer v0.24.0 has no element-style mutation reachable
+// from outside docs-ui) + incrementRev to repaint. TODO(collab): the text
+// cascade bypasses the command bus; replace once a fork-side mutation lands.
 
 export interface Theme {
   id: string;
   name: string;
-  background: string;    // CSS rgb()
-  swatch: string;        // hex / rgb for the preview tile
-  accent: string;        // for the swatch corner pip
+  background: string;     // CSS rgb() for the page fill
+  swatch: string;         // hex / rgb for the preview tile
+  accent: string;         // accent / heading colour
+  headingFont: string;    // CSS font-family for headings
+  bodyFont: string;       // CSS font-family for body text
+  headingRgb: string;     // heading text colour (hex)
+  bodyRgb: string;        // body text colour (hex)
 }
 
 export const THEMES: Theme[] = [
-  { id: 'classic',   name: 'Classic',   background: 'rgb(255, 255, 255)', swatch: '#ffffff', accent: '#B7472A' },
-  { id: 'paper',     name: 'Paper',     background: 'rgb(250, 248, 244)', swatch: '#faf8f4', accent: '#5b4636' },
-  { id: 'sky',       name: 'Sky',       background: 'rgb(230, 244, 255)', swatch: '#e6f4ff', accent: '#1a73e8' },
-  { id: 'mint',      name: 'Mint',      background: 'rgb(230, 250, 240)', swatch: '#e6faf0', accent: '#107c41' },
-  { id: 'sunset',    name: 'Sunset',    background: 'rgb(255, 244, 230)', swatch: '#fff4e6', accent: '#d97706' },
-  { id: 'lavender',  name: 'Lavender',  background: 'rgb(244, 240, 252)', swatch: '#f4f0fc', accent: '#7c3aed' },
-  { id: 'graphite',  name: 'Graphite',  background: 'rgb(34, 38, 45)',    swatch: '#22262d', accent: '#fafafa' },
-  { id: 'ocean',     name: 'Ocean',     background: 'rgb(20, 38, 58)',    swatch: '#14263a', accent: '#7dd3fc' },
+  { id: 'classic',  name: 'Classic',  background: 'rgb(255, 255, 255)', swatch: '#ffffff', accent: '#0891B2', headingFont: 'Inter',            bodyFont: 'Inter',          headingRgb: '#1F2937', bodyRgb: '#374151' },
+  { id: 'paper',    name: 'Paper',    background: 'rgb(250, 248, 244)', swatch: '#faf8f4', accent: '#5b4636', headingFont: 'Merriweather',     bodyFont: 'PT Sans',        headingRgb: '#3b2f25', bodyRgb: '#5b4636' },
+  { id: 'sky',      name: 'Sky',      background: 'rgb(230, 244, 255)', swatch: '#e6f4ff', accent: '#1a73e8', headingFont: 'Montserrat',       bodyFont: 'Open Sans',      headingRgb: '#0b3d91', bodyRgb: '#1f3a5f' },
+  { id: 'mint',     name: 'Mint',     background: 'rgb(230, 250, 240)', swatch: '#e6faf0', accent: '#107c41', headingFont: 'Poppins',          bodyFont: 'Lato',           headingRgb: '#0c5c30', bodyRgb: '#1f4a35' },
+  { id: 'sunset',   name: 'Sunset',   background: 'rgb(255, 244, 230)', swatch: '#fff4e6', accent: '#d97706', headingFont: 'Playfair Display', bodyFont: 'Source Sans 3',  headingRgb: '#7c3f06', bodyRgb: '#5c4326' },
+  { id: 'lavender', name: 'Lavender', background: 'rgb(244, 240, 252)', swatch: '#f4f0fc', accent: '#7c3aed', headingFont: 'Raleway',          bodyFont: 'Nunito Sans',    headingRgb: '#4c1d95', bodyRgb: '#4b3a66' },
+  { id: 'graphite', name: 'Graphite', background: 'rgb(34, 38, 45)',    swatch: '#22262d', accent: '#fafafa', headingFont: 'Roboto Slab',      bodyFont: 'Roboto',         headingRgb: '#fafafa', bodyRgb: '#d1d5db' },
+  { id: 'ocean',    name: 'Ocean',    background: 'rgb(20, 38, 58)',    swatch: '#14263a', accent: '#7dd3fc', headingFont: 'Oswald',           bodyFont: 'Work Sans',      headingRgb: '#e0f2fe', bodyRgb: '#bae6fd' },
 ];
 
 export interface ThemePickerProps {
@@ -49,23 +55,52 @@ function getModel(): SlideDataModel | null {
   }
 }
 
+// A text element reads as a heading when it's large (fs >= 28) or bold.
+// Everything else takes the body style.
+function isHeading(fs: number | undefined, bl: number | undefined): boolean {
+  return (fs ?? 0) >= 28 || bl === 1;
+}
+
 async function applyTheme(theme: Theme) {
   const model = getModel();
   if (!model) return;
   const order = model.getPageOrder();
   if (!order) return;
-  // Dispatch one mutation per page. They run synchronously through
-  // ICommandService and each fires onMutationExecutedForCollab — so when
-  // P2 lands, each peer receives the same set of update-page mutations.
+
+  // 1) Background per page — goes through the command bus (collab-ready).
   for (const pageId of order) {
     await dispatchSlideCommand('slide.mutation.update-page', {
       pageId,
       patch: { pageBackgroundFill: { rgb: theme.background } },
     });
   }
+
+  // 2) Text cascade — font + colour per TEXT element. Written directly on
+  //    the snapshot because Univer v0.24.0 exposes no element-style
+  //    mutation outside docs-ui. TODO(collab): bypasses the command bus.
+  const snapshot = model.getSnapshot();
+  const pages = snapshot.body?.pages ?? {};
+  let touched = false;
+  for (const pageId of order) {
+    const page = pages[pageId];
+    if (!page) continue;
+    for (const el of Object.values(page.pageElements ?? {})) {
+      if (el.type !== PageElementType.TEXT || !el.richText) continue;
+      const heading = isHeading(el.richText.fs, el.richText.bl);
+      el.richText.ff = heading ? theme.headingFont : theme.bodyFont;
+      el.richText.cl = { rgb: heading ? theme.headingRgb : theme.bodyRgb };
+      touched = true;
+    }
+  }
+  if (touched) {
+    model.incrementRev();
+    const active = model.getActivePage();
+    if (active) model.setActivePage(active);
+  }
 }
 
 export function ThemePicker({ open, onClose }: ThemePickerProps) {
+  const { t } = useTranslation('dialogs');
   const dialogRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click + Escape.
@@ -93,13 +128,13 @@ export function ThemePicker({ open, onClose }: ThemePickerProps) {
   if (!open) return null;
 
   return (
-    <div className="cs-themepicker__backdrop" role="dialog" aria-label="Choose a theme">
+    <div className="cs-themepicker__backdrop" role="dialog" aria-label={t('theme.ariaLabel')}>
       <div className="cs-themepicker" ref={dialogRef}>
         <header className="cs-themepicker__header">
           <Icon name="palette" size={16} />
-          <h2 className="cs-themepicker__title">Themes</h2>
-          <span className="cs-themepicker__hint">Applies to every slide</span>
-          <button type="button" className="cs-themepicker__close" onClick={onClose} title="Close (Esc)">
+          <h2 className="cs-themepicker__title">{t('theme.title')}</h2>
+          <span className="cs-themepicker__hint">{t('theme.hint')}</span>
+          <button type="button" className="cs-themepicker__close" onClick={onClose} title={t('theme.closeTooltip')}>
             <Icon name="close" size={16} />
           </button>
         </header>
@@ -116,10 +151,13 @@ export function ThemePicker({ open, onClose }: ThemePickerProps) {
                 className="cs-themepicker__swatch"
                 style={{ background: theme.swatch }}
               >
+                {/* Live "Aa" preview in the theme's heading font + accent. */}
                 <span
-                  className="cs-themepicker__pip"
-                  style={{ background: theme.accent }}
-                />
+                  className="cs-themepicker__aa"
+                  style={{ color: theme.accent, fontFamily: `'${theme.headingFont}', sans-serif` }}
+                >
+                  Aa
+                </span>
                 <span
                   className="cs-themepicker__line"
                   style={{ background: theme.accent, opacity: 0.85 }}

@@ -3296,3 +3296,40 @@ body.cs-slide-rail-open .cs-notes {
   transition: background 80ms ease;
 }
 .cs-slide-rail__add:hover { background: var(--cs-hover); }
+
+/* ================ Picker upgrades ================ */
+/* Live "Aa" preview chip in each theme card swatch. */
+.cs-themepicker__aa {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+/* "No fill" button in the background picker header. */
+.cs-bg-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cs-bg-picker__nofill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--cs-text-mute);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius);
+  background: transparent;
+  cursor: pointer;
+  transition: background 80ms ease, color 80ms ease;
+}
+.cs-bg-picker__nofill:hover {
+  background: var(--cs-hover);
+  color: var(--cs-text);
+}
