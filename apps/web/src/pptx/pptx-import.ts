@@ -1715,7 +1715,80 @@ function parseCustGeomPath(custGeom: unknown): string | null {
   return segments.length > 0 ? segments.join(' ') : null;
 }
 
-function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
+// D18 — resolve `<p:style>` shape-style refs against the theme's
+// fmtScheme. PowerPoint's Insert > Shape produces empty `<p:spPr>` +
+// `<p:style><a:fillRef idx="N"><a:schemeClr val="accent1"/></a:fillRef>`.
+// We index fillStyleLst (or bgFillStyleLst when idx >= 1000) and
+// substitute the entry's `<a:schemeClr val="phClr"/>` placeholders
+// with the fillRef's own color slot. Solid + gradient supported;
+// pattern / blip fall back to null.
+function resolveStyleRefFill(
+  styleRef: unknown,
+  theme: ThemeMap | null,
+): { fillRgb: string | null; fillGradient: IGradientFill | null; outlineRgb: string | null } {
+  const empty = { fillRgb: null, fillGradient: null, outlineRgb: null };
+  if (!styleRef || typeof styleRef !== 'object' || !theme) return empty;
+  const cache = themeFmtSchemeCache.get(theme);
+  if (!cache) return empty;
+  const fillRef = findChild(styleRef, 'a:fillRef') as XmlNode | undefined;
+  const lnRef = findChild(styleRef, 'a:lnRef') as XmlNode | undefined;
+  let resolvedFill: string | null = null;
+  let resolvedGradient: IGradientFill | null = null;
+  if (fillRef) {
+    const idxRaw = fillRef['@idx'];
+    const idx = parseInt(String(idxRaw ?? ''), 10);
+    if (Number.isFinite(idx) && idx >= 1) {
+      const entry = idx >= 1000
+        ? cache.bgFillStyleLst[idx - 1001]
+        : cache.fillStyleLst[idx - 1];
+      const refColor = readColor(fillRef, theme) ?? parseSrgbColor(fillRef);
+      if (entry && refColor) {
+        if ('a:solidFill' in (entry as Record<string, unknown>)) {
+          resolvedFill = refColor;
+        } else if ('a:gradFill' in (entry as Record<string, unknown>)) {
+          const grad = (entry as XmlNode)['a:gradFill'] as XmlNode | undefined;
+          if (grad) {
+            const gsLst = findChild(grad, 'a:gsLst');
+            const stops: IGradientStop[] = [];
+            for (const gs of toArray(findChild(gsLst, 'a:gs'))) {
+              if (!gs || typeof gs !== 'object') continue;
+              const node = gs as XmlNode;
+              const posRaw = node['@pos'];
+              const pos = parseInt(String(posRaw ?? '0'), 10);
+              const sc = findChild(node, 'a:schemeClr') as XmlNode | undefined;
+              let stopRgb: string | null = null;
+              if (sc && sc['@val'] === 'phClr') {
+                stopRgb = applyColorModifiers(refColor, sc);
+              } else {
+                stopRgb = readColor(node, theme) ?? parseSrgbColor(node);
+              }
+              if (stopRgb) stops.push({ pos: Number.isFinite(pos) ? pos / 100000 : 0, color: stopRgb });
+            }
+            if (stops.length > 0) {
+              const lin = findChild(grad, 'a:lin') as XmlNode | undefined;
+              const angRaw = lin?.['@ang'];
+              const ang = parseInt(String(angRaw ?? '0'), 10);
+              resolvedGradient = {
+                kind: 'linear',
+                angle: Number.isFinite(ang) ? ang / 60000 : 0,
+                stops,
+              };
+              resolvedFill = stops[0].color;
+            }
+          }
+        }
+      }
+    }
+  }
+  let resolvedOutline: string | null = null;
+  if (lnRef) {
+    const refColor = readColor(lnRef, theme) ?? parseSrgbColor(lnRef);
+    if (refColor) resolvedOutline = refColor;
+  }
+  return { fillRgb: resolvedFill, fillGradient: resolvedGradient, outlineRgb: resolvedOutline };
+}
+
+function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null, pStyle: unknown = null): {
   shapeType: string;
   pathData: string | null;
   fillRgb: string | null;
@@ -1775,13 +1848,21 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
   // the stroke when the OOXML omits `<a:noFill/>`.
   const hasNoFill =
     findChild(spPr, 'a:noFill') !== undefined || isLineLikeShape(shapeType);
-  const fillRgb = hasNoFill
+  let fillRgb = hasNoFill
     ? TRANSPARENT_FILL
     : readColor(spPr, theme) ?? parseSrgbColor(spPr);
-  // A3 / D9 — harvest the full gradient stops. Renderer-side work will
-  // pick this up; the flat fillRgb above stays as the first-stop
-  // degradation so older render paths keep their colour.
-  const fillGradient = hasNoFill ? null : readGradientStops(spPr, theme);
+  let fillGradient = hasNoFill ? null : readGradientStops(spPr, theme);
+  // D18 — when spPr provides no inline fill, fall back to the
+  // shape's `<p:style><a:fillRef idx="N">` against the theme's
+  // fmtScheme. Without this, themed shapes inserted via PowerPoint's
+  // Shape menu render with no fill.
+  let styleOutlineFromRef: string | null = null;
+  if (pStyle && !hasNoFill && !fillRgb && !fillGradient) {
+    const resolved = resolveStyleRefFill(pStyle, theme);
+    if (resolved.fillRgb) fillRgb = resolved.fillRgb;
+    if (resolved.fillGradient) fillGradient = resolved.fillGradient;
+    if (resolved.outlineRgb) styleOutlineFromRef = resolved.outlineRgb;
+  }
 
   let outlineRgb: string | null = null;
   let outlineWeightPx: number | null = null;
@@ -1816,6 +1897,8 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null): {
       }
     }
   }
+  // D18 — `<p:style><a:lnRef>` outline fallback.
+  if (!outlineRgb && styleOutlineFromRef) outlineRgb = styleOutlineFromRef;
 
   // D18 + D19 — `<a:effectLst>` shadow / glow / reflection / blur.
   const effectLst = parseEffectList(spPr, theme);
@@ -2588,6 +2671,49 @@ async function processSpTree(
         ...props,
         ...(rich ? { rich } : {}),
       } as ISlideRichTextProps;
+      // D11 — a `<p:sp>` carrying BOTH text AND a fill / outline needs
+      // a backing SHAPE under the text (Univer's TEXT element paints
+      // no background). themes.pptx slide 1's blue "Fill: RGB(...)"
+      // card is the canonical case.
+      const txAppearance = spPr ? parseShapeAppearance(spPr, reg.theme, findChild(sp, 'p:style')) : null;
+      const hasBackingFill = txAppearance && (
+        (txAppearance.fillRgb && txAppearance.fillRgb !== TRANSPARENT_FILL)
+        || txAppearance.fillGradient
+        || txAppearance.outlineRgb
+        || (typeof txAppearance.outlineWeightPx === 'number' && txAppearance.outlineWeightPx > 0)
+      );
+      if (hasBackingFill && txAppearance) {
+        const bgZ = z.next;
+        z.next += 1;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const bgShapeProperties: any = {};
+        if (txAppearance.fillRgb) bgShapeProperties.shapeBackgroundFill = { rgb: txAppearance.fillRgb };
+        if (txAppearance.fillGradient) bgShapeProperties.gradientFill = txAppearance.fillGradient;
+        if (txAppearance.pathData) bgShapeProperties.pathData = txAppearance.pathData;
+        if (txAppearance.prstAdjustments) bgShapeProperties.prstAdjustments = txAppearance.prstAdjustments;
+        if (
+          txAppearance.outlineRgb
+          || txAppearance.outlineWeightPx !== null
+          || txAppearance.outlineDash !== null
+          || txAppearance.outlineCap !== null
+        ) {
+          bgShapeProperties.outline = {
+            outlineFill: txAppearance.outlineRgb ? { rgb: txAppearance.outlineRgb } : undefined,
+            weight: txAppearance.outlineWeightPx ?? 1,
+            ...(txAppearance.outlineDash !== null ? { dashStyle: txAppearance.outlineDash } : {}),
+            ...(txAppearance.outlineCap !== null ? { cap: txAppearance.outlineCap } : {}),
+          };
+        }
+        if (txAppearance.effectLst !== null) bgShapeProperties.effectLst = txAppearance.effectLst;
+        out.push({
+          id: `${elId}-bg`,
+          zIndex: bgZ,
+          left, top, width, height, angle, flipX, flipY,
+          title: '', description: '',
+          type: PageElementType.SHAPE,
+          shape: { shapeType: txAppearance.shapeType as never, text: '', shapeProperties: bgShapeProperties },
+        });
+      }
       out.push({
         id: elId,
         zIndex,
@@ -2608,7 +2734,7 @@ async function processSpTree(
     }
 
     if (spPr) {
-      const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments } = parseShapeAppearance(spPr, reg.theme);
+      const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments } = parseShapeAppearance(spPr, reg.theme, findChild(sp, 'p:style'));
       const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shapeProperties: any = {};
@@ -2676,7 +2802,7 @@ async function processSpTree(
 
     const zIndex = z.next;
     z.next += 1;
-    const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments } = parseShapeAppearance(spPr, reg.theme);
+    const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments } = parseShapeAppearance(spPr, reg.theme, findChild(cxn, 'p:style'));
     const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shapeProperties: any = {};
