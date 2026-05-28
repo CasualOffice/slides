@@ -2366,6 +2366,31 @@ interface ImageRegistry {
   theme: ThemeMap | null;
   /** Deck-level `<p:defaultTextStyle>` lvl1pPr/defRPr — lowest-priority text defaults (K3) */
   deckDefaultRunProps?: Partial<ISlideRichTextProps>;
+  /** G5 — `ppt/tableStyles.xml` parsed into styleId → part-fill map */
+  tableStyles?: Map<string, TableStyleDef>;
+}
+
+// G5 — one style "part" (wholeTbl / firstRow / band1H / …). We only
+// resolve the fill + a couple of text attributes today; borders come
+// from the per-cell <a:tcPr> path or are left to the renderer default.
+interface TableStylePart {
+  fillRgb?: string;
+  textColor?: string;
+  bold?: boolean;
+}
+// The full set of conditional-format parts a table style can declare.
+// Composition order (later overrides earlier) per OOXML §17.7.6:
+//   wholeTbl < band1H/band2H < firstCol/lastCol < firstRow/lastRow.
+interface TableStyleDef {
+  wholeTbl?: TableStylePart;
+  band1H?: TableStylePart;
+  band2H?: TableStylePart;
+  band1V?: TableStylePart;
+  band2V?: TableStylePart;
+  firstRow?: TableStylePart;
+  lastRow?: TableStylePart;
+  firstCol?: TableStylePart;
+  lastCol?: TableStylePart;
 }
 
 const MIME_FROM_EXT: Record<string, string> = {
@@ -2916,6 +2941,117 @@ async function processSpTree(
 //       </a:tcPr>
 //     </a:tc>
 //   </a:tr>
+// G5 — parse `ppt/tableStyles.xml` into styleId → TableStyleDef. Each
+// `<a:tblStyle>` has conditional-format children (wholeTbl, firstRow,
+// band1H, …). Within each, the cell fill lives at either:
+//   <a:tcStyle><a:fill><a:solidFill>…           (direct — "Medium" styles)
+//   <a:tcStyle><a:fillRef idx="N">…             (theme ref — "Themed" styles)
+// and the text color / bold at <a:tcTxStyle>. We resolve both fill
+// forms to a literal RGB so the cell renderer just paints it.
+const tableStylesCache = new WeakMap<JSZip, Promise<Map<string, TableStyleDef>>>();
+
+function parseTableStylePart(partNode: unknown, theme: ThemeMap | null): TableStylePart | undefined {
+  if (!partNode || typeof partNode !== 'object') return undefined;
+  const out: TableStylePart = {};
+  const tcStyle = findChild(partNode, 'a:tcStyle') as XmlNode | undefined;
+  if (tcStyle) {
+    const fill = findChild(tcStyle, 'a:fill') as XmlNode | undefined;
+    if (fill) {
+      const rgb = readColor(fill, theme) ?? parseSrgbColor(fill);
+      if (rgb) out.fillRgb = rgb;
+    }
+    if (!out.fillRgb) {
+      // Themed style — resolve <a:fillRef idx> through the fmtScheme
+      // (reuses the D18 helper).
+      const resolved = resolveStyleRefFill(tcStyle, theme);
+      if (resolved.fillRgb) out.fillRgb = resolved.fillRgb;
+    }
+  }
+  const tcTxStyle = findChild(partNode, 'a:tcTxStyle') as XmlNode | undefined;
+  if (tcTxStyle) {
+    const b = tcTxStyle['@b'];
+    if (b === 'on' || b === '1' || b === 1 || b === 'true') out.bold = true;
+    const txColor = readColor(tcTxStyle, theme) ?? parseSrgbColor(tcTxStyle);
+    if (txColor) out.textColor = txColor;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+async function loadTableStyles(zip: JSZip, theme: ThemeMap | null): Promise<Map<string, TableStyleDef>> {
+  const cached = tableStylesCache.get(zip);
+  if (cached) return cached;
+  const promise = (async () => {
+    const map = new Map<string, TableStyleDef>();
+    const xml = await zip.file('ppt/tableStyles.xml')?.async('string');
+    if (!xml) return map;
+    const parsed = parser.parse(xml) as XmlNode;
+    const lst = findChild(parsed, 'a:tblStyleLst') as XmlNode | undefined;
+    if (!lst) return map;
+    for (const style of toArray(findChild(lst, 'a:tblStyle'))) {
+      if (!style || typeof style !== 'object') continue;
+      const node = style as XmlNode;
+      const id = node['@styleId'];
+      if (typeof id !== 'string') continue;
+      const def: TableStyleDef = {};
+      const parts: Array<keyof TableStyleDef> = [
+        'wholeTbl', 'band1H', 'band2H', 'band1V', 'band2V',
+        'firstRow', 'lastRow', 'firstCol', 'lastCol',
+      ];
+      for (const part of parts) {
+        const partNode = findChild(node, `a:${part}`);
+        const parsedPart = parseTableStylePart(partNode, theme);
+        if (parsedPart) def[part] = parsedPart;
+      }
+      map.set(id, def);
+    }
+    return map;
+  })();
+  tableStylesCache.set(zip, promise);
+  return promise;
+}
+
+// G5 — given a table style + the slide's `<a:tblPr>` toggle flags +
+// a cell's (row, col) position, compose the effective fill / text
+// attributes. Composition order per OOXML §17.7.6:
+//   wholeTbl < band(H/V) < firstCol/lastCol < firstRow/lastRow.
+function resolveTableCellStyle(
+  def: TableStyleDef | undefined,
+  flags: { firstRow: boolean; lastRow: boolean; firstCol: boolean; lastCol: boolean; bandRow: boolean; bandCol: boolean },
+  pos: { row: number; col: number; rowCount: number; colCount: number },
+): TableStylePart {
+  const composed: TableStylePart = {};
+  const apply = (part?: TableStylePart) => {
+    if (!part) return;
+    if (part.fillRgb) composed.fillRgb = part.fillRgb;
+    if (part.textColor) composed.textColor = part.textColor;
+    if (part.bold !== undefined) composed.bold = part.bold;
+  };
+  if (!def) return composed;
+  apply(def.wholeTbl);
+  // Banded rows: the FIRST data row (after an optional header) is
+  // band1; alternate. When firstRow flag is on, row 0 is the header
+  // and banding starts at row 1.
+  if (flags.bandRow) {
+    const headerOffset = flags.firstRow ? 1 : 0;
+    const bandIndex = pos.row - headerOffset;
+    if (bandIndex >= 0) {
+      apply(bandIndex % 2 === 0 ? def.band1H : def.band2H);
+    }
+  }
+  if (flags.bandCol) {
+    const firstColOffset = flags.firstCol ? 1 : 0;
+    const bandIndex = pos.col - firstColOffset;
+    if (bandIndex >= 0) {
+      apply(bandIndex % 2 === 0 ? def.band1V : def.band2V);
+    }
+  }
+  if (flags.firstCol && pos.col === 0) apply(def.firstCol);
+  if (flags.lastCol && pos.col === pos.colCount - 1) apply(def.lastCol);
+  if (flags.firstRow && pos.row === 0) apply(def.firstRow);
+  if (flags.lastRow && pos.row === pos.rowCount - 1) apply(def.lastRow);
+  return composed;
+}
+
 function parseTableCellAppearance(tcPr: unknown, theme: ThemeMap | null): { fillRgb?: string; outlineRgb?: string; outlineWeight?: number } {
   if (!tcPr) return {};
   const out: { fillRgb?: string; outlineRgb?: string; outlineWeight?: number } = {};
@@ -2951,6 +3087,34 @@ function parseTable(tbl: unknown, reg: ImageRegistry, elementId: string): { rows
       if (Number.isFinite(emu)) columnWidths.push(emu / EMU_PER_PIXEL);
     }
   }
+  // G5 — `<a:tblPr firstRow bandRow firstCol lastCol lastRow bandCol>`
+  // toggles which conditional-format parts of the table style apply,
+  // plus `<a:tableStyleId>` referencing tableStyles.xml.
+  const tblPr = findChild(tbl, 'a:tblPr') as XmlNode | undefined;
+  const flag = (k: string) => {
+    const v = tblPr?.[k];
+    return v === '1' || v === 1 || v === 'true';
+  };
+  const tblFlags = {
+    firstRow: flag('@firstRow'),
+    lastRow: flag('@lastRow'),
+    firstCol: flag('@firstCol'),
+    lastCol: flag('@lastCol'),
+    bandRow: flag('@bandRow'),
+    bandCol: flag('@bandCol'),
+  };
+  let styleId = '';
+  if (tblPr) {
+    const sid = findChild(tblPr, 'a:tableStyleId');
+    if (typeof sid === 'string') styleId = sid;
+    else if (sid && typeof sid === 'object') {
+      const inner = (sid as XmlNode)['#text'];
+      if (typeof inner === 'string') styleId = inner;
+    }
+  }
+  const styleDef = styleId ? reg.tableStyles?.get(styleId) : undefined;
+  const rowCount = toArray(findChild(tbl, 'a:tr')).length;
+  const colCount = columnWidths.length || (toArray(findChild(findChild(tbl, 'a:tr'), 'a:tc')).length);
   let rowIdx = 0;
   for (const tr of toArray(findChild(tbl, 'a:tr'))) {
     if (!tr || typeof tr !== 'object') continue;
@@ -2978,11 +3142,30 @@ function parseTable(tbl: unknown, reg: ImageRegistry, elementId: string): { rows
       if (tcNode['@hMerge'] === '1' || tcNode['@hMerge'] === 1 || tcNode['@hMerge'] === 'true') cell.hMerge = true;
       if (tcNode['@vMerge'] === '1' || tcNode['@vMerge'] === 1 || tcNode['@vMerge'] === 'true') cell.vMerge = true;
       const tcPr = findChild(tc, 'a:tcPr');
-      Object.assign(cell, parseTableCellAppearance(tcPr, reg.theme));
+      const inlineAppearance = parseTableCellAppearance(tcPr, reg.theme);
+      Object.assign(cell, inlineAppearance);
+      // G5 — fall back to the table-style fill / text attrs when the
+      // cell carries no inline fill. Inline `<a:tcPr><a:solidFill>`
+      // always wins (matches PowerPoint precedence: direct formatting
+      // over the conditional style).
+      const styleCell = resolveTableCellStyle(styleDef, tblFlags, {
+        row: rowIdx, col: cellIdx, rowCount, colCount,
+      });
+      if (!cell.fillRgb && styleCell.fillRgb) cell.fillRgb = styleCell.fillRgb;
       const txBody = findChild(tc, 'a:txBody');
       if (txBody) {
         const cellElId = `${elementId}-r${rowIdx}-c${cellIdx}`;
-        const { text, props, rich } = extractRichDoc(txBody, cellElId, undefined, reg.theme, reg.imageRelMap);
+        // G5 — feed the style's text color + bold as the fallback run
+        // props so cells with no explicit run color pick up the
+        // header-row white / body-row dark from the table style.
+        const cellFallback: Partial<ISlideRichTextProps> = {};
+        if (styleCell.textColor) cellFallback.cl = { rgb: styleCell.textColor };
+        if (styleCell.bold) cellFallback.bl = 1;
+        const { text, props, rich } = extractRichDoc(
+          txBody, cellElId,
+          Object.keys(cellFallback).length > 0 ? cellFallback : undefined,
+          reg.theme, reg.imageRelMap,
+        );
         if (text) cell.text = text;
         if (rich) cell.richText = { text, ...props, rich };
       }
@@ -4104,8 +4287,12 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     // multi-slide decks don't re-parse it on every slide.
     const theme = await resolveThemeForSlide(slideRelsXml, zip, themeCache);
     const placeholderRects = await buildPlaceholderMap(slideRelsXml, zip, theme);
+    // G5 — table styles are deck-global (ppt/tableStyles.xml) but their
+    // fill resolution depends on this slide's theme color map, so load
+    // per-slide (cached by zip; the parse itself is memoised).
+    const tableStyles = await loadTableStyles(zip, theme);
 
-    const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip, placeholderRects, theme, deckDefaultRunProps };
+    const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip, placeholderRects, theme, deckDefaultRunProps, tableStyles };
     const pageOrdinal = i + 1;
     const pageId = `page-${pageOrdinal}`;
     // Layout / master decorative shapes (non-placeholder) inherit as a
