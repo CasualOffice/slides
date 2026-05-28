@@ -145,7 +145,29 @@ Scope: NEW `FindReplaceDialog.tsx` + `<FindReplaceProvider />` self-mount in `ma
 
 ---
 
-## Wave 4 — pending dispatch (after Wave 3 merges)
+## Wave 4 — in flight (parallel agents, isolated worktrees)
+
+### Bucket W4-Rail — Left slide rail with rendered thumbnails
+Owner: Agent-W4Rail (worktree, running)
+Scope: NEW `SlideRail.tsx` + `SlideRailThumbnail.tsx`, self-mount via `<SlideRailProvider />` in `main.tsx`, new `chrome.slideRail.*` i18n, styles.css append.
+- [~] Rendered thumbnails (reuse `SlideTile` with `transform: scale`).
+- [~] Click → activate; Cmd/Ctrl-click toggle; Shift-click range; Esc clears.
+- [~] Drag-reorder via `pageOrder` swap (TODO(collab)).
+- [~] Up/Down keyboard navigation; Cmd/Ctrl+A select all; bare Delete on selection.
+- [~] Bottom "+ New slide" button.
+- [~] Hide Univer's `[data-u-comp="left-sidebar"]` via CSS.
+- [~] `body.cs-slide-rail-open` toggles 220 px margin-left on workspace.
+
+### Bucket W4-F — Picker improvements
+Owner: Agent-W4F (worktree, running)
+Scope: `ThemePicker.tsx`, `BackgroundPicker.tsx`, `LayoutPicker.tsx`, `layouts.ts`, `en.json` keys, styles.css append.
+- [~] ThemePicker cascades font + accent + text-color across every slide.
+- [~] BackgroundPicker "No fill", "Image…" (PNG/JPEG), optional gradient.
+- [~] LayoutPicker Insert vs Apply-to-current segmented control.
+
+---
+
+## Wave 5 — pending dispatch
 
 ### Bucket D — Google Slides toolbar (the BIG one)
 Scope: `Toolbar.tsx` + new components. Industry-standard format controls.
