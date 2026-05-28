@@ -35,6 +35,11 @@
     },
     "workspace": {
       "dropPptx": "Drop .pptx to open"
+    },
+    "slideRail": {
+      "ariaLabel": "Slide thumbnails",
+      "slideLabel": "Slide {{index}}",
+      "newSlide": "New slide"
     }
   },
   "menu": {

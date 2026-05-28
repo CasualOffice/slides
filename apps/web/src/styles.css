@@ -3167,3 +3167,132 @@ body.cs-format-pane-open .cs-statusbar {
 .cs-findreplace-flash--play {
   animation: cs-findreplace-flash 600ms cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+/* ================ Slide rail ================ */
+/* Our own left rail of rendered thumbnails — replaces Univer's built-in
+   numbered sidebar, which we hide below. Mounted via <SlideRailProvider />;
+   the body class shifts the workspace right so the canvas isn't overlapped. */
+
+/* Hide Univer's native slide bar — we render our own. Scoped to the
+   univer mount so our rail (which reuses data-u-comp="left-sidebar" for
+   the context-menu hook) is NOT hidden. */
+.univer-mount [data-u-comp="left-sidebar"] { display: none !important; }
+
+.cs-slide-rail {
+  position: fixed;
+  left: 0;
+  top: calc(var(--cs-titlebar-h) + var(--cs-toolbar-h));
+  bottom: var(--cs-statusbar-h);
+  width: 220px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--cs-surface);
+  border-right: 1px solid var(--cs-border);
+  min-width: 0;
+}
+
+/* Shift the editor surface + notes right so the rail doesn't overlap. */
+body.cs-slide-rail-open .cs-workspace,
+body.cs-slide-rail-open .cs-notes {
+  margin-left: 220px;
+  transition: margin-left 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cs-slide-rail__list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cs-slide-rail__item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 2px;
+  border-radius: var(--cs-radius);
+}
+
+/* Insertion lines for drag-reorder. */
+.cs-slide-rail__item.is-drop-above::before,
+.cs-slide-rail__item.is-drop-below::after {
+  content: '';
+  position: absolute;
+  left: 24px;
+  right: 6px;
+  height: 2px;
+  background: var(--cs-accent);
+  border-radius: 2px;
+}
+.cs-slide-rail__item.is-drop-above::before { top: -1px; }
+.cs-slide-rail__item.is-drop-below::after { bottom: -1px; }
+
+.cs-slide-rail__num {
+  width: 16px;
+  flex-shrink: 0;
+  padding-top: 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--cs-text-mute);
+  text-align: right;
+  user-select: none;
+}
+
+.cs-slide-rail__thumb {
+  flex: 1;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 80ms ease, box-shadow 80ms ease;
+}
+.cs-slide-rail__thumb:hover { border-color: var(--cs-border); }
+.cs-slide-rail__thumb.is-selected { border-color: var(--cs-accent); }
+.cs-slide-rail__thumb.is-active {
+  border-color: var(--cs-accent);
+  box-shadow: 0 0 0 1px var(--cs-accent);
+}
+
+.cs-slide-rail__thumb-frame {
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--cs-border-2);
+  border-radius: 2px;
+}
+
+/* The inner tile renders at native px and is scaled down via transform.
+   Disable pointer events so clicks hit the thumb button, not the tile. */
+.cs-slide-rail__thumb-scale {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+.cs-slide-rail__thumb-scale .cs-slideshow__slide {
+  box-shadow: none;
+}
+
+.cs-slide-rail__add {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  border-top: 1px solid var(--cs-border-2);
+  background: var(--cs-surface);
+  color: var(--cs-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+.cs-slide-rail__add:hover { background: var(--cs-hover); }

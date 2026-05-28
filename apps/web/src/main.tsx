@@ -3,6 +3,7 @@ import { App } from './App';
 import { ShortcutsProvider } from './shell/ShortcutsDialog';
 import { FormatPaneProvider } from './shell/FormatPane';
 import { FindReplaceProvider } from './shell/FindReplaceDialog';
+import { SlideRailProvider } from './shell/SlideRail';
 // i18n must initialise before any React component mounts so the first
 // render of <App /> already sees the configured `t()` instance — otherwise
 // components would fall back to raw keys for one tick.
@@ -36,6 +37,7 @@ if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <>
     <App />
+    <SlideRailProvider />
     <ShortcutsProvider />
     <FormatPaneProvider />
     <FindReplaceProvider />
