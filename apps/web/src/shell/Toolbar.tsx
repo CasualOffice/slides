@@ -18,7 +18,7 @@
 // line spacing, clear formatting, insert link, vertical-align), the button
 // is wired to local state only with an inline `TODO(univer)` comment
 // pointing at the gap. We never fake a dispatch.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Univer } from '@univerjs/core';
 import { IUndoRedoService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
@@ -48,21 +48,21 @@ interface ShapeMenuItem {
 // dispatch pipeline intact so the renderer/exporter pieces don't need to
 // change. Labels go through i18n (`toolbar.shape_*`).
 const SHAPES_MENU: ShapeMenuItem[] = [
-  { id: 'rect',       labelKey: 'toolbar:shape_rect',       icon: 'add',            cmd: 'slide.command.insert-float-shape.rectangle' },
-  { id: 'ellipse',    labelKey: 'toolbar:shape_ellipse',    icon: 'add',            cmd: 'slide.command.insert-float-shape.ellipse' },
-  { id: 'line',       labelKey: 'toolbar:shape_line',       icon: 'remove',         shapeType: 'line' },
-  { id: 'rightArrow', labelKey: 'toolbar:shape_rightArrow', icon: 'add',            shapeType: 'rightArrow' },
-  { id: 'leftArrow',  labelKey: 'toolbar:shape_leftArrow',  icon: 'add',            shapeType: 'leftArrow' },
-  { id: 'upArrow',    labelKey: 'toolbar:shape_upArrow',    icon: 'add',            shapeType: 'upArrow' },
-  { id: 'downArrow',  labelKey: 'toolbar:shape_downArrow',  icon: 'add',            shapeType: 'downArrow' },
-  { id: 'triangle',   labelKey: 'toolbar:shape_triangle',   icon: 'add',            shapeType: 'triangle' },
-  { id: 'diamond',    labelKey: 'toolbar:shape_diamond',    icon: 'add',            shapeType: 'diamond' },
-  { id: 'pentagon',   labelKey: 'toolbar:shape_pentagon',   icon: 'add',            shapeType: 'pentagon' },
-  { id: 'hexagon',    labelKey: 'toolbar:shape_hexagon',    icon: 'add',            shapeType: 'hexagon' },
-  { id: 'octagon',    labelKey: 'toolbar:shape_octagon',    icon: 'add',            shapeType: 'octagon' },
-  { id: 'chevron',    labelKey: 'toolbar:shape_chevron',    icon: 'add',            shapeType: 'chevron' },
-  { id: 'plus',       labelKey: 'toolbar:shape_plus',       icon: 'add',            shapeType: 'plus' },
-  { id: 'star5',      labelKey: 'toolbar:shape_star5',      icon: 'add',            shapeType: 'star5' },
+  { id: 'rect',       labelKey: 'toolbar:shape_rect',       icon: 'rectangle',       cmd: 'slide.command.insert-float-shape.rectangle' },
+  { id: 'ellipse',    labelKey: 'toolbar:shape_ellipse',    icon: 'circle',          cmd: 'slide.command.insert-float-shape.ellipse' },
+  { id: 'line',       labelKey: 'toolbar:shape_line',       icon: 'horizontal_rule', shapeType: 'line' },
+  { id: 'rightArrow', labelKey: 'toolbar:shape_rightArrow', icon: 'arrow_right_alt', shapeType: 'rightArrow' },
+  { id: 'leftArrow',  labelKey: 'toolbar:shape_leftArrow',  icon: 'arrow_back',      shapeType: 'leftArrow' },
+  { id: 'upArrow',    labelKey: 'toolbar:shape_upArrow',    icon: 'arrow_upward',    shapeType: 'upArrow' },
+  { id: 'downArrow',  labelKey: 'toolbar:shape_downArrow',  icon: 'arrow_downward',  shapeType: 'downArrow' },
+  { id: 'triangle',   labelKey: 'toolbar:shape_triangle',   icon: 'change_history',  shapeType: 'triangle' },
+  { id: 'diamond',    labelKey: 'toolbar:shape_diamond',    icon: 'diamond',         shapeType: 'diamond' },
+  { id: 'pentagon',   labelKey: 'toolbar:shape_pentagon',   icon: 'pentagon',        shapeType: 'pentagon' },
+  { id: 'hexagon',    labelKey: 'toolbar:shape_hexagon',    icon: 'hexagon',         shapeType: 'hexagon' },
+  { id: 'octagon',    labelKey: 'toolbar:shape_octagon',    icon: 'shape_line',      shapeType: 'octagon' },
+  { id: 'chevron',    labelKey: 'toolbar:shape_chevron',    icon: 'double_arrow',    shapeType: 'chevron' },
+  { id: 'plus',       labelKey: 'toolbar:shape_plus',       icon: 'add',             shapeType: 'plus' },
+  { id: 'star5',      labelKey: 'toolbar:shape_star5',      icon: 'star',            shapeType: 'star5' },
 ];
 
 // Manual `slide.mutation.insert-element` payload for shape types the
@@ -262,21 +262,29 @@ export function Toolbar() {
   const overflow = useToolbarOverflow(rootRef);
 
   const [format, setFormat] = useState<FormatState>(DEFAULT_FORMAT);
-  const [shapesAnchor, setShapesAnchor] = useState<DOMRect | null>(null);
   const [bgAnchor, setBgAnchor] = useState<DOMRect | null>(null);
   const [layoutAnchor, setLayoutAnchor] = useState<DOMRect | null>(null);
   const [overflowAnchor, setOverflowAnchor] = useState<DOMRect | null>(null);
+  // Category dropdowns — "Insert ▾" (text/image/shape/line) and "Slide ▾"
+  // (new/layout/theme/background). Keeps the toolbar compact while leaving
+  // text formatting flat + always visible.
+  const [insertAnchor, setInsertAnchor] = useState<DOMRect | null>(null);
+  const [slideAnchor, setSlideAnchor] = useState<DOMRect | null>(null);
 
-  // Dismiss the shapes popover on outside click.
-  const shapesContainerRef = useRef<HTMLDivElement>(null);
+  // Dismiss the Insert / Slide category popovers on outside click. They are
+  // rendered inside the toolbar root, so a click outside rootRef closes them.
+  const rootForDismiss = rootRef;
   useEffect(() => {
-    if (!shapesAnchor) return;
+    if (!insertAnchor && !slideAnchor) return;
     const handler = (e: MouseEvent) => {
-      if (!shapesContainerRef.current?.contains(e.target as Node)) setShapesAnchor(null);
+      if (!rootForDismiss.current?.contains(e.target as Node)) {
+        setInsertAnchor(null);
+        setSlideAnchor(null);
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [shapesAnchor]);
+  }, [insertAnchor, slideAnchor, rootForDismiss]);
 
   // Helper for "icon toggle" buttons that dispatch a single Univer command.
   function toggleFormat<K extends keyof FormatState>(key: K, cmd: string) {
@@ -341,99 +349,44 @@ export function Toolbar() {
     </>
   );
 
-  const group3 = (
-    <>
-      <button
-        type="button"
-        className="cs-toolbar2__btn"
-        title={t('toolbar:textBox')}
-        aria-label={t('toolbar:textBox')}
-        onClick={() => void dispatchSlideCommand('slide.command.add-text')}
-      >
-        <Icon name="text_fields" size={18} />
-      </button>
-      <button
-        type="button"
-        className="cs-toolbar2__btn"
-        title={t('toolbar:image')}
-        aria-label={t('toolbar:image')}
-        onClick={() => void dispatchSlideCommand('slide.command.insert-float-image')}
-      >
-        <Icon name="image" size={18} />
-      </button>
-      <div className="cs-toolbar2__split" ref={shapesContainerRef}>
-        <button
-          type="button"
-          className="cs-toolbar2__btn cs-toolbar2__btn--with-caret"
-          title={t('toolbar:shape')}
-          aria-label={t('toolbar:shape')}
-          aria-haspopup="menu"
-          aria-expanded={!!shapesAnchor}
-          onClick={(e) =>
-            setShapesAnchor(shapesAnchor ? null : e.currentTarget.getBoundingClientRect())
-          }
-        >
-          <Icon name="category" size={18} />
-          <Icon name="expand_more" size={14} className="cs-toolbar2__caret" />
-        </button>
-      </div>
-      <button
-        type="button"
-        className="cs-toolbar2__btn"
-        title={t('toolbar:line')}
-        aria-label={t('toolbar:line')}
-        onClick={() => insertShapeOfType('line')}
-      >
-        <Icon name="horizontal_rule" size={18} />
-      </button>
-    </>
+  // "Insert ▾" category dropdown trigger.
+  const groupInsert = (
+    <button
+      type="button"
+      className="cs-toolbar2__btn cs-toolbar2__btn--labeled"
+      title={t('toolbar:group.insert')}
+      aria-label={t('toolbar:group.insert')}
+      aria-haspopup="menu"
+      aria-expanded={!!insertAnchor}
+      onClick={(e) => {
+        setSlideAnchor(null);
+        setInsertAnchor(insertAnchor ? null : e.currentTarget.getBoundingClientRect());
+      }}
+    >
+      <Icon name="text_fields" size={18} />
+      <span className="cs-toolbar2__btn-label">{t('toolbar:group.insert')}</span>
+      <Icon name="expand_more" size={14} className="cs-toolbar2__caret" />
+    </button>
   );
 
-  const group5 = (
-    <>
-      <button
-        type="button"
-        className="cs-toolbar2__btn"
-        title={t('toolbar:newSlideShortcut')}
-        aria-label={t('toolbar:newSlide')}
-        onClick={() => void dispatchSlideCommand('slide.operation.append-slide')}
-      >
-        <Icon name="add_to_photos" size={18} />
-      </button>
-      <button
-        type="button"
-        className="cs-toolbar2__btn"
-        title={t('toolbar:layout')}
-        aria-label={t('toolbar:layout')}
-        onClick={(e) =>
-          setLayoutAnchor(layoutAnchor ? null : e.currentTarget.getBoundingClientRect())
-        }
-      >
-        <Icon name="view_compact" size={18} />
-      </button>
-      <button
-        type="button"
-        className="cs-toolbar2__btn"
-        title={t('toolbar:theme')}
-        aria-label={t('toolbar:theme')}
-        onClick={() =>
-          (window as Window & { __casualSlides_openThemes?: () => void }).__casualSlides_openThemes?.()
-        }
-      >
-        <Icon name="palette" size={18} />
-      </button>
-      <button
-        type="button"
-        className="cs-toolbar2__btn"
-        title={t('toolbar:background')}
-        aria-label={t('toolbar:background')}
-        onClick={(e) =>
-          setBgAnchor(bgAnchor ? null : e.currentTarget.getBoundingClientRect())
-        }
-      >
-        <Icon name="format_color_fill" size={18} />
-      </button>
-    </>
+  // "Slide ▾" category dropdown trigger.
+  const groupSlide = (
+    <button
+      type="button"
+      className="cs-toolbar2__btn cs-toolbar2__btn--labeled"
+      title={t('toolbar:group.slide')}
+      aria-label={t('toolbar:group.slide')}
+      aria-haspopup="menu"
+      aria-expanded={!!slideAnchor}
+      onClick={(e) => {
+        setInsertAnchor(null);
+        setSlideAnchor(slideAnchor ? null : e.currentTarget.getBoundingClientRect());
+      }}
+    >
+      <Icon name="add_to_photos" size={18} />
+      <span className="cs-toolbar2__btn-label">{t('toolbar:group.slide')}</span>
+      <Icon name="expand_more" size={14} className="cs-toolbar2__caret" />
+    </button>
   );
 
   const group6 = (
@@ -551,50 +504,13 @@ export function Toolbar() {
     </>
   );
 
-  // Slides menu items rendered by the popover. Memo'd so the same array
-  // identity flows into the popover render and the keyboard handler.
-  const shapesMenuRendered = useMemo(
-    () => (
-      <div
-        className="cs-toolbar2__popover cs-toolbar2__popover--shapes"
-        style={
-          shapesAnchor
-            ? { top: shapesAnchor.bottom + 6, left: shapesAnchor.left }
-            : undefined
-        }
-        role="menu"
-        aria-label={t('toolbar:shape')}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        {SHAPES_MENU.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="menuitem"
-            className="cs-toolbar2__popover-item"
-            onClick={() => {
-              setShapesAnchor(null);
-              if (item.shapeType) insertShapeOfType(item.shapeType);
-              else if (item.cmd) void dispatchSlideCommand(item.cmd);
-            }}
-          >
-            <Icon name={item.icon} size={14} />
-            <span>{t(item.labelKey)}</span>
-          </button>
-        ))}
-      </div>
-    ),
-    [shapesAnchor, t],
-  );
-
   return (
     <div className="cs-toolbar" ref={rootRef}>
       <div className="cs-toolbar2__row" role="toolbar" aria-label={t('toolbar:group.actions')}>
         {group1}
         <span className="cs-toolbar__sep" aria-hidden="true" />
-        {group3}
-        <span className="cs-toolbar__sep" aria-hidden="true" />
-        {group5}
+        {groupInsert}
+        {groupSlide}
         {/* Character formatting (font / size / B I U S / colours) is ALWAYS
             visible — never hidden behind "More". Only the secondary paragraph
             group (align / list / indent) collapses when space is tight. */}
@@ -641,7 +557,78 @@ export function Toolbar() {
         </button>
       </div>
 
-      {shapesAnchor && shapesMenuRendered}
+      {/* Insert ▾ category popover */}
+      {insertAnchor && (
+        <div
+          className="cs-toolbar2__popover cs-toolbar2__popover--insert"
+          style={{ top: insertAnchor.bottom + 6, left: insertAnchor.left }}
+          role="menu"
+          aria-label={t('toolbar:group.insert')}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setInsertAnchor(null); void dispatchSlideCommand('slide.command.add-text'); }}>
+            <Icon name="text_fields" size={16} /><span>{t('toolbar:textBox')}</span>
+          </button>
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setInsertAnchor(null); void dispatchSlideCommand('slide.command.insert-float-image'); }}>
+            <Icon name="image" size={16} /><span>{t('toolbar:image')}</span>
+          </button>
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setInsertAnchor(null); insertShapeOfType('line'); }}>
+            <Icon name="horizontal_rule" size={16} /><span>{t('toolbar:line')}</span>
+          </button>
+          <div className="cs-toolbar2__popover-sep" role="separator" />
+          <div className="cs-toolbar2__popover-label">{t('toolbar:shape')}</div>
+          <div className="cs-toolbar2__shape-grid">
+            {SHAPES_MENU.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="menuitem"
+                className="cs-toolbar2__shape-cell"
+                title={t(item.labelKey)}
+                aria-label={t(item.labelKey)}
+                onClick={() => {
+                  setInsertAnchor(null);
+                  if (item.shapeType) insertShapeOfType(item.shapeType);
+                  else if (item.cmd) void dispatchSlideCommand(item.cmd);
+                }}
+              >
+                <Icon name={item.icon} size={18} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Slide ▾ category popover */}
+      {slideAnchor && (
+        <div
+          className="cs-toolbar2__popover cs-toolbar2__popover--slidecat"
+          style={{ top: slideAnchor.bottom + 6, left: slideAnchor.left }}
+          role="menu"
+          aria-label={t('toolbar:group.slide')}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setSlideAnchor(null); void dispatchSlideCommand('slide.operation.append-slide'); }}>
+            <Icon name="add_to_photos" size={16} /><span>{t('toolbar:newSlide')}</span>
+          </button>
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { const r = slideAnchor; setSlideAnchor(null); setLayoutAnchor(r); }}>
+            <Icon name="view_compact" size={16} /><span>{t('toolbar:layout')}</span>
+          </button>
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setSlideAnchor(null); (window as Window & { __casualSlides_openThemes?: () => void }).__casualSlides_openThemes?.(); }}>
+            <Icon name="palette" size={16} /><span>{t('toolbar:theme')}</span>
+          </button>
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { const r = slideAnchor; setSlideAnchor(null); setBgAnchor(r); }}>
+            <Icon name="format_color_fill" size={16} /><span>{t('toolbar:background')}</span>
+          </button>
+        </div>
+      )}
 
       {overflow && overflowAnchor && (
         <OverflowPopover anchor={overflowAnchor} onClose={() => setOverflowAnchor(null)}>

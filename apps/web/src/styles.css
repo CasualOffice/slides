@@ -3404,3 +3404,55 @@ body.cs-slide-rail-open .cs-notes {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* ================ Toolbar category dropdowns ================ */
+/* "Insert ▾" / "Slide ▾" labeled triggers — most-used controls grouped
+   under a caret so the bar stays compact, formatting stays inline. */
+.cs-toolbar2__btn--labeled {
+  width: auto;
+  gap: 4px;
+  padding: 0 8px;
+}
+.cs-toolbar2__btn-label {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Section label + separator inside category popovers. */
+.cs-toolbar2__popover-label {
+  padding: 6px 12px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cs-text-mute);
+}
+.cs-toolbar2__popover-sep {
+  height: 1px;
+  background: var(--cs-border-2);
+  margin: 6px 0;
+}
+
+/* Shape catalogue as a compact icon grid inside the Insert popover. */
+.cs-toolbar2__popover--insert { width: 232px; }
+.cs-toolbar2__shape-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  padding: 2px 6px 6px;
+}
+.cs-toolbar2__shape-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  border-radius: var(--cs-radius);
+  color: var(--cs-text);
+  transition: background 80ms ease;
+}
+.cs-toolbar2__shape-cell:hover { background: var(--cs-hover); }
+.cs-toolbar2__shape-cell:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: -1px;
+}
