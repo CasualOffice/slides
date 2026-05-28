@@ -3,6 +3,7 @@ import type { Univer } from '@univerjs/core';
 import { IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { ISlidePage, SlideDataModel } from '@univerjs/slides';
 import { Icon } from './icons';
+import { useTranslation } from '../i18n';
 
 // Speaker-notes panel. Renders below the workspace, edits the active
 // slide's notes. Stored in ISlidePage.description for now — Univer's
@@ -61,6 +62,7 @@ export interface NotesPanelProps {
 }
 
 export function NotesPanel({ visible, onToggle }: NotesPanelProps) {
+  const { t } = useTranslation('notes');
   const [draft, setDraft] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
@@ -94,25 +96,25 @@ export function NotesPanel({ visible, onToggle }: NotesPanelProps) {
     <div
       className={`cs-notes ${visible ? 'is-visible' : 'is-hidden'}`}
       role="region"
-      aria-label="Speaker notes"
+      aria-label={t('regionLabel')}
       aria-hidden={!visible}
     >
       <div className="cs-notes__header">
         <Icon name="sticky_note_2" size={14} />
-        <span className="cs-notes__title">Speaker notes</span>
-        <span className="cs-notes__hint">Private — your own reference, not exported</span>
+        <span className="cs-notes__title">{t('title')}</span>
+        <span className="cs-notes__hint">{t('hint')}</span>
         <button
           type="button"
           className="cs-notes__close"
           onClick={onToggle}
-          title="Hide notes (View → Speaker notes)"
+          title={t('closeTooltip')}
         >
           <Icon name="close" size={14} />
         </button>
       </div>
       <textarea
         className="cs-notes__textarea"
-        placeholder={activeId ? 'Add speaker notes for this slide…' : 'Select a slide to add notes'}
+        placeholder={activeId ? t('placeholderActive') : t('placeholderEmpty')}
         value={draft}
         onChange={(e) => {
           setDraft(e.target.value);

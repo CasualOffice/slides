@@ -4,6 +4,7 @@ import { IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
 import { dispatchSlideCommand } from '../univer/commands';
 import { Icon } from './icons';
+import { useTranslation } from '../i18n';
 
 // Right-click context menu on slide thumbnails in the left rail.
 // Standard PowerPoint / Google Slides affordance.
@@ -110,6 +111,7 @@ async function toggleHidden(pageId: string, current: boolean): Promise<void> {
 }
 
 export function SlideContextMenu() {
+  const { t } = useTranslation('dialogs');
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuRef = useRef<HTMLUListElement>(null);
 
@@ -212,7 +214,7 @@ export function SlideContextMenu() {
           onClick={() => void fire('slide.operation.append-slide')}
         >
           <Icon name="add_to_photos" size={14} />
-          <span>New slide</span>
+          <span>{t('slideContext.newSlide')}</span>
         </button>
       </li>
       <li>
@@ -222,8 +224,8 @@ export function SlideContextMenu() {
           onClick={() => void fire('slide.command.duplicate-slide', { pageId: menu.pageId })}
         >
           <Icon name="content_copy" size={14} />
-          <span>Duplicate slide</span>
-          <span className="cs-slide-context__shortcut">Ctrl+D</span>
+          <span>{t('slideContext.duplicate')}</span>
+          <span className="cs-slide-context__shortcut">{t('slideContext.shortcut.duplicate')}</span>
         </button>
       </li>
       <li className="cs-slide-context__sep" role="separator" />
@@ -236,7 +238,7 @@ export function SlideContextMenu() {
           data-testid="slide-context-move-up"
         >
           <Icon name="arrow_upward" size={14} />
-          <span>Move up</span>
+          <span>{t('slideContext.moveUp')}</span>
         </button>
       </li>
       <li>
@@ -248,7 +250,7 @@ export function SlideContextMenu() {
           data-testid="slide-context-move-down"
         >
           <Icon name="arrow_downward" size={14} />
-          <span>Move down</span>
+          <span>{t('slideContext.moveDown')}</span>
         </button>
       </li>
       <li className="cs-slide-context__sep" role="separator" />
@@ -268,7 +270,7 @@ export function SlideContextMenu() {
           data-testid="slide-context-hide"
         >
           <Icon name={menu.isHidden ? 'visibility' : 'visibility_off'} size={14} />
-          <span>{menu.isHidden ? 'Unhide slide' : 'Hide slide'}</span>
+          <span>{menu.isHidden ? t('slideContext.unhide') : t('slideContext.hide')}</span>
         </button>
       </li>
       <li className="cs-slide-context__sep" role="separator" />
@@ -279,8 +281,8 @@ export function SlideContextMenu() {
           onClick={() => void fire('slide.command.delete-slide', { pageId: menu.pageId })}
         >
           <Icon name="delete" size={14} />
-          <span>Delete slide</span>
-          <span className="cs-slide-context__shortcut">Shift+Del</span>
+          <span>{t('slideContext.delete')}</span>
+          <span className="cs-slide-context__shortcut">{t('slideContext.shortcut.delete')}</span>
         </button>
       </li>
     </ul>
