@@ -5,6 +5,7 @@ import type { ISlideData, SlideDataModel } from '@univerjs/slides';
 import { PageElementType } from '@univerjs/slides';
 import { Icon } from './icons';
 import { useFocusTrap } from './use-focus-trap';
+import { useTranslation } from '../i18n';
 
 // File → Properties modal. Read-only metadata about the active deck.
 // Same backdrop / centred-card idiom as ThemePicker; key/value rows
@@ -72,6 +73,7 @@ function formatInches(px: number): string {
 }
 
 export function PropertiesDialog({ open, onClose, fallback }: PropertiesDialogProps) {
+  const { t } = useTranslation('dialogs');
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(open, dialogRef);
 
@@ -101,34 +103,44 @@ export function PropertiesDialog({ open, onClose, fallback }: PropertiesDialogPr
   if (!open || !stats) return null;
 
   return (
-    <div className="cs-properties__backdrop" role="dialog" aria-modal="true" aria-label="Deck properties">
+    <div className="cs-properties__backdrop" role="dialog" aria-modal="true" aria-label={t('properties.ariaLabel')}>
       <div className="cs-properties" ref={dialogRef} data-testid="properties-dialog" tabIndex={-1}>
         <header className="cs-properties__header">
           <Icon name="info" size={16} />
-          <h2 className="cs-properties__title">Properties</h2>
+          <h2 className="cs-properties__title">{t('properties.title')}</h2>
           <button
             type="button"
             className="cs-properties__close"
             onClick={onClose}
-            title="Close (Esc)"
+            title={t('properties.closeTooltip')}
           >
             <Icon name="close" size={16} />
           </button>
         </header>
         <dl className="cs-properties__list">
-          <PropRow label="Title" value={stats.title} />
-          <PropRow label="Slides" value={String(stats.slideCount)} />
+          <PropRow testId="title" label={t('properties.keys.title')} value={stats.title} />
+          <PropRow testId="slides" label={t('properties.keys.slides')} value={String(stats.slideCount)} />
           <PropRow
-            label="Page size"
-            value={`${stats.pageWidth} × ${stats.pageHeight} px  ·  ${formatInches(stats.pageWidth)} × ${formatInches(stats.pageHeight)} in`}
+            testId="page-size"
+            label={t('properties.keys.pageSize')}
+            value={t('properties.values.pageSize', {
+              width: stats.pageWidth,
+              height: stats.pageHeight,
+              widthIn: formatInches(stats.pageWidth),
+              heightIn: formatInches(stats.pageHeight),
+            })}
           />
-          <PropRow label="Elements" value={String(stats.elementCount)} />
-          <PropRow label="Text length" value={`${stats.textChars} characters`} />
-          <PropRow label="Format" value="PowerPoint (.pptx)" />
+          <PropRow testId="elements" label={t('properties.keys.elements')} value={String(stats.elementCount)} />
+          <PropRow
+            testId="text-length"
+            label={t('properties.keys.textLength')}
+            value={t('properties.values.textCharacters', { count: stats.textChars })}
+          />
+          <PropRow testId="format" label={t('properties.keys.format')} value={t('properties.values.format')} />
         </dl>
         <footer className="cs-properties__footer">
           <button type="button" className="cs-btn cs-btn--ghost" onClick={onClose}>
-            Close
+            {t('properties.close')}
           </button>
         </footer>
       </div>
@@ -136,9 +148,9 @@ export function PropertiesDialog({ open, onClose, fallback }: PropertiesDialogPr
   );
 }
 
-function PropRow({ label, value }: { label: string; value: string }) {
+function PropRow({ testId, label, value }: { testId: string; label: string; value: string }) {
   return (
-    <div className="cs-properties__row" data-testid={`prop-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+    <div className="cs-properties__row" data-testid={`prop-${testId}`}>
       <dt className="cs-properties__key">{label}</dt>
       <dd className="cs-properties__value">{value}</dd>
     </div>

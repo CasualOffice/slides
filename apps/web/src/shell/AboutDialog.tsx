@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Icon } from './icons';
 import { useFocusTrap } from './use-focus-trap';
+import { useTranslation } from '../i18n';
 
 // Help → About modal. Static content — version, license, repo, the
 // open-source dependencies we ship on top of. Same backdrop / centred-
@@ -11,53 +12,20 @@ export interface AboutDialogProps {
   onClose: () => void;
 }
 
-interface Attribution {
-  name: string;
-  license: string;
-  url: string;
-  note?: string;
-}
-
-const ATTRIBUTIONS: Attribution[] = [
-  {
-    name: 'Univer OSS',
-    license: 'Apache-2.0',
-    url: 'https://github.com/dream-num/univer',
-    note: 'Slides canvas + data model (v0.24.0).',
-  },
-  {
-    name: 'PptxGenJS',
-    license: 'MIT',
-    url: 'https://github.com/gitbrent/PptxGenJS',
-    note: '.pptx export pipeline.',
-  },
-  {
-    name: 'JSZip',
-    license: 'MIT or GPL-3.0 (we use MIT)',
-    url: 'https://github.com/Stuk/jszip',
-    note: '.pptx zip read/write.',
-  },
-  {
-    name: 'fast-xml-parser',
-    license: 'MIT',
-    url: 'https://github.com/NaturalIntelligence/fast-xml-parser',
-    note: 'OOXML parsing.',
-  },
-  {
-    name: 'React',
-    license: 'MIT',
-    url: 'https://react.dev/',
-    note: 'UI shell.',
-  },
-  {
-    name: 'Material Symbols',
-    license: 'Apache-2.0',
-    url: 'https://fonts.google.com/icons',
-    note: 'Toolbar + menu icons.',
-  },
+// Dependency display text (name / license / note) is i18n-keyed under
+// dialogs.about.deps.<key>; only the URL stays here (URLs don't translate).
+const ATTRIBUTIONS: { key: string; url: string }[] = [
+  { key: 'univer', url: 'https://github.com/dream-num/univer' },
+  { key: 'pptxgenjs', url: 'https://github.com/gitbrent/PptxGenJS' },
+  { key: 'jszip', url: 'https://github.com/Stuk/jszip' },
+  { key: 'fastXmlParser', url: 'https://github.com/NaturalIntelligence/fast-xml-parser' },
+  { key: 'react', url: 'https://react.dev/' },
+  { key: 'lucide', url: 'https://lucide.dev/' },
+  { key: 'i18next', url: 'https://www.i18next.com/' },
 ];
 
 export function AboutDialog({ open, onClose }: AboutDialogProps) {
+  const { t } = useTranslation('dialogs');
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(open, dialogRef);
 
@@ -80,16 +48,16 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
   if (!open) return null;
 
   return (
-    <div className="cs-about__backdrop" role="dialog" aria-modal="true" aria-label="About Casual Slides">
+    <div className="cs-about__backdrop" role="dialog" aria-modal="true" aria-label={t('about.ariaLabel')}>
       <div className="cs-about" ref={dialogRef} data-testid="about-dialog" tabIndex={-1}>
         <header className="cs-about__header">
           <Icon name="info" size={16} />
-          <h2 className="cs-about__title">About Casual Slides</h2>
+          <h2 className="cs-about__title">{t('about.title')}</h2>
           <button
             type="button"
             className="cs-about__close"
             onClick={onClose}
-            title="Close (Esc)"
+            title={t('about.closeTooltip')}
           >
             <Icon name="close" size={16} />
           </button>
@@ -106,56 +74,54 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
             <path d="M20.5 26 L24 27.75 L20.5 29.5 Z" fill="#0891B2" />
           </svg>
           <div>
-            <h3 className="cs-about__product">Casual Slides</h3>
-            <p className="cs-about__tagline">
-              Web-based PowerPoint-equivalent — built on Univer OSS, licensed Apache-2.0.
-            </p>
+            <h3 className="cs-about__product">{t('about.product')}</h3>
+            <p className="cs-about__tagline">{t('about.tagline')}</p>
           </div>
         </section>
 
         <dl className="cs-about__meta">
           <div className="cs-about__row">
-            <dt>License</dt>
-            <dd>Apache-2.0</dd>
+            <dt>{t('about.license')}</dt>
+            <dd>{t('about.licenseValue')}</dd>
           </div>
           <div className="cs-about__row">
-            <dt>Source</dt>
+            <dt>{t('about.source')}</dt>
             <dd>
               <a
                 href="https://github.com/schnsrw/slides"
                 target="_blank"
                 rel="noreferrer noopener"
               >
-                github.com/schnsrw/slides
+                {t('about.sourceLink')}
               </a>
             </dd>
           </div>
           <div className="cs-about__row">
-            <dt>Live</dt>
+            <dt>{t('about.live')}</dt>
             <dd>
               <a
                 href="https://slide.schnsrw.live"
                 target="_blank"
                 rel="noreferrer noopener"
               >
-                slide.schnsrw.live
+                {t('about.liveLink')}
               </a>
             </dd>
           </div>
         </dl>
 
         <section className="cs-about__attrib">
-          <h4 className="cs-about__attrib-title">Open-source dependencies</h4>
+          <h4 className="cs-about__attrib-title">{t('about.attribTitle')}</h4>
           <ul className="cs-about__attrib-list">
             {ATTRIBUTIONS.map((a) => (
-              <li key={a.name} className="cs-about__attrib-item">
+              <li key={a.key} className="cs-about__attrib-item">
                 <div className="cs-about__attrib-row">
                   <a href={a.url} target="_blank" rel="noreferrer noopener">
-                    {a.name}
+                    {t(`about.deps.${a.key}.name`)}
                   </a>
-                  <span className="cs-about__attrib-license">{a.license}</span>
+                  <span className="cs-about__attrib-license">{t(`about.deps.${a.key}.license`)}</span>
                 </div>
-                {a.note && <p className="cs-about__attrib-note">{a.note}</p>}
+                <p className="cs-about__attrib-note">{t(`about.deps.${a.key}.note`)}</p>
               </li>
             ))}
           </ul>
@@ -163,7 +129,7 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
 
         <footer className="cs-about__footer">
           <button type="button" className="cs-btn cs-btn--ghost" onClick={onClose}>
-            Close
+            {t('about.close')}
           </button>
         </footer>
       </div>

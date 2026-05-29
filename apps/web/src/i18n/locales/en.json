@@ -434,10 +434,15 @@
           "license": "MIT",
           "note": "UI shell."
         },
-        "materialSymbols": {
-          "name": "Material Symbols",
-          "license": "Apache-2.0",
-          "note": "Toolbar + menu icons."
+        "lucide": {
+          "name": "Lucide",
+          "license": "ISC",
+          "note": "Inline SVG toolbar + menu icons."
+        },
+        "i18next": {
+          "name": "i18next + react-i18next",
+          "license": "MIT",
+          "note": "UI localization framework."
         }
       }
     },
