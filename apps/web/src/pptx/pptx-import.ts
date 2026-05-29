@@ -1872,6 +1872,11 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null, pSty
   // each handle as `adj1`, `adj2`, ... in 1/100000 of the shape
   // width/height. The renderer can read these to draw the correct path.
   prstAdjustments: Record<string, number> | null;
+  // E5 — `<a:blipFill><a:blip r:embed="rIdN">` image-fill on a shape
+  // (common for logos in rounded rects, photo-filled SmartArt nodes,
+  // etc.). The caller resolves the rId to a data URI and emits a
+  // backing IMAGE element under the shape.
+  imageFillRId: string | null;
 } {
   const prstGeom = findChild(spPr, 'a:prstGeom') as XmlNode | undefined;
   const prstAttr = prstGeom?.['@prst'];
@@ -1969,7 +1974,20 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null, pSty
   // D18 + D19 — `<a:effectLst>` shadow / glow / reflection / blur.
   const effectLst = parseEffectList(spPr, theme);
 
-  return { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments };
+  // E5 — image-fill via `<a:blipFill><a:blip r:embed="rIdN"/></a:blipFill>`.
+  // We only extract the rId here; the caller awaits the data URI
+  // conversion since it needs zip access.
+  let imageFillRId: string | null = null;
+  if (!hasNoFill) {
+    const blipFillNode = findChild(spPr, 'a:blipFill') as XmlNode | undefined;
+    if (blipFillNode) {
+      const blipNode = findChild(blipFillNode, 'a:blip') as XmlNode | undefined;
+      const rEmbed = blipNode?.['@r:embed'];
+      if (typeof rEmbed === 'string' && rEmbed.length > 0) imageFillRId = rEmbed;
+    }
+  }
+
+  return { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments, imageFillRId };
 }
 
 // Placeholder geometry inherited from the slide layout / master (I3).
@@ -2587,6 +2605,22 @@ const MIME_FROM_EXT: Record<string, string> = {
   webp: 'image/webp',
 };
 
+// E5 — resolve an `<a:blip r:embed>` rId to a data URI (memoised per
+// zip path in reg.cache). Used by image-fill on shapes + SmartArt
+// nodes; the slide-level pic / bg paths inline equivalent code.
+async function resolveBlipDataUri(rEmbed: string, reg: ImageRegistry): Promise<string | null> {
+  const relTarget = reg.imageRelMap.get(rEmbed);
+  if (!relTarget) return null;
+  const zipPath = relTarget.startsWith('/')
+    ? relTarget.slice(1)
+    : (relTarget.startsWith('..') ? `ppt/${relTarget.replace(/^\.\.\//, '')}` : `ppt/slides/${relTarget}`);
+  const cached = reg.cache.get(zipPath);
+  if (cached) return cached;
+  const dataUri = await readImageAsDataUri(reg.zip, zipPath);
+  if (dataUri) reg.cache.set(zipPath, dataUri);
+  return dataUri;
+}
+
 async function readImageAsDataUri(zip: JSZip, path: string): Promise<string | null> {
   const entry = zip.file(path);
   if (!entry) return null;
@@ -2949,11 +2983,32 @@ async function processSpTree(
     }
 
     if (spPr) {
-      const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments } = parseShapeAppearance(spPr, reg.theme, findChild(sp, 'p:style'));
+      const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments, imageFillRId } = parseShapeAppearance(spPr, reg.theme, findChild(sp, 'p:style'));
       const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
+      // E5 — image fill on a shape (`<a:spPr><a:blipFill>`). Emit a
+      // backing IMAGE element at the same rect BEFORE the shape so the
+      // picture shows behind the shape's outline. Lossy for non-rect
+      // geometries (no clip-to-shape) but better than blank fill;
+      // logos in rounded rects + photo-filled SmartArt nodes work.
+      if (imageFillRId) {
+        const dataUri = await resolveBlipDataUri(imageFillRId, reg);
+        if (dataUri) {
+          const imgZ = z.next; z.next += 1;
+          out.push({
+            id: `s${pageOrdinal}-shape-${zIndex}-img`,
+            zIndex: imgZ,
+            left, top, width: inflated.width, height: inflated.height,
+            angle, flipX, flipY,
+            title: '', description: '',
+            type: PageElementType.IMAGE,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            image: { contentUrl: dataUri } as any,
+          });
+        }
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const shapeProperties: any = {};
-      if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
+      if (fillRgb && !imageFillRId) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
       // D9 — full gradient stops alongside the flat fillRgb (which keeps
       // the first-stop degradation). Renderer agent picks this up.
       if (fillGradient) shapeProperties.gradientFill = fillGradient;
@@ -3017,7 +3072,7 @@ async function processSpTree(
 
     const zIndex = z.next;
     z.next += 1;
-    const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments } = parseShapeAppearance(spPr, reg.theme, findChild(cxn, 'p:style'));
+    const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments /* imageFillRId unused for connectors */ } = parseShapeAppearance(spPr, reg.theme, findChild(cxn, 'p:style'));
     const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shapeProperties: any = {};
@@ -3612,10 +3667,25 @@ async function extractDiagramShapes(
     const { angle, flipX, flipY } = readXfrmExtras(xfrm);
 
     const appearance = parseShapeAppearance(spPr, reg.theme, findChild(sp, 'dsp:style'));
+    // E5 — image fill on a SmartArt node (the def-circle photo case).
+    if (appearance.imageFillRId) {
+      const dataUri = await resolveBlipDataUri(appearance.imageFillRId, reg);
+      if (dataUri) {
+        const imgZ = z.next; z.next += 1;
+        out.push({
+          id: `s${pageOrdinal}-dgm-${imgZ}-img`,
+          zIndex: imgZ, left, top, width, height, angle, flipX, flipY,
+          title: '', description: '',
+          type: PageElementType.IMAGE,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          image: { contentUrl: dataUri } as any,
+        });
+      }
+    }
     const zIndex = z.next; z.next += 1;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shapeProperties: any = {};
-    if (appearance.fillRgb) shapeProperties.shapeBackgroundFill = { rgb: appearance.fillRgb };
+    if (appearance.fillRgb && !appearance.imageFillRId) shapeProperties.shapeBackgroundFill = { rgb: appearance.fillRgb };
     if (appearance.fillGradient) shapeProperties.gradientFill = appearance.fillGradient;
     if (appearance.pathData) shapeProperties.pathData = appearance.pathData;
     if (appearance.prstAdjustments) shapeProperties.prstAdjustments = appearance.prstAdjustments;
