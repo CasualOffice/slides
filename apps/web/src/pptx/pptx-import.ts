@@ -3846,8 +3846,17 @@ async function processGraphicFrame(
         : resolveRelTarget(drawingTarget, 'ppt/slides/');
       const drawingXml = await reg.zip.file(drawingPath)?.async('string');
       if (drawingXml) {
+        // E5 — drawing's own rels (drawing#.xml.rels) holds the rIds
+        // for image-fill <a:blip r:embed>s. Without scoping the reg
+        // to these rels, the slide's imageRelMap is wrong and the
+        // image fill silently fails to resolve.
+        const dir = drawingPath.slice(0, drawingPath.lastIndexOf('/') + 1);
+        const name = drawingPath.split('/').pop() ?? '';
+        const drawingRelsXml = await reg.zip.file(`${dir}_rels/${name}.rels`)?.async('string');
+        const drawingRelMap = drawingRelsXml ? extractRelMap(drawingRelsXml) : reg.imageRelMap;
+        const scopedReg: ImageRegistry = { ...reg, imageRelMap: drawingRelMap };
         try {
-          const shapes = await extractDiagramShapes(drawingXml, reg, left, top, groupXfrm.scaleX, groupXfrm.scaleY, pageOrdinal, z);
+          const shapes = await extractDiagramShapes(drawingXml, scopedReg, left, top, groupXfrm.scaleX, groupXfrm.scaleY, pageOrdinal, z);
           if (shapes.length > 0) return shapes;
         } catch { /* malformed drawing — fall through to null */ }
       }
