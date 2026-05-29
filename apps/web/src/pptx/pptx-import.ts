@@ -3080,7 +3080,10 @@ async function processSpTree(
     const _lenBefore = out.length;
     if (!gf || typeof gf !== 'object') continue;
     const result = await processGraphicFrame(gf, reg, groupXfrm, pageOrdinal, z);
-    if (result) out.push(result);
+    // SmartArt diagrams expand to MANY shapes, so processGraphicFrame
+    // may return an array; tables / charts return a single element.
+    if (Array.isArray(result)) { for (const el of result) out.push(el); }
+    else if (result) out.push(result);
     stampPushed(_lenBefore, 'p:graphicFrame', _myIdx);
   }
 
@@ -3567,13 +3570,97 @@ function parseChartXml(chartXml: string, chartId: string, chartPath?: string, th
 
 // G1-G4 + H1 — graphicFrame dispatch. Returns a TABLE or CHART
 // IPageElement based on the `<a:graphicData uri>` discriminator.
+// H6 — SmartArt diagram. The graphicFrame references a diagram
+// (data/layout/quickStyle/colors via <dgm:relIds>), but PowerPoint
+// also writes a pre-rendered DrawingML fallback at
+// ppt/diagrams/drawing#.xml — a `<dsp:spTree>` of positioned
+// `<dsp:sp>` shapes (same a:xfrm / a:prstGeom / a:solidFill / a:p
+// structure as `<p:sp>`, just the dsp: prefix). We render that
+// fallback as ordinary SHAPE + TEXT elements so the diagram actually
+// appears instead of empty space. Coordinates are EMU relative to the
+// frame's top-left.
+async function extractDiagramShapes(
+  drawingXml: string,
+  reg: ImageRegistry,
+  frameLeft: number,
+  frameTop: number,
+  scaleX: number,
+  scaleY: number,
+  pageOrdinal: number,
+  z: ZCounter,
+): Promise<IPageElement[]> {
+  const out: IPageElement[] = [];
+  const parsed = parser.parse(drawingXml) as XmlNode;
+  const drawing = findChild(parsed, 'dsp:drawing');
+  const spTree = findChild(drawing, 'dsp:spTree');
+  if (!spTree) return out;
+  for (const sp of toArray(findChild(spTree, 'dsp:sp'))) {
+    if (!sp || typeof sp !== 'object') continue;
+    const spPr = findChild(sp, 'dsp:spPr');
+    if (!spPr) continue;
+    const xfrm = findChild(spPr, 'a:xfrm');
+    const off = findChild(xfrm, 'a:off') as XmlNode | undefined;
+    const ext = findChild(xfrm, 'a:ext') as XmlNode | undefined;
+    const dx = emu2px(off?.['@x'] as string | undefined);
+    const dy = emu2px(off?.['@y'] as string | undefined);
+    const dw = emu2px(ext?.['@cx'] as string | undefined);
+    const dh = emu2px(ext?.['@cy'] as string | undefined);
+    const left = frameLeft + dx * scaleX;
+    const top = frameTop + dy * scaleY;
+    const width = dw * scaleX;
+    const height = dh * scaleY;
+    const { angle, flipX, flipY } = readXfrmExtras(xfrm);
+
+    const appearance = parseShapeAppearance(spPr, reg.theme, findChild(sp, 'dsp:style'));
+    const zIndex = z.next; z.next += 1;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shapeProperties: any = {};
+    if (appearance.fillRgb) shapeProperties.shapeBackgroundFill = { rgb: appearance.fillRgb };
+    if (appearance.fillGradient) shapeProperties.gradientFill = appearance.fillGradient;
+    if (appearance.pathData) shapeProperties.pathData = appearance.pathData;
+    if (appearance.prstAdjustments) shapeProperties.prstAdjustments = appearance.prstAdjustments;
+    if (appearance.outlineRgb || appearance.outlineWeightPx !== null || appearance.outlineDash !== null) {
+      shapeProperties.outline = {
+        outlineFill: appearance.outlineRgb ? { rgb: appearance.outlineRgb } : undefined,
+        weight: appearance.outlineWeightPx ?? 1,
+        ...(appearance.outlineDash !== null ? { dashStyle: appearance.outlineDash } : {}),
+      };
+    }
+    if (appearance.effectLst !== null) shapeProperties.effectLst = appearance.effectLst;
+    out.push({
+      id: `s${pageOrdinal}-dgm-${zIndex}`,
+      zIndex, left, top, width, height, angle, flipX, flipY,
+      title: '', description: '',
+      type: PageElementType.SHAPE,
+      shape: { shapeType: appearance.shapeType as never, text: '', shapeProperties },
+    });
+
+    // Text label centered in the shape (rendered on top).
+    const txBody = findChild(sp, 'dsp:txBody');
+    if (txBody) {
+      const { text, props, rich } = extractRichDoc(txBody, `s${pageOrdinal}-dgm-${zIndex}-t`, undefined, reg.theme, reg.imageRelMap);
+      if (text && text.trim().length > 0) {
+        const tZ = z.next; z.next += 1;
+        out.push({
+          id: `s${pageOrdinal}-dgm-${zIndex}-t`,
+          zIndex: tZ, left, top, width, height, angle, flipX, flipY,
+          title: '', description: '',
+          type: PageElementType.TEXT,
+          richText: { text, ...props, ...(rich ? { rich } : {}) } as ISlideRichTextProps,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 async function processGraphicFrame(
   gf: unknown,
   reg: ImageRegistry,
   groupXfrm: GroupXfrm,
   pageOrdinal: number,
   z: ZCounter,
-): Promise<IPageElement | null> {
+): Promise<IPageElement | IPageElement[] | null> {
   // graphicFrame uses `<p:xfrm>` (not `<p:spPr><a:xfrm>`). Position +
   // size come from the same `<a:off>` / `<a:ext>` child structure.
   const xfrm = findChild(gf, 'p:xfrm');
@@ -3665,6 +3752,36 @@ async function processGraphicFrame(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       chart: structured as any,
     } as unknown as IPageElement;
+  }
+
+  // H6 — SmartArt diagram. Resolve the pre-rendered drawing part and
+  // expand it into SHAPE + TEXT elements.
+  if (typeof uri === 'string' && uri.includes('/diagram')) {
+    const relIds = findChild(graphicData, 'dgm:relIds') as XmlNode | undefined;
+    const dmId = relIds?.['@r:dm'] as string | undefined;
+    const dataTarget = dmId ? reg.imageRelMap.get(dmId) : undefined;
+    // MS convention: the drawing part sits beside the data part —
+    // data1.xml → drawing1.xml. Derive it, then resolve to a zip path.
+    let drawingTarget: string | undefined;
+    if (dataTarget) drawingTarget = dataTarget.replace(/data(\d+)\.xml$/, 'drawing$1.xml');
+    // Fallback: scan slide rels for any diagrams/drawing target.
+    if (!drawingTarget || drawingTarget === dataTarget) {
+      for (const t of reg.imageRelMap.values()) {
+        if (/diagrams\/drawing\d+\.xml$/.test(t)) { drawingTarget = t; break; }
+      }
+    }
+    if (drawingTarget) {
+      const drawingPath = drawingTarget.startsWith('/')
+        ? drawingTarget.slice(1)
+        : resolveRelTarget(drawingTarget, 'ppt/slides/');
+      const drawingXml = await reg.zip.file(drawingPath)?.async('string');
+      if (drawingXml) {
+        try {
+          const shapes = await extractDiagramShapes(drawingXml, reg, left, top, groupXfrm.scaleX, groupXfrm.scaleY, pageOrdinal, z);
+          if (shapes.length > 0) return shapes;
+        } catch { /* malformed drawing — fall through to null */ }
+      }
+    }
   }
 
   return null;
