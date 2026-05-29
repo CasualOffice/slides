@@ -15,7 +15,7 @@ import { NotesPanel } from './shell/NotesPanel';
 import { ThemePicker } from './shell/ThemePicker';
 import { PropertiesDialog } from './shell/PropertiesDialog';
 import { PageSetupDialog } from './shell/PageSetupDialog';
-import { downloadSlideAsPng } from './shell/download-slide';
+import { downloadSlideAsPng, downloadDeckAsPdf } from './shell/download-slide';
 import { RecentFilesDialog } from './shell/RecentFilesDialog';
 import { AboutDialog } from './shell/AboutDialog';
 import { SlideContextMenu } from './shell/SlideContextMenu';
@@ -457,6 +457,31 @@ export function App() {
     }
   }
 
+  // Export the entire deck as a single PDF. Renders each slide through
+  // the same offscreen SlideTile path as the PNG export so the two outputs
+  // stay visually consistent.
+  async function handleDownloadPdf() {
+    const live = getCurrentSnapshot(snapshot);
+    const pageSize = {
+      width: live.pageSize?.width ?? 960,
+      height: live.pageSize?.height ?? 540,
+    };
+    const order = live.body?.pageOrder ?? [];
+    const pageMap = live.body?.pages ?? {};
+    const orderedPages = order.map((id) => pageMap[id]).filter((p) => !!p);
+    if (!orderedPages.length) return;
+    setError(null);
+    setStatus(`Rendering 0 / ${orderedPages.length}…`);
+    try {
+      await downloadDeckAsPdf(orderedPages, pageSize, fileName, (done, total) => {
+        setStatus(`Rendering ${done} / ${total}…`);
+      });
+      setStatus(`Saved · ${fileName}.pdf`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   function handleSetPageSize(width: number, height: number) {
     const live = getCurrentSnapshot(snapshot);
     setSnapshot({
@@ -566,6 +591,7 @@ export function App() {
         onOpenAbout={() => setAboutOpen(true)}
         onOpenPageSetup={() => setPageSetupOpen(true)}
         onDownloadPng={() => void handleDownloadPng()}
+        onDownloadPdf={() => void handleDownloadPdf()}
         onToggleNotes={() => setNotesVisible((v) => !v)}
         onFitToWindow={handleFitToWindow}
         onZoomIn={() => setZoom((z) => Math.min(400, z + 10))}

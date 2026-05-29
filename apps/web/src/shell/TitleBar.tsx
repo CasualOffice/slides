@@ -27,6 +27,7 @@ export interface TitleBarProps {
   onOpenAbout: () => void;
   onOpenPageSetup: () => void;
   onDownloadPng: () => void;
+  onDownloadPdf: () => void;
   onToggleNotes?: () => void;
   onFitToWindow?: () => void;
   onZoomIn?: () => void;
@@ -70,6 +71,7 @@ function buildMenus(t: (key: string) => string): MenuDef[] {
       { id: 'save', label: t('menu:file.save'), shortcut: t('menu:file.shortcut.save') },
       { id: 'sep1', label: '---' },
       { id: 'downloadPng', label: t('menu:file.downloadPng') },
+      { id: 'downloadPdf', label: t('menu:file.downloadPdf') },
       { id: 'pageSetup', label: t('menu:file.pageSetup') },
       { id: 'properties', label: t('menu:file.properties') },
     ] },
@@ -133,6 +135,7 @@ export function TitleBar({
   onOpenAbout,
   onOpenPageSetup,
   onDownloadPng,
+  onDownloadPdf,
   onToggleNotes,
   onFitToWindow,
   onZoomIn,
@@ -196,6 +199,7 @@ export function TitleBar({
         if (itemId === 'properties') onOpenProperties();
         if (itemId === 'pageSetup') onOpenPageSetup();
         if (itemId === 'downloadPng') onDownloadPng();
+        if (itemId === 'downloadPdf') onDownloadPdf();
         if (itemId === 'recent') onOpenRecent();
         return;
       }
@@ -241,6 +245,7 @@ export function TitleBar({
       onOpenAbout,
       onOpenPageSetup,
       onDownloadPng,
+      onDownloadPdf,
       onToggleNotes,
       onFitToWindow,
       onZoomIn,

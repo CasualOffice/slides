@@ -57,7 +57,8 @@
         "save": "Ctrl+S"
       },
       "pageSetup": "Page setup",
-      "downloadPng": "Download slide as PNG"
+      "downloadPng": "Download slide as PNG",
+      "downloadPdf": "Download deck as PDF"
     },
     "edit": {
       "label": "Edit",
