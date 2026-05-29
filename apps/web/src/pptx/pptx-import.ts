@@ -870,13 +870,42 @@ interface ParsedBullet {
   customFontFamily?: string;
 }
 
-function parseBullet(pPr: unknown, listIdSeed: string, level: number, theme: ThemeMap | null = null): ParsedBullet | null {
+// C19 — build a ParsedBullet from a raw glyph char + optional font /
+// size (in pt). Shared by explicit `<a:buChar>` and the master
+// bodyStyle level-bullet inheritance fallback.
+function makeCharBullet(
+  rawChar: string,
+  listIdSeed: string,
+  level: number,
+  buFontRaw: string | undefined,
+  sizePts: number | undefined,
+  theme: ThemeMap | null,
+): ParsedBullet {
+  const customGlyph = rawChar.length > 0 ? rawChar : undefined;
+  let customFontFamily: string | undefined;
+  if (typeof buFontRaw === 'string' && buFontRaw.length > 0) {
+    if (buFontRaw === '+mj-lt') customFontFamily = theme?.get(FONT_MAJOR_KEY) ?? undefined;
+    else if (buFontRaw === '+mn-lt') customFontFamily = theme?.get(FONT_MINOR_KEY) ?? undefined;
+    else customFontFamily = buFontRaw;
+  }
+  const listType = customGlyph ? `${listIdSeed}-bul` : PresetListType.BULLET_LIST;
+  return {
+    bullet: { listType, listId: `${listIdSeed}-bul`, nestingLevel: level },
+    customGlyph,
+    customFontSize: sizePts,
+    customFontFamily,
+  };
+}
+
+// Returns the explicit ParsedBullet, the sentinel 'none' for an
+// explicit `<a:buNone/>` (caller must NOT inherit), or null when the
+// paragraph declares no bullet directive (caller MAY inherit from the
+// master bodyStyle level bullets).
+function parseBullet(pPr: unknown, listIdSeed: string, level: number, theme: ThemeMap | null = null): ParsedBullet | 'none' | null {
   if (!pPr || typeof pPr !== 'object') return null;
   const node = pPr as XmlNode;
   if (findChild(node, 'a:buNone') !== undefined) {
-    // Explicit "no bullet" — caller treats null as "no override", so
-    // we distinguish via a sentinel `none` flag.
-    return null;
+    return 'none';
   }
   const buChar = findChild(node, 'a:buChar') as XmlNode | undefined;
   if (buChar) {
@@ -1141,6 +1170,11 @@ function extractRichDoc(
   // line). When undefined (table cells, legacy callers), the function
   // falls back to runs-only iteration and silently drops `<a:br>`.
   orderedParaChildren?: unknown[][],
+  // C19 — master bodyStyle per-level bullet glyphs. A paragraph in a
+  // body-class placeholder with NO explicit bullet directive inherits
+  // the glyph for its nesting level from here. Undefined for title /
+  // non-body frames + table cells (no inheritance).
+  inheritedBullets?: Map<number, BulletDef>,
 ): {
   text: string;
   props: Partial<ISlideRichTextProps>;
@@ -1182,6 +1216,10 @@ function extractRichDoc(
   for (let paraIdx = 0; paraIdx < paras.length; paraIdx += 1) {
     const p = paras[paraIdx];
     const runs = toArray(findChild(p, 'a:r'));
+    // C19 — does this paragraph carry any visible text? An empty
+    // paragraph (a blank separator line) must NOT inherit a bullet —
+    // PowerPoint only bullets lines with content.
+    const paraHasText = runs.some((r) => readT(findChild(r, 'a:t')).length > 0);
 
     // Paragraph-level style is computed once and shared across every
     // segment produced by this source paragraph (segments only appear
@@ -1191,7 +1229,23 @@ function extractRichDoc(
     const lineSpacing = parseLineSpacing(pPr);
     const { indentStart, indentFirstLine } = parseIndent(pPr);
     const level = parseLevel(pPr);
-    const parsedBullet = parseBullet(pPr, elementId, level, theme);
+    const rawParsedBullet = parseBullet(pPr, elementId, level, theme);
+    // C19 — three cases:
+    //   ParsedBullet → explicit bullet on this paragraph
+    //   'none'       → explicit <a:buNone/>, stays bulletless
+    //   null         → no directive; inherit the master bodyStyle glyph
+    //                  for this nesting level when available.
+    let parsedBullet: ParsedBullet | null;
+    if (rawParsedBullet === 'none') {
+      parsedBullet = null;
+    } else if (rawParsedBullet === null) {
+      const inh = paraHasText ? inheritedBullets?.get(level) : undefined;
+      parsedBullet = inh
+        ? makeCharBullet(inh.char, elementId, level, inh.font, inh.sizePts, theme)
+        : null;
+    } else {
+      parsedBullet = rawParsedBullet;
+    }
     const bullet = parsedBullet?.bullet ?? null;
     // C17 — stash any custom glyph metadata so we can synthesise the
     // matching `IListData` entry on the document below.
@@ -2328,6 +2382,63 @@ function parseMasterTextStyles(
   return out;
 }
 
+// C19 — per-level bullet glyph defaults from a master's bodyStyle.
+interface BulletDef { char: string; font?: string; sizePts?: number }
+
+// Parse `<p:bodyStyle>` lvl1pPr..lvl9pPr `<a:buChar>` / `<a:buFont>` /
+// `<a:buSzPts>` into a level→BulletDef map (0-based level). A
+// paragraph in a body placeholder that declares NO bullet directive
+// inherits the glyph for its nesting level from here. `<a:buNone>` at
+// a level means that level is explicitly bulletless (recorded as an
+// absent entry so the caller falls back to no bullet).
+function parseMasterBodyBullets(masterXml: string): Map<number, BulletDef> {
+  const map = new Map<number, BulletDef>();
+  const parsed = parser.parse(masterXml) as XmlNode;
+  const master = findChild(parsed, 'p:sldMaster');
+  const txStyles = findChild(master, 'p:txStyles');
+  const bodyStyle = findChild(txStyles, 'p:bodyStyle');
+  if (!bodyStyle) return map;
+  for (let lvl = 1; lvl <= 9; lvl += 1) {
+    const lvlPr = findChild(bodyStyle, `a:lvl${lvl}pPr`);
+    if (!lvlPr) continue;
+    if (findChild(lvlPr, 'a:buNone') !== undefined) continue; // explicit no-bullet
+    const buChar = findChild(lvlPr, 'a:buChar') as XmlNode | undefined;
+    const rawChar = buChar?.['@char'];
+    if (typeof rawChar !== 'string' || rawChar.length === 0) continue;
+    const buFont = findChild(lvlPr, 'a:buFont') as XmlNode | undefined;
+    const font = typeof buFont?.['@typeface'] === 'string' ? (buFont['@typeface'] as string) : undefined;
+    const buSzPts = findChild(lvlPr, 'a:buSzPts') as XmlNode | undefined;
+    let sizePts: number | undefined;
+    const szRaw = buSzPts?.['@val'];
+    if (typeof szRaw === 'string' || typeof szRaw === 'number') {
+      const n = parseInt(String(szRaw), 10);
+      if (Number.isFinite(n)) sizePts = n / 100;
+    }
+    map.set(lvl - 1, { char: rawChar, font, sizePts });
+  }
+  return map;
+}
+
+// Resolve a slide's master and return its bodyStyle per-level bullet
+// glyphs. Mirrors buildPlaceholderMap's layout→master resolution.
+async function loadMasterBodyBullets(slideRelsXml: string | null, zip: JSZip): Promise<Map<number, BulletDef>> {
+  const empty = new Map<number, BulletDef>();
+  if (!slideRelsXml) return empty;
+  const layoutTarget = findRelTargetByType(slideRelsXml, '/slideLayout');
+  if (!layoutTarget) return empty;
+  const layoutPath = resolveRelTarget(layoutTarget, 'ppt/slides/');
+  const layoutDir = layoutPath.slice(0, layoutPath.lastIndexOf('/') + 1);
+  const layoutName = layoutPath.split('/').pop() ?? '';
+  const layoutRelsXml = await zip.file(`${layoutDir}_rels/${layoutName}.rels`)?.async('string');
+  if (!layoutRelsXml) return empty;
+  const masterTarget = findRelTargetByType(layoutRelsXml, '/slideMaster');
+  if (!masterTarget) return empty;
+  const masterPath = resolveRelTarget(masterTarget, layoutDir);
+  const masterXml = await zip.file(masterPath)?.async('string');
+  if (!masterXml) return empty;
+  return parseMasterBodyBullets(masterXml);
+}
+
 async function buildPlaceholderMap(
   slideRelsXml: string | null,
   zip: JSZip,
@@ -2427,6 +2538,8 @@ interface ImageRegistry {
   deckDefaultRunProps?: Partial<ISlideRichTextProps>;
   /** G5 — `ppt/tableStyles.xml` parsed into styleId → part-fill map */
   tableStyles?: Map<string, TableStyleDef>;
+  /** C19 — master bodyStyle per-level bullet glyphs (0-based level) */
+  masterBodyBullets?: Map<number, BulletDef>;
 }
 
 // G5 — one style "part" (wholeTbl / firstRow / band1H / …). We only
@@ -2710,6 +2823,11 @@ async function processSpTree(
       const ph = findChild(nvPr, 'p:ph') as XmlNode | undefined;
       const phType = ph?.['@type'];
       const isTitle = phType === 'title' || phType === 'ctrTitle';
+      // C19 — body-class placeholders inherit the master bodyStyle's
+      // per-level bullet glyphs for paragraphs with no explicit bullet
+      // directive. A bare `<p:ph idx="N"/>` with no type defaults to
+      // body. Non-placeholder text frames don't get bodyStyle bullets.
+      const isBodyClass = !!ph && (phType === 'body' || phType === 'subTitle' || phType === undefined);
       // K3 — fallback priority: deck-default < master/layout placeholder default.
       // The placeholder default (already merged across layout > master in
       // buildPlaceholderMap) wins field-by-field on top of the deck default.
@@ -2749,6 +2867,7 @@ async function processSpTree(
         fontScale,
         isTitle,
         _orderedParaChildren,
+        isBodyClass ? reg.masterBodyBullets : undefined,
       );
       const richText: ISlideRichTextProps = {
         text,
@@ -4390,8 +4509,11 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     // fill resolution depends on this slide's theme color map, so load
     // per-slide (cached by zip; the parse itself is memoised).
     const tableStyles = await loadTableStyles(zip, theme);
+    // C19 — master bodyStyle per-level bullets, for paragraphs in body
+    // placeholders that declare no explicit bullet directive.
+    const masterBodyBullets = await loadMasterBodyBullets(slideRelsXml, zip);
 
-    const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip, placeholderRects, theme, deckDefaultRunProps, tableStyles };
+    const reg: ImageRegistry = { imageRelMap, cache: imageCache, zip, placeholderRects, theme, deckDefaultRunProps, tableStyles, masterBodyBullets };
     const pageOrdinal = i + 1;
     const pageId = `page-${pageOrdinal}`;
     // Layout / master decorative shapes (non-placeholder) inherit as a
