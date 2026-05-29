@@ -1201,7 +1201,10 @@ function extractRichDoc(
   // string + optional textStyle the renderer should use. Built into
   // `documentStyle.lists` at the end so the docs engine can resolve
   // the bullet correctly instead of falling back to PRESET_LIST_TYPE.
-  const customLists: Record<string, { glyph: string; level: number; fs?: number; ff?: string }> = {};
+  // Per listType, a per-NESTING-LEVEL glyph map. A single text frame
+  // can mix levels (e.g. lvl0 • and lvl1 –) under one listType, so we
+  // must key the glyph by level — not collapse to one glyph per list.
+  const customLists: Record<string, Record<number, { glyph: string; fs?: number; ff?: string }>> = {};
 
   // Extract the tag name from a preserveOrder child entry. Each
   // entry has the shape `{ <tagName>: [children], ':@'?: attrs }`.
@@ -1250,9 +1253,10 @@ function extractRichDoc(
     // C17 — stash any custom glyph metadata so we can synthesise the
     // matching `IListData` entry on the document below.
     if (parsedBullet?.customGlyph) {
-      customLists[parsedBullet.bullet.listType] = {
+      const lt = parsedBullet.bullet.listType;
+      if (!customLists[lt]) customLists[lt] = {};
+      customLists[lt][level] = {
         glyph: parsedBullet.customGlyph,
-        level,
         fs: parsedBullet.customFontSize,
         ff: parsedBullet.customFontFamily,
       };
@@ -1403,23 +1407,31 @@ function extractRichDoc(
   // depth, with passthrough glyphs at others. The nesting level the
   // paragraph references is stored on the bullet itself.
   const lists: Record<string, unknown> = {};
-  for (const [listType, info] of Object.entries(customLists)) {
-    // Univer's bullet renderer indexes into `nestingLevel[paragraph.bullet.nestingLevel]`.
-    // We fill 9 slots so unexpected deeper nesting still resolves.
-    const nestingLevel = Array.from({ length: 9 }, () => ({
-      glyphFormat: ` %${1}`,
-      glyphSymbol: info.glyph,
-      bulletAlignment: 0, // BulletAlignment.START
-      startNumber: 0,
-      paragraphProperties: {
-        hanging: { v: 21 },
-        indentStart: { v: 21 * info.level },
-      },
-      textStyle: {
-        ...(typeof info.fs === 'number' ? { fs: info.fs } : {}),
-        ...(typeof info.ff === 'string' ? { ff: info.ff } : {}),
-      },
-    }));
+  for (const [listType, perLevel] of Object.entries(customLists)) {
+    // Univer indexes nestingLevel[paragraph.bullet.nestingLevel]. Build
+    // 9 slots, each using THIS level's authored glyph when present
+    // (falling back to the nearest shallower level's glyph, else •),
+    // with indent growing per depth so nested items step inward.
+    let lastGlyph: { glyph: string; fs?: number; ff?: string } = { glyph: '•' };
+    const nestingLevel = Array.from({ length: 9 }, (_unused, i) => {
+      const here = perLevel[i];
+      if (here) lastGlyph = here;
+      const g = here ?? lastGlyph;
+      return {
+        glyphFormat: ` %${1}`,
+        glyphSymbol: g.glyph,
+        bulletAlignment: 0, // BulletAlignment.START
+        startNumber: 0,
+        paragraphProperties: {
+          hanging: { v: 18 },
+          indentStart: { v: 18 + 18 * i },
+        },
+        textStyle: {
+          ...(typeof g.fs === 'number' ? { fs: g.fs } : {}),
+          ...(typeof g.ff === 'string' ? { ff: g.ff } : {}),
+        },
+      };
+    });
     lists[listType] = { listType, nestingLevel };
   }
 
