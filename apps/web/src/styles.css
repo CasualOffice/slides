@@ -3485,3 +3485,7 @@ body.cs-slide-rail-open .cs-notes {
   outline: 2px solid var(--cs-focus);
   outline-offset: 1px;
 }
+
+/* ================ Background picker header (image + no-fill) ================ */
+.cs-bg-picker__header { gap: 6px; }
+.cs-bg-picker__title { flex: 1; }

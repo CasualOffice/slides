@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Univer } from '@univerjs/core';
 import { IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
+import { PageElementType } from '@univerjs/slides';
 import { dispatchSlideCommand } from '../univer/commands';
 import { Icon } from './icons';
 
@@ -81,6 +82,7 @@ export function BackgroundPicker({ anchorRect, onClose }: BackgroundPickerProps)
   const [applyAll, setApplyAll] = useState(false);
   const [customHex, setCustomHex] = useState('#ffffff');
   const popoverRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // Initial colour reflects the active slide's current background, if any.
   useEffect(() => {
@@ -128,6 +130,63 @@ export function BackgroundPicker({ anchorRect, onClose }: BackgroundPickerProps)
     onClose();
   }, [onClose]);
 
+  // Image background. Univer's pageBackgroundFill is colour-only, so (like
+  // the pptx importer for picture backgrounds) we drop a full-slide IMAGE
+  // element at zIndex 0 — it sits below the authored content. Inserted via
+  // slide.mutation.insert-element, which repaints. Applies to the active
+  // slide, or every slide when "Apply to all" is on.
+  const applyImage = useCallback((dataUrl: string, all: boolean) => {
+    const model = getModel();
+    if (!model) return;
+    const snapshot = model.getSnapshot();
+    const pageSize = {
+      width: snapshot.pageSize?.width ?? 960,
+      height: snapshot.pageSize?.height ?? 540,
+    };
+    const unitId = model.getUnitId();
+    const targets = all
+      ? (model.getPageOrder() ?? [])
+      : ([model.getActivePage()?.id].filter(Boolean) as string[]);
+    for (const pageId of targets) {
+      const element = {
+        id: `bg-img-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        zIndex: 0,
+        left: 0,
+        top: 0,
+        width: pageSize.width,
+        height: pageSize.height,
+        title: '',
+        description: '',
+        type: PageElementType.IMAGE,
+        image: {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          imageProperties: { contentUrl: dataUrl } as any,
+        },
+      };
+      void dispatchSlideCommand('slide.mutation.insert-element', {
+        unitId,
+        pageId,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        element: element as any,
+      });
+    }
+    onClose();
+  }, [onClose]);
+
+  const onImageFile = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') applyImage(reader.result, applyAll);
+      };
+      reader.readAsDataURL(file);
+    },
+    [applyImage, applyAll],
+  );
+
   if (!anchorRect) return null;
 
   // Position below the toolbar button, right-aligned to keep wide popover
@@ -150,12 +209,28 @@ export function BackgroundPicker({ anchorRect, onClose }: BackgroundPickerProps)
         <button
           type="button"
           className="cs-bg-picker__nofill"
+          onClick={() => imageInputRef.current?.click()}
+          title="Image background"
+        >
+          <Icon name="image" size={14} />
+          <span>Image</span>
+        </button>
+        <button
+          type="button"
+          className="cs-bg-picker__nofill"
           onClick={() => void apply('', applyAll)}
           title="No fill"
         >
           <Icon name="format_color_reset" size={14} />
           <span>No fill</span>
         </button>
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          style={{ display: 'none' }}
+          onChange={onImageFile}
+        />
       </div>
       <div className="cs-bg-picker__grid" role="listbox" aria-label="Color presets">
         {PALETTE.map((chip) => (
