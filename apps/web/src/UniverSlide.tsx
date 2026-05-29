@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ICommandService, IUniverInstanceService, LocaleType, LogLevel, Univer, UniverInstanceType } from '@univerjs/core';
+import { ICommandService, IUniverInstanceService, LocaleType, LogLevel, PluginService, Univer, UniverInstanceType } from '@univerjs/core';
 import type { ISlideData, SlideDataModel } from '@univerjs/slides';
 import { defaultTheme } from '@univerjs/themes';
 import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
@@ -7,6 +7,8 @@ import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
 import { UniverUIPlugin } from '@univerjs/ui';
 import { UniverDocsPlugin } from '@univerjs/docs';
 import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
+import { UniverDocsHyperLinkPlugin } from '@univerjs/docs-hyper-link';
+import { UniverDocsHyperLinkUIPlugin } from '@univerjs/docs-hyper-link-ui';
 import { UniverDrawingPlugin } from '@univerjs/drawing';
 import { IRenderManagerService } from '@univerjs/engine-render';
 import { UniverSlidesPlugin } from '@univerjs/slides';
@@ -69,6 +71,13 @@ export function UniverSlide({ snapshot }: UniverSlideProps) {
     univer.registerPlugin(UniverDocsUIPlugin);
     univer.registerPlugin(UniverFormulaEnginePlugin);
 
+    // Hyperlink-in-text support. The plugin pair registers the
+    // `doc.operation.show-hyper-link-edit-popup` and
+    // `docs.command.add-hyper-link` commands; we dispatch them from the
+    // Toolbar against the focused embedded doc unit (slide text frame).
+    univer.registerPlugin(UniverDocsHyperLinkPlugin);
+    univer.registerPlugin(UniverDocsHyperLinkUIPlugin);
+
     // Drawing plugin is required for image page elements.
     univer.registerPlugin(UniverDrawingPlugin);
 
@@ -80,6 +89,15 @@ export function UniverSlide({ snapshot }: UniverSlideProps) {
       UniverInstanceType.UNIVER_SLIDE,
       snapshot,
     );
+
+    // The hyperlink plugin pair declares `type = UNIVER_DOC`, so it only
+    // starts when a DOC unit is created. In a slides app, embedded doc
+    // units spawn lazily when the user clicks into a text frame — which
+    // means the toolbar button + Ctrl+K shortcut wouldn't fire until then.
+    // Force-start DOC-typed plugins now so `doc.operation.show-hyper-link-edit-popup`
+    // is registered globally and the inserted-link UX works the first
+    // time the user clicks into text.
+    univer.__getInjector().get(PluginService).startPluginsForType(UniverInstanceType.UNIVER_DOC);
 
     if (typeof window !== 'undefined') {
       const w = window as unknown as {

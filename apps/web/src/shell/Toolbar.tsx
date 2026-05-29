@@ -579,11 +579,20 @@ export function Toolbar() {
       >
         <Icon name="format_clear" size={18} />
       </button>
-      {/* Insert link omitted: docs-ui v0.24.0 ships no hyperlink command and
-          @univerjs/docs-hyperlink isn't installed. InsertCustomRangeCommand
-          only inserts a non-clickable generic CUSTOM range and replaces the
-          selection text — not a real link. A dead button is worse than none.
-          Re-add when the hyperlink plugin / fork patch lands. */}
+      {/* Insert link — opens Univer's hyperlink popup over the selected
+          text run. Plugin pair `@univerjs/docs-hyper-link[-ui]` registers
+          the operation; it no-ops if the caret isn't inside an editable
+          text frame with a non-collapsed selection. Ctrl+K shortcut is
+          registered by the plugin via `whenDocAndEditorFocused`. */}
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar:insertLinkShortcut')}
+        aria-label={t('toolbar:insertLink')}
+        onClick={() => void dispatchSlideCommand('doc.operation.show-hyper-link-edit-popup')}
+      >
+        <Icon name="link" size={18} />
+      </button>
     </>
   );
 

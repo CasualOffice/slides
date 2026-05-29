@@ -1534,17 +1534,46 @@ function isLineLikeShape(prst: string): boolean {
   );
 }
 
+// F4b — also reserve vertical (for horizontal lines) or horizontal (for
+// vertical lines) headroom for the arrowhead V-marker. With the bbox
+// collapsed to stroke width, the V is clipped and only the stem shows.
+// Shift `top` (or `left`) by the same halfW so the visible line still
+// sits where the source placed it.
+function arrowHalfWidth(a: { w?: 'sm' | 'med' | 'lg' } | null): number {
+  if (!a) return 0;
+  const wMap = { sm: 4, med: 6, lg: 8 } as const;
+  return (wMap[a.w ?? 'med'] ?? 6) / 2;
+}
 function inflateLineBbox(
   shapeType: string,
   width: number,
   height: number,
   outlineWeightPx: number | null,
-): { width: number; height: number } {
-  if (!isLineLikeShape(shapeType)) return { width, height };
+  headEnd: { type?: string; w?: 'sm' | 'med' | 'lg' } | null = null,
+  tailEnd: { type?: string; w?: 'sm' | 'med' | 'lg' } | null = null,
+): { width: number; height: number; deltaLeft: number; deltaTop: number } {
+  if (!isLineLikeShape(shapeType)) return { width, height, deltaLeft: 0, deltaTop: 0 };
   const stroke = Math.max(1, outlineWeightPx ?? 1);
+  const hasArrow = (a: { type?: string } | null) => !!a && !!a.type && a.type !== 'none';
+  const halfW = Math.max(
+    hasArrow(headEnd) ? arrowHalfWidth(headEnd) : 0,
+    hasArrow(tailEnd) ? arrowHalfWidth(tailEnd) : 0,
+  );
+  const horizontal = width > 0 && height === 0;
+  const vertical = height > 0 && width === 0;
+  if (horizontal) {
+    const needH = Math.max(stroke, halfW * 2);
+    return { width, height: needH, deltaLeft: 0, deltaTop: -halfW };
+  }
+  if (vertical) {
+    const needW = Math.max(stroke, halfW * 2);
+    return { width: needW, height, deltaLeft: -halfW, deltaTop: 0 };
+  }
   return {
-    width: width > 0 ? width : stroke,
-    height: height > 0 ? height : stroke,
+    width: Math.max(width, stroke),
+    height: Math.max(height, stroke),
+    deltaLeft: 0,
+    deltaTop: 0,
   };
 }
 
@@ -2984,7 +3013,9 @@ async function processSpTree(
 
     if (spPr) {
       const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments, imageFillRId } = parseShapeAppearance(spPr, reg.theme, findChild(sp, 'p:style'));
-      const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
+      const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx, headEnd, tailEnd);
+      const adjLeft = left + inflated.deltaLeft;
+      const adjTop = top + inflated.deltaTop;
       // E5 — image fill on a shape (`<a:spPr><a:blipFill>`). Emit a
       // backing IMAGE element at the same rect BEFORE the shape so the
       // picture shows behind the shape's outline. Lossy for non-rect
@@ -2997,7 +3028,7 @@ async function processSpTree(
           out.push({
             id: `s${pageOrdinal}-shape-${zIndex}-img`,
             zIndex: imgZ,
-            left, top, width: inflated.width, height: inflated.height,
+            left: adjLeft, top: adjTop, width: inflated.width, height: inflated.height,
             angle, flipX, flipY,
             title: '', description: '',
             type: PageElementType.IMAGE,
@@ -3030,8 +3061,8 @@ async function processSpTree(
       out.push({
         id: `s${pageOrdinal}-shape-${zIndex}`,
         zIndex,
-        left,
-        top,
+        left: adjLeft,
+        top: adjTop,
         width: inflated.width,
         height: inflated.height,
         angle,
@@ -3073,7 +3104,9 @@ async function processSpTree(
     const zIndex = z.next;
     z.next += 1;
     const { shapeType, pathData, fillRgb, fillGradient, outlineRgb, outlineWeightPx, outlineDash, outlineCap, headEnd, tailEnd, effectLst, prstAdjustments /* imageFillRId unused for connectors */ } = parseShapeAppearance(spPr, reg.theme, findChild(cxn, 'p:style'));
-    const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx);
+    const inflated = inflateLineBbox(shapeType, width, height, outlineWeightPx, headEnd, tailEnd);
+    const adjLeft = left + inflated.deltaLeft;
+    const adjTop = top + inflated.deltaTop;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shapeProperties: any = {};
     if (fillRgb) shapeProperties.shapeBackgroundFill = { rgb: fillRgb };
@@ -3094,8 +3127,8 @@ async function processSpTree(
     out.push({
       id: `s${pageOrdinal}-cxn-${zIndex}`,
       zIndex,
-      left,
-      top,
+      left: adjLeft,
+      top: adjTop,
       width: inflated.width,
       height: inflated.height,
       angle,
@@ -4602,13 +4635,64 @@ function extractCoreProps(coreXml: string): { title?: string; creator?: string; 
   return out;
 }
 
+// 200 MB is the soft cap. Above this the browser's ArrayBuffer + JSZip
+// inflate buffers can OOM the tab on low-memory devices. Real PowerPoint
+// decks routinely sit under 50 MB; anything above 200 MB is almost
+// always embedded video / fonts the user would be better off pruning.
+const MAX_PPTX_BYTES = 200 * 1024 * 1024;
+
+function formatBytes(n: number): string {
+  if (n >= 1024 * 1024 * 1024) return `${(n / (1024 ** 3)).toFixed(1)} GB`;
+  if (n >= 1024 * 1024) return `${(n / (1024 ** 2)).toFixed(1)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${n} B`;
+}
+
+// Password-protected OOXML decks aren't ZIPs — they're OLE compound-file
+// containers ("EncryptedPackage" stream inside a CFB). Magic bytes:
+//   D0 CF 11 E0 A1 B1 1A E1
+// Sniffing here lets us return a clear "decrypt first" error instead of
+// the cryptic "not a zip" JSZip would throw 200 ms later.
+function isOleEncrypted(file: ArrayBuffer): boolean {
+  if (file.byteLength < 8) return false;
+  const h = new Uint8Array(file, 0, 8);
+  return (
+    h[0] === 0xd0 && h[1] === 0xcf && h[2] === 0x11 && h[3] === 0xe0 &&
+    h[4] === 0xa1 && h[5] === 0xb1 && h[6] === 0x1a && h[7] === 0xe1
+  );
+}
+
 export async function importPptxToSlides(file: ArrayBuffer, fileName: string): Promise<ISlideData> {
-  const zip = await JSZip.loadAsync(file);
+  // Resilience checks before we touch JSZip — fast-fail paths with
+  // clear user-facing messages instead of post-mortem cryptic errors.
+  if (file.byteLength > MAX_PPTX_BYTES) {
+    throw new Error(
+      `File is too large to open (${formatBytes(file.byteLength)}). Limit is ${formatBytes(MAX_PPTX_BYTES)}.`,
+    );
+  }
+  if (isOleEncrypted(file)) {
+    throw new Error(
+      'This .pptx is password-protected. Decrypt it in PowerPoint first, then re-open.',
+    );
+  }
+
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(file);
+  } catch (e) {
+    // JSZip threw — file isn't a valid ZIP at all. Almost always a
+    // corrupt download, a renamed non-pptx, or a 0-byte file.
+    throw new Error(
+      `This .pptx is corrupt or not a PowerPoint file (${e instanceof Error ? e.message : String(e)}).`,
+    );
+  }
 
   // 1. Deck-level: ppt/presentation.xml → slide size + slide ids.
   const presentationXml = await zip.file('ppt/presentation.xml')?.async('string');
   if (!presentationXml) {
-    throw new Error('ppt/presentation.xml not found — not a valid pptx');
+    throw new Error(
+      'This .pptx is missing its presentation manifest (ppt/presentation.xml) — likely renamed from another Office format.',
+    );
   }
   const presParsed = parser.parse(presentationXml) as XmlNode;
   const presentation = findChild(presParsed, 'p:presentation') as XmlNode | undefined;

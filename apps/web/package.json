@@ -13,6 +13,8 @@
     "@univerjs/core": "0.24.0",
     "@univerjs/design": "0.24.0",
     "@univerjs/docs": "0.24.0",
+    "@univerjs/docs-hyper-link": "0.24.0",
+    "@univerjs/docs-hyper-link-ui": "0.24.0",
     "@univerjs/docs-ui": "0.24.0",
     "@univerjs/drawing": "0.24.0",
     "@univerjs/engine-formula": "0.24.0",

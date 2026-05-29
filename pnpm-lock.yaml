@@ -65,6 +65,12 @@ importers:
       '@univerjs/docs':
         specifier: 0.24.0
         version: 0.24.0(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/docs-hyper-link':
+        specifier: 0.24.0
+        version: 0.24.0(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/docs-hyper-link-ui':
+        specifier: 0.24.0
+        version: 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/docs-ui':
         specifier: 0.24.0
         version: 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
@@ -1123,6 +1129,15 @@ packages:
     peerDependencies:
       react: ^16.9.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc
       react-dom: ^16.9.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc
+
+  '@univerjs/docs-hyper-link-ui@0.24.0':
+    resolution: {integrity: sha512-CH8FsziatHk9C+GDzon0soG+sSRpChajztHeOBHV+O51w5pv/WViZBNl0tJiUao8wnaEuZhJ0eTXwun2XZpE2A==}
+    peerDependencies:
+      react: ^16.9.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc
+      rxjs: '>=7.0.0'
+
+  '@univerjs/docs-hyper-link@0.24.0':
+    resolution: {integrity: sha512-3uGDPmK1md1bWGmZlT+MMH1siS0dPZhJVEVO28BOhhd6VzjBIRoWQMhIqnuH1aOSlsfkWTe11oWSaAJP1FdYCQ==}
 
   '@univerjs/docs-ui@0.24.0':
     resolution: {integrity: sha512-KKdD2jUCTSq6JzW1RqQo6Zwifs/zMA+8Z0zreBm03qr5urMuZT/JhmzvwLmz0JhZi0z/mSjKIxkkw2kyfDKdVA==}
@@ -2577,6 +2592,30 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
       - '@types/react-dom'
+
+  '@univerjs/docs-hyper-link-ui@0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)':
+    dependencies:
+      '@univerjs/core': 0.24.0(patch_hash=c39d6c5b6f04ba21d13bb8b0640d0de60a03bc947b9e53f3d6a9c64d881dd69a)(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/design': 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@univerjs/docs': 0.24.0(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/docs-hyper-link': 0.24.0(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/docs-ui': 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/engine-render': 0.24.0(patch_hash=82ec8237ede468a956b917c6e3ae91bdb7a3c650a1b8b7b71b73dd59249acb1f)(react@18.3.1)(rxjs@7.8.2)
+      '@univerjs/icons': 1.4.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@univerjs/ui': 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
+      react: 18.3.1
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - '@types/react'
+      - '@types/react-dom'
+      - react-dom
+
+  '@univerjs/docs-hyper-link@0.24.0(react@18.3.1)(rxjs@7.8.2)':
+    dependencies:
+      '@univerjs/core': 0.24.0(patch_hash=c39d6c5b6f04ba21d13bb8b0640d0de60a03bc947b9e53f3d6a9c64d881dd69a)(react@18.3.1)(rxjs@7.8.2)
+    transitivePeerDependencies:
+      - react
+      - rxjs
 
   '@univerjs/docs-ui@0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)':
     dependencies:
