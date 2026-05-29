@@ -885,6 +885,8 @@ export function FormatPaneProvider() {
     let retryHandle: number | null = null;
     let activePageSub: Subscription | null = null;
     let perPageDispose: (() => void) | null = null;
+    let wiredUnitId: string | null = null;
+    let swapWatch: number | null = null;
 
     const wirePage = (
       univer: Univer,
@@ -990,18 +992,53 @@ export function FormatPaneProvider() {
           if (disposed) return;
           reattach(page?.id ?? null);
         });
+        wiredUnitId = unitId;
       } catch {
         retryHandle = window.setTimeout(wireUniver, 200);
       }
     };
 
+    // Tear down the current subscriptions (used on deck swap + unmount).
+    const teardown = () => {
+      activePageSub?.unsubscribe();
+      activePageSub = null;
+      perPageDispose?.();
+      perPageDispose = null;
+    };
+
     wireUniver();
+
+    // Opening a .pptx swaps in a fresh Univer instance (UniverSlide is keyed
+    // on snapshot.id), disposing the model we subscribed to — activePage$ +
+    // the transformer controls go silent and the pane would stop tracking
+    // selections on the new deck. Poll the live unitId; on change, tear down
+    // and re-wire to the new model. Same guard the slide rail uses.
+    swapWatch = window.setInterval(() => {
+      if (disposed) return;
+      const u = getUniver();
+      if (!u) return;
+      let liveUnitId: string | null = null;
+      try {
+        liveUnitId = u
+          .__getInjector()
+          .get(IUniverInstanceService)
+          .getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE)
+          ?.getUnitId() ?? null;
+      } catch {
+        return;
+      }
+      if (liveUnitId && liveUnitId !== wiredUnitId) {
+        teardown();
+        setSelection(null);
+        wireUniver();
+      }
+    }, 400);
 
     return () => {
       disposed = true;
       if (retryHandle != null) window.clearTimeout(retryHandle);
-      activePageSub?.unsubscribe();
-      perPageDispose?.();
+      if (swapWatch != null) window.clearInterval(swapWatch);
+      teardown();
     };
   }, []);
 
