@@ -56,7 +56,8 @@
         "open": "Ctrl+O",
         "save": "Ctrl+S"
       },
-      "pageSetup": "Page setup"
+      "pageSetup": "Page setup",
+      "downloadPng": "Download slide as PNG"
     },
     "edit": {
       "label": "Edit",

@@ -15,6 +15,7 @@ import { NotesPanel } from './shell/NotesPanel';
 import { ThemePicker } from './shell/ThemePicker';
 import { PropertiesDialog } from './shell/PropertiesDialog';
 import { PageSetupDialog } from './shell/PageSetupDialog';
+import { downloadSlideAsPng } from './shell/download-slide';
 import { RecentFilesDialog } from './shell/RecentFilesDialog';
 import { AboutDialog } from './shell/AboutDialog';
 import { SlideContextMenu } from './shell/SlideContextMenu';
@@ -433,6 +434,29 @@ export function App() {
   // live doesn't re-fit the slide — we re-key the deck (new snapshot.id)
   // which remounts UniverSlide at the new size, preserving all content. Same
   // remount mechanism the .pptx import uses.
+  // Download the current slide as a PNG. Renders the SlideTile offscreen
+  // at native size, rasterizes via html-to-image, triggers a download.
+  async function handleDownloadPng() {
+    const live = getCurrentSnapshot(snapshot);
+    const pageSize = {
+      width: live.pageSize?.width ?? 960,
+      height: live.pageSize?.height ?? 540,
+    };
+    const order = live.body?.pageOrder ?? [];
+    const pages = live.body?.pages ?? {};
+    const activeId = order[activeSlideIndex] ?? order[0];
+    const page = activeId ? pages[activeId] : undefined;
+    if (!page) return;
+    setError(null);
+    setStatus(null);
+    try {
+      await downloadSlideAsPng(page, pageSize, fileName, activeSlideIndex + 1);
+      setStatus(`Saved · slide ${activeSlideIndex + 1}.png`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   function handleSetPageSize(width: number, height: number) {
     const live = getCurrentSnapshot(snapshot);
     setSnapshot({
@@ -541,6 +565,7 @@ export function App() {
         onOpenRecent={() => setRecentOpen(true)}
         onOpenAbout={() => setAboutOpen(true)}
         onOpenPageSetup={() => setPageSetupOpen(true)}
+        onDownloadPng={() => void handleDownloadPng()}
         onToggleNotes={() => setNotesVisible((v) => !v)}
         onFitToWindow={handleFitToWindow}
         onZoomIn={() => setZoom((z) => Math.min(400, z + 10))}

@@ -22,6 +22,7 @@
     "@univerjs/themes": "0.24.0",
     "@univerjs/ui": "0.24.0",
     "fast-xml-parser": "^5.8.0",
+    "html-to-image": "^1.11.13",
     "i18next": "^23.16.4",
     "jszip": "^3.10.1",
     "pptxgenjs": "^4.0.1",
