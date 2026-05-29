@@ -617,7 +617,8 @@
       "notesAriaLabel": "Speaker notes for current slide",
       "notesEmpty": "No notes on this slide.",
       "resetTimer": "Reset",
-      "resetTimerTooltip": "Reset elapsed timer"
+      "resetTimerTooltip": "Reset elapsed timer",
+      "currentLabel": "Current slide"
     },
     "jump": {
       "title": "Go to slide",

@@ -1,7 +1,7 @@
 import type { ISlidePage } from '@univerjs/slides';
 import { useTranslation } from '../i18n';
 import { Icon } from './icons';
-import { SlideTile } from './SlideTile';
+import { ScaledSlide } from './ScaledSlide';
 
 // PresenterView — two-pane layout shown when the user toggles presenter
 // mode inside the slideshow.
@@ -58,7 +58,7 @@ export function PresenterView({
           })}
         </div>
         <div className="cs-slideshow__presenter-tile">
-          <SlideTile page={currentPage} pageSize={pageSize} />
+          <ScaledSlide page={currentPage} pageSize={pageSize} />
         </div>
       </div>
       <div className="cs-slideshow__presenter-side">
@@ -69,7 +69,7 @@ export function PresenterView({
           </div>
           <div className="cs-slideshow__presenter-next-tile">
             {nextPage ? (
-              <SlideTile page={nextPage} pageSize={pageSize} />
+              <ScaledSlide page={nextPage} pageSize={pageSize} />
             ) : (
               <div className="cs-slideshow__presenter-next-empty">
                 {t('presenter.endOfDeck')}
