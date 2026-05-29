@@ -1112,6 +1112,34 @@ export function FormatPaneProvider() {
     };
   }, [selection]);
 
+  // Arrow-key nudge for the selected element. 1 px per tap, 10 px with
+  // Shift — same grain as Google Slides / PowerPoint. We bail out when
+  // the focus is on an editable surface (input, textarea, contenteditable
+  // — covers the filename rename, Find&Replace input, and Univer's
+  // text-edit overlay), so the keys still drive the caret in those
+  // contexts. preventDefault stops the browser from page-scrolling on
+  // ArrowDown/ArrowUp while the user nudges.
+  useEffect(() => {
+    if (!selection) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (target.isContentEditable) return;
+      }
+      const step = e.shiftKey ? 10 : 1;
+      const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+      const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+      e.preventDefault();
+      apply({ left: selection.left + dx, top: selection.top + dy });
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [selection, apply]);
+
   // Hidden entirely when there's nothing to format — Google-Slides UX.
   if (!selection) {
     return <aside className="cs-format-pane is-hidden" aria-hidden="true" />;
