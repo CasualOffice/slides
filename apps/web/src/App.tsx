@@ -14,6 +14,7 @@ import { SlideShow } from './shell/SlideShow';
 import { NotesPanel } from './shell/NotesPanel';
 import { ThemePicker } from './shell/ThemePicker';
 import { PropertiesDialog } from './shell/PropertiesDialog';
+import { PageSetupDialog } from './shell/PageSetupDialog';
 import { RecentFilesDialog } from './shell/RecentFilesDialog';
 import { AboutDialog } from './shell/AboutDialog';
 import { SlideContextMenu } from './shell/SlideContextMenu';
@@ -115,6 +116,7 @@ export function App() {
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [pageSetupOpen, setPageSetupOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Active slide index — driven by Univer's `SlideDataModel.activePage$`.
@@ -427,6 +429,20 @@ export function App() {
     setDirty(true);
   }
 
+  // Page setup. Univer caches the slide rect at mount, so changing pageSize
+  // live doesn't re-fit the slide — we re-key the deck (new snapshot.id)
+  // which remounts UniverSlide at the new size, preserving all content. Same
+  // remount mechanism the .pptx import uses.
+  function handleSetPageSize(width: number, height: number) {
+    const live = getCurrentSnapshot(snapshot);
+    setSnapshot({
+      ...live,
+      id: `${live.id || 'deck'}-${Date.now().toString(36)}`,
+      pageSize: { ...live.pageSize, width, height },
+    });
+    setDirty(true);
+  }
+
   // View → Fit to window. Re-invokes SlideRenderController.scrollToCenter
   // (same engine as UniverSlide.tsx mount-centering), then resets zoom to
   // 100% — the centering math assumes scale=1. Google Slides' Fit behaves
@@ -524,6 +540,7 @@ export function App() {
         onOpenProperties={() => setPropertiesOpen(true)}
         onOpenRecent={() => setRecentOpen(true)}
         onOpenAbout={() => setAboutOpen(true)}
+        onOpenPageSetup={() => setPageSetupOpen(true)}
         onToggleNotes={() => setNotesVisible((v) => !v)}
         onFitToWindow={handleFitToWindow}
         onZoomIn={() => setZoom((z) => Math.min(400, z + 10))}
@@ -577,6 +594,15 @@ export function App() {
         <SlideShow snapshot={snapshot} onExit={() => setSlideshowOpen(false)} />
       )}
       <ThemePicker open={themesOpen} onClose={() => setThemesOpen(false)} />
+      <PageSetupDialog
+        open={pageSetupOpen}
+        onClose={() => setPageSetupOpen(false)}
+        current={{
+          width: snapshot.pageSize?.width ?? 960,
+          height: snapshot.pageSize?.height ?? 540,
+        }}
+        onApply={handleSetPageSize}
+      />
       <PropertiesDialog
         open={propertiesOpen}
         onClose={() => setPropertiesOpen(false)}

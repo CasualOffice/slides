@@ -55,7 +55,8 @@
         "new": "Ctrl+N",
         "open": "Ctrl+O",
         "save": "Ctrl+S"
-      }
+      },
+      "pageSetup": "Page setup"
     },
     "edit": {
       "label": "Edit",
@@ -573,6 +574,19 @@
       "regexInvalid": "Invalid regular expression",
       "replacedCount_one": "Replaced {{count}} match",
       "replacedCount_other": "Replaced {{count}} matches"
+    },
+    "pageSetup": {
+      "title": "Page setup",
+      "ariaLabel": "Page setup",
+      "close": "Close (Esc)",
+      "cancel": "Cancel",
+      "apply": "Apply",
+      "widescreen": "Widescreen 16:9",
+      "standard": "Standard 4:3",
+      "custom": "Custom",
+      "width": "Width",
+      "height": "Height",
+      "note": "Changing the slide size reloads the deck to re-fit the canvas."
     }
   },
   "slideshow": {

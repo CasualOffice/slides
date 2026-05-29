@@ -25,6 +25,7 @@ export interface TitleBarProps {
   onOpenProperties: () => void;
   onOpenRecent: () => void;
   onOpenAbout: () => void;
+  onOpenPageSetup: () => void;
   onToggleNotes?: () => void;
   onFitToWindow?: () => void;
   onZoomIn?: () => void;
@@ -67,6 +68,7 @@ function buildMenus(t: (key: string) => string): MenuDef[] {
       { id: 'recent', label: t('menu:file.recent') },
       { id: 'save', label: t('menu:file.save'), shortcut: t('menu:file.shortcut.save') },
       { id: 'sep1', label: '---' },
+      { id: 'pageSetup', label: t('menu:file.pageSetup') },
       { id: 'properties', label: t('menu:file.properties') },
     ] },
     { id: 'edit', label: t('menu:edit.label'), items: [
@@ -127,6 +129,7 @@ export function TitleBar({
   onOpenProperties,
   onOpenRecent,
   onOpenAbout,
+  onOpenPageSetup,
   onToggleNotes,
   onFitToWindow,
   onZoomIn,
@@ -188,6 +191,7 @@ export function TitleBar({
         if (itemId === 'open') onOpen();
         if (itemId === 'save') onSave();
         if (itemId === 'properties') onOpenProperties();
+        if (itemId === 'pageSetup') onOpenPageSetup();
         if (itemId === 'recent') onOpenRecent();
         return;
       }
@@ -231,6 +235,7 @@ export function TitleBar({
       onOpenProperties,
       onOpenRecent,
       onOpenAbout,
+      onOpenPageSetup,
       onToggleNotes,
       onFitToWindow,
       onZoomIn,
