@@ -1140,6 +1140,54 @@ export function FormatPaneProvider() {
     return () => window.removeEventListener('keydown', handler);
   }, [selection, apply]);
 
+  // Tab / Shift+Tab cycles selection through the active page's elements.
+  // Reads the page's pageElements order from the slide model + filters
+  // the canvas's BaseObject list so we only land on user shapes (skips
+  // overlay/transformer controls). Wraps at the ends. Skipped when focus
+  // is on an editable surface so Tab keeps its native indent/focus
+  // behaviour inside text frames and HTML inputs.
+  useEffect(() => {
+    if (!selection) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (target.isContentEditable) return;
+      }
+      const univer = getUniver();
+      if (!univer) return;
+      try {
+        const instances = univer.__getInjector().get(IUniverInstanceService);
+        const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+        if (!model) return;
+        const snap = model.getSnapshot();
+        const page = snap.body?.pages?.[selection.pageId];
+        const ids = Object.keys(page?.pageElements ?? {});
+        if (ids.length < 2) return;
+        const canvasView = univer.__getInjector().get(CanvasView);
+        const scene = canvasView.getRenderUnitByPageId(selection.pageId, selection.unitId)?.scene;
+        const transformer = scene?.getTransformer();
+        if (!scene || !transformer) return;
+        const objs = scene.getAllObjectsByOrder().filter((o) => ids.includes(o.oKey));
+        if (objs.length < 2) return;
+        const currentIdx = Math.max(0, objs.findIndex((o) => o.oKey === selection.oKey));
+        const nextIdx = e.shiftKey
+          ? (currentIdx - 1 + objs.length) % objs.length
+          : (currentIdx + 1) % objs.length;
+        e.preventDefault();
+        transformer.clearControls();
+        transformer.attachTo(objs[nextIdx]);
+      } catch {
+        /* unit torn down mid-cycle — ignore */
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [selection]);
+
   // Hidden entirely when there's nothing to format — Google-Slides UX.
   if (!selection) {
     return <aside className="cs-format-pane is-hidden" aria-hidden="true" />;
