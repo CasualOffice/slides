@@ -5,7 +5,7 @@
 //   Group 3: Text box · Image · Shape · Line
 //   Group 5: New slide · Layout · Theme · Background
 //   Group 6: Font family · Font size · Bold · Italic · Underline · Strikethrough · Text color · Fill color · Border color
-//   Group 7: Align · Bullet · Number · Indent- · Indent+ · Line spacing · Clear formatting · Insert link
+//   Group 7: Align · Bullet · Number · Indent- · Indent+ · Line spacing · Clear formatting
 //   Group 8: Slideshow CTA (right-aligned)
 //
 // The row never scrolls horizontally. A ResizeObserver tracks the toolbar
@@ -14,16 +14,17 @@
 // stays visible.
 //
 // All formatting controls dispatch existing Univer commands (see the
-// constants below). Where a command is missing in v0.24.0 (paint format,
-// line spacing, clear formatting, insert link, vertical-align), the button
-// is wired to local state only with an inline `TODO(univer)` comment
-// pointing at the gap. We never fake a dispatch.
-import { useEffect, useRef, useState } from 'react';
-import type { Univer } from '@univerjs/core';
-import { IUndoRedoService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
+// constants below + univer/commands.ts). Where a command is genuinely
+// missing in v0.24.0 (paint format, insert link, vertical-align) the
+// control is left OUT entirely rather than rendered as an inert button —
+// a dead button reads as broken. We never fake a dispatch.
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { Univer, IShapeProperties } from '@univerjs/core';
+import { BorderStyleTypes, IUndoRedoService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
 import { useTranslation } from '../i18n';
-import { dispatchSlideCommand } from '../univer/commands';
+import { clearFormatting, dispatchSlideCommand } from '../univer/commands';
+import { getSelectedElement, subscribeSelection } from './selection';
 import { BackgroundPicker } from './BackgroundPicker';
 import { LayoutPicker } from './LayoutPicker';
 import { Icon } from './icons';
@@ -32,6 +33,7 @@ import { FontSizePicker } from './toolbar/FontSizePicker';
 import { ColorPicker } from './toolbar/ColorPicker';
 import { AlignPicker, type AlignValue } from './toolbar/AlignPicker';
 import { ListPicker, type ListMode } from './toolbar/ListPicker';
+import { LineSpacingPicker } from './toolbar/LineSpacingPicker';
 import { OverflowPopover } from './toolbar/OverflowPopover';
 
 // ============================================================ shapes ===
@@ -157,6 +159,49 @@ function useUndoRedoCounts(): { undos: number; redos: number } {
   return counts;
 }
 
+// ============================================================ shape style ===
+
+// Subscribe to the selection bridge so the fill/border colour pickers can
+// contextually disable when nothing is selected (Google-Slides UX) and
+// re-render when the selection changes.
+function useSelectedElement() {
+  return useSyncExternalStore(subscribeSelection, getSelectedElement, getSelectedElement);
+}
+
+// Mutate the selected shape's shapeProperties on the live SlideDataModel
+// snapshot and repaint — the same direct-write + incrementRev pattern
+// ThemePicker uses (Univer v0.24.0 has no element-style mutation reachable
+// from outside docs-ui). ShapeAdaptor.convert reads shapeBackgroundFill →
+// fill and outline.{outlineFill,weight,dashStyle} → stroke on every render
+// pass, so the write visibly re-renders the shape.
+// TODO(collab): direct snapshot write, not collab-safe.
+function mutateSelectedShape(patch: (sp: IShapeProperties) => void): boolean {
+  const sel = getSelectedElement();
+  if (!sel) return false;
+  const w = window as unknown as { univer?: Univer };
+  const univer = w.univer;
+  if (!univer) return false;
+  try {
+    const model = univer
+      .__getInjector()
+      .get(IUniverInstanceService)
+      .getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+    if (!model) return false;
+    const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
+    if (!el?.shape) return false;
+    if (!el.shape.shapeProperties) {
+      el.shape.shapeProperties = { shapeBackgroundFill: {} } as IShapeProperties;
+    }
+    patch(el.shape.shapeProperties);
+    model.incrementRev();
+    const active = model.getActivePage();
+    if (active) model.setActivePage(active);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ============================================================ format state ===
 
 // Local mirror of the inline-format toggle state. We can't subscribe to the
@@ -262,6 +307,9 @@ export function Toolbar() {
   const overflow = useToolbarOverflow(rootRef);
 
   const [format, setFormat] = useState<FormatState>(DEFAULT_FORMAT);
+  // Fill/border act on the selected shape; disable when nothing is selected.
+  const selectedEl = useSelectedElement();
+  const hasShapeSelection = !!selectedEl;
   const [bgAnchor, setBgAnchor] = useState<DOMRect | null>(null);
   const [layoutAnchor, setLayoutAnchor] = useState<DOMRect | null>(null);
   const [overflowAnchor, setOverflowAnchor] = useState<DOMRect | null>(null);
@@ -292,18 +340,30 @@ export function Toolbar() {
     void dispatchSlideCommand(cmd);
   }
 
+  // Fill / border target the SELECTED shape via the selection bridge.
+  // shapeBackgroundFill → engine-render `fill`; outline → stroke. Both are
+  // read by ShapeAdaptor on render, so the snapshot write repaints.
+  // TODO(collab): direct snapshot write, not collab-safe.
   function applyFillColor(rgb: string) {
-    setFormat((p) => ({ ...p, fillColor: rgb }));
-    // TODO(univer): no docs-ui inline-format-fill exists. Slide shape fill
-    // would route through `slide.mutation.update-element` with a
-    // shapeProperties.shapeBackgroundFill patch — but we don't track the
-    // selected element id at the toolbar layer yet. Inert until the
-    // selection bridge in `docs/UNIVER_SLIDES_GAPS.md` lands.
+    const ok = mutateSelectedShape((sp) => {
+      sp.shapeBackgroundFill = { rgb };
+    });
+    if (ok) setFormat((p) => ({ ...p, fillColor: rgb }));
   }
   function applyBorderColor(rgb: string) {
-    setFormat((p) => ({ ...p, borderColor: rgb }));
-    // TODO(univer): same gap as fill — needs `slide.mutation.update-element`
-    // with the shape's outline patch + a selection bridge.
+    const ok = mutateSelectedShape((sp) => {
+      const transparent = /rgba?\([^)]*,\s*0\s*\)/i.test(rgb);
+      sp.outline = {
+        ...sp.outline,
+        outlineFill: { rgb },
+        // Give a first-time outline a visible weight; clearing drops it.
+        weight: transparent ? 0 : sp.outline?.weight ?? 1,
+        dashStyle: transparent
+          ? BorderStyleTypes.NONE
+          : sp.outline?.dashStyle ?? BorderStyleTypes.THIN,
+      };
+    });
+    if (ok) setFormat((p) => ({ ...p, borderColor: rgb }));
   }
   function applyTextColor(rgb: string) {
     setFormat((p) => ({ ...p, textColor: rgb }));
@@ -453,6 +513,8 @@ export function Toolbar() {
         onClear={() => applyFillColor('rgba(0,0,0,0)')}
         icon="format_color_fill"
         label={t('toolbar:fillColor')}
+        disabled={!hasShapeSelection}
+        disabledTitle={t('toolbar:selectShapeFirst')}
       />
       <ColorPicker
         scope="border"
@@ -461,6 +523,8 @@ export function Toolbar() {
         onClear={() => applyBorderColor('rgba(0,0,0,0)')}
         icon="border_color"
         label={t('toolbar:borderColor')}
+        disabled={!hasShapeSelection}
+        disabledTitle={t('toolbar:selectShapeFirst')}
       />
     </>
   );
@@ -497,10 +561,29 @@ export function Toolbar() {
       >
         <Icon name="format_indent_increase" size={18} />
       </button>
-      {/* Line spacing, Clear formatting, Insert link omitted until Univer
-          v0.24.0 exposes the matching commands — they were inert (no-op)
-          buttons, which read as broken. Re-add when the fork patch lands.
-          TODO(univer). */}
+      {/* Line spacing — writes the paragraph's lineSpacing multiplier via
+          `doc-paragraph-setting.command`. */}
+      <LineSpacingPicker
+        value={format.lineSpacing}
+        onChange={(lineSpacing) => setFormat((p) => ({ ...p, lineSpacing }))}
+      />
+      {/* Clear formatting — resets paragraph (NORMAL_TEXT) + inline run style
+          across the selection. Both reachable docs-ui commands; see
+          `clearFormatting` in univer/commands.ts. */}
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar:clearFormatting')}
+        aria-label={t('toolbar:clearFormatting')}
+        onClick={() => void clearFormatting()}
+      >
+        <Icon name="format_clear" size={18} />
+      </button>
+      {/* Insert link omitted: docs-ui v0.24.0 ships no hyperlink command and
+          @univerjs/docs-hyperlink isn't installed. InsertCustomRangeCommand
+          only inserts a non-clickable generic CUSTOM range and replaces the
+          selection text — not a real link. A dead button is worse than none.
+          Re-add when the hyperlink plugin / fork patch lands. */}
     </>
   );
 

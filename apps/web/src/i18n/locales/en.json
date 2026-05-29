@@ -179,6 +179,7 @@
     "textColor": "Text color",
     "fillColor": "Fill color",
     "borderColor": "Border color",
+    "selectShapeFirst": "Select a shape first",
     "align": "Align",
     "alignLeft": "Left align",
     "alignCenter": "Center align",
@@ -497,14 +498,12 @@
       "expandSection": "Expand {{section}}",
       "collapseSection": "Collapse {{section}}",
       "noSelection": "No element selected",
-      "todoUniver": "Not yet wired in Univer v0.24.0",
       "sections": {
         "position": "Position",
         "size": "Size",
         "fill": "Fill",
         "border": "Border",
-        "shadow": "Shadow",
-        "opacity": "Opacity"
+        "shadow": "Shadow"
       },
       "position": {
         "x": "X",
@@ -526,6 +525,7 @@
       },
       "border": {
         "colorLabel": "Border color",
+        "none": "No border",
         "widthLabel": "Border width",
         "widthAria": "Border width (px)",
         "dashLabel": "Dash style",
@@ -544,11 +544,6 @@
         "offsetXAria": "Shadow horizontal offset (px)",
         "offsetYAria": "Shadow vertical offset (px)",
         "blurAria": "Shadow blur radius (px)"
-      },
-      "opacity": {
-        "label": "Opacity",
-        "aria": "Opacity (percent)",
-        "percent": "{{value}}%"
       }
     },
     "findReplace": {

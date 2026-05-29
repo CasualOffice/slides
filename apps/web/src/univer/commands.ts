@@ -1,5 +1,14 @@
-import type { Univer } from '@univerjs/core';
-import { ICommandService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
+import type { DocumentDataModel, Univer } from '@univerjs/core';
+import {
+  BooleanNumber,
+  ICommandService,
+  IUniverInstanceService,
+  NamedStyleType,
+  SpacingRule,
+  UpdateDocsAttributeType,
+  UniverInstanceType,
+} from '@univerjs/core';
+import { DocSelectionManagerService } from '@univerjs/docs';
 
 // Thin façade over the live Univer instance for ribbon/status-bar dispatches.
 // Reads `window.univer` (set by UniverSlide on mount) so any React component
@@ -53,4 +62,91 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
     console.warn(`[dispatchSlideCommand] ${id} failed:`, err);
     return false;
   }
+}
+
+// ─────────────────────────────────────────────────── text-frame helpers
+//
+// Text frames in Univer Slides are backed by nested @univerjs/docs doc-units.
+// The toolbar talks to whatever doc-unit currently owns the caret — when a
+// text box is being edited, `getCurrentUnitOfType(UNIVER_DOC)` resolves to
+// that nested unit and `DocSelectionManagerService` reports its selection.
+// Both helpers below route through the same `RichTextEditingMutation` path
+// the built-in align/list/bold commands use, so they stay collab-safe.
+
+// Line spacing. `doc-paragraph-setting.command` writes the paragraph's
+// `lineSpacing` (a line-height multiplier) + `spacingRule`. We mirror the
+// official docs-ui paragraph-setting hook: a multiplier preset with
+// SpacingRule.AUTO (height grows with content, no hard min/max).
+export async function setLineSpacing(multiplier: number): Promise<boolean> {
+  return dispatchSlideCommand('doc-paragraph-setting.command', {
+    paragraph: { lineSpacing: multiplier, spacingRule: SpacingRule.AUTO },
+  });
+}
+
+// Clear formatting. docs-ui v0.24.0 ships no single "clear all" command, so
+// we compose the two reachable resets that DO exist:
+//   1. paragraph level — `doc.command.set-paragraph-named-style` → NORMAL_TEXT
+//      drops heading / line-spacing / spacing overrides.
+//   2. inline level — `doc.command.update-text` with `coverType: REPLACE`
+//      over each selected range wipes the run style (bold / italic /
+//      underline / strikethrough / color / background / baseline).
+// Both go through RichTextEditingMutation, so undo + collab work unchanged.
+export async function clearFormatting(): Promise<boolean> {
+  const univer = getUniver();
+  if (!univer) return false;
+  const injector = univer.__getInjector();
+  const instances = injector.get(IUniverInstanceService);
+  const doc = instances.getCurrentUnitOfType<DocumentDataModel>(UniverInstanceType.UNIVER_DOC);
+  if (!doc) return false;
+  const unitId = doc.getUnitId();
+  const selection = injector.get(DocSelectionManagerService);
+  const ranges = selection.getDocRanges();
+  if (!ranges.length) return false;
+  const cs = injector.get(ICommandService);
+
+  // 1. Reset paragraph style across the selection (line spacing, heading…).
+  let ok = false;
+  try {
+    ok = await cs.executeCommand('doc.command.set-paragraph-named-style', {
+      value: NamedStyleType.NORMAL_TEXT,
+      textRanges: ranges,
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[clearFormatting] paragraph reset failed:', err);
+  }
+
+  // 2. Reset inline run style for every non-collapsed range. A collapsed
+  // caret has no run to rewrite — skip it.
+  const RESET_TS = {
+    bl: BooleanNumber.FALSE,
+    it: BooleanNumber.FALSE,
+    ul: { s: BooleanNumber.FALSE },
+    st: { s: BooleanNumber.FALSE },
+    va: null,
+    cl: null,
+    bg: null,
+  };
+  for (const range of ranges) {
+    const { startOffset, endOffset, segmentId } = range;
+    if (startOffset == null || endOffset == null || startOffset === endOffset) continue;
+    try {
+      const result = await cs.executeCommand('doc.command.update-text', {
+        unitId,
+        segmentId,
+        range: { startOffset, endOffset, collapsed: false },
+        textRanges: ranges,
+        coverType: UpdateDocsAttributeType.REPLACE,
+        updateBody: {
+          dataStream: '',
+          textRuns: [{ st: 0, ed: endOffset - startOffset, ts: RESET_TS }],
+        },
+      });
+      ok = ok || Boolean(result);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[clearFormatting] inline reset failed:', err);
+    }
+  }
+  return ok;
 }

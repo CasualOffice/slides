@@ -75,9 +75,14 @@ export interface ColorPickerProps {
   label: string;
   // Optional shortcut hint (Ctrl+…); we add it to the trigger's title.
   shortcut?: string;
+  // Contextual disable — fill/border have no target until a shape is
+  // selected. Both buttons go inert and adopt `disabledTitle` as the tooltip
+  // (Google-Slides "Select a shape first" UX), NOT an inert TODO.
+  disabled?: boolean;
+  disabledTitle?: string;
 }
 
-export function ColorPicker({ scope, value, onPick, onClear, icon, label, shortcut }: ColorPickerProps) {
+export function ColorPicker({ scope, value, onPick, onClear, icon, label, shortcut, disabled, disabledTitle }: ColorPickerProps) {
   const { t } = useTranslation();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -102,12 +107,12 @@ export function ColorPicker({ scope, value, onPick, onClear, icon, label, shortc
     if (rgb) apply(rgb);
   }
 
-  const title = shortcut ? `${label} (${shortcut})` : label;
+  const title = disabled ? disabledTitle ?? label : shortcut ? `${label} (${shortcut})` : label;
   // Preview swatch under the icon — the "current colour" indicator that
   // makes the split-button a one-click apply path for the last-used colour.
   const previewColor = value ?? (scope === 'text' ? 'rgb(34, 38, 45)' : null);
 
-  const pos = anchorPosition(anchor, 248, 320);
+  const pos = !disabled && anchorPosition(anchor, 248, 320);
 
   return (
     <div className="cs-toolbar2__color">
@@ -117,7 +122,7 @@ export function ColorPicker({ scope, value, onPick, onClear, icon, label, shortc
         title={title}
         aria-label={label}
         onClick={() => previewColor && apply(previewColor)}
-        disabled={!previewColor}
+        disabled={disabled || !previewColor}
       >
         <Icon name={icon} size={16} />
         <span
@@ -130,10 +135,11 @@ export function ColorPicker({ scope, value, onPick, onClear, icon, label, shortc
         ref={triggerRef}
         type="button"
         className="cs-toolbar2__color-caret"
-        title={label}
+        title={title}
         aria-label={`${label} ▾`}
         aria-haspopup="dialog"
         aria-expanded={!!anchor}
+        disabled={disabled}
         onClick={() => setAnchor(anchor ? null : triggerRef.current!.getBoundingClientRect())}
       >
         <Icon name="expand_more" size={12} />

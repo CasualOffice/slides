@@ -17,28 +17,38 @@
 //   (see node_modules/@univerjs/slides-ui/lib/es/index.js around line 2767).
 //   No new dependency, no fork-patch needed for the read side.
 //
-// Univer command gaps
-//   v0.24.0 only exposes UpdateSlideElementOperation with { left, top,
-//   width, height, angle } as supported `props`. There is NO clean
-//   mutation for shape fill / outline / shadow / opacity on a SELECTED
-//   element. The fill/border/shadow/opacity inputs are rendered disabled
-//   with a tooltip so the UX surface is present but we don't fake
-//   dispatches. See `TODO(univer)` comments below.
+// Shape styling (fill / border / shadow)
+//   Position + size go through UpdateSlideElementOperation (the only props
+//   it whitelists in v0.24.0). Fill / outline / shadow have NO element-style
+//   mutation reachable from outside docs-ui, so — exactly like ThemePicker's
+//   text cascade — we write the property directly on the SlideDataModel
+//   snapshot and repaint with `incrementRev()` + `setActivePage(active)`.
+//   The ShapeAdaptor reads `shapeProperties.shapeBackgroundFill`,
+//   `shapeProperties.outline.{outlineFill,weight,dashStyle}` and
+//   `shapeProperties.effectLst.outerShdw` on every render pass (see
+//   node_modules/@univerjs/slides/lib/es/index.js ShapeAdaptor.convert),
+//   so a snapshot write + rev bump visibly re-renders the shape.
+//   TODO(collab): these direct writes bypass the command bus; swap to a
+//   fork-side mutation when one lands (docs/UNIVER_SLIDES_GAPS.md).
 //
-//   When the fork-patch in docs/UNIVER_SLIDES_GAPS.md lands a real fill/
-//   outline mutation, swap the disabled inputs to live ones — no other
-//   change needed in this file.
+//   Opacity is intentionally absent: neither IPageElement nor IShapeProperties
+//   carries an alpha field in v0.24.0 and the ShapeAdaptor never sets the
+//   engine-render `opacity` prop on shapes — so an opacity control could not
+//   change anything on the canvas. Removed rather than shipped disabled.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Univer } from '@univerjs/core';
 import {
+  BorderStyleTypes,
   ICommandService,
   IUniverInstanceService,
   UniverInstanceType,
 } from '@univerjs/core';
+import type { IShapeProperties } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
 import { CanvasView } from '@univerjs/slides-ui';
 import type { BaseObject } from '@univerjs/engine-render';
+import { setSelectedElement } from './selection';
 // Inline subscription shape — rxjs isn't a direct dep of apps/web (it
 // arrives transitively via @univerjs). Importing the type directly from
 // 'rxjs' won't resolve under TS strict; the shape we need is just
@@ -57,6 +67,144 @@ interface UniverWin {
 
 function getUniver(): Univer | null {
   return ((globalThis as UniverWin).univer ?? null) as Univer | null;
+}
+
+function getSlideModel(univer: Univer): SlideDataModel | null {
+  try {
+    return (
+      univer
+        .__getInjector()
+        .get(IUniverInstanceService)
+        .getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE) ??
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
+// Pixel→EMU and degree→OOXML-angle conversions for the shadow effect — the
+// ShapeAdaptor decodes `effectLst.outerShdw` from EMU (dist/blurRad) and a
+// 60000ths-of-a-degree clockwise direction (dir). We invert that here so the
+// pane can speak in px offsets.
+const EMU_PER_PX = 9525;
+
+// Snapshot of the shape style fields the pane edits, read off the model for
+// initial control values. Colours come back as the model's stored rgb
+// string (or null when unset).
+interface ShapeStyle {
+  fill: string | null;
+  borderColor: string | null;
+  borderWidth: number;
+  borderDash: BorderStyleTypes;
+  shadowEnabled: boolean;
+  shadowColor: string | null;
+  shadowOffsetX: number;
+  shadowOffsetY: number;
+  shadowBlur: number;
+}
+
+const DEFAULT_SHAPE_STYLE: ShapeStyle = {
+  fill: null,
+  borderColor: null,
+  borderWidth: 1,
+  borderDash: BorderStyleTypes.THIN,
+  shadowEnabled: false,
+  shadowColor: '#000000',
+  shadowOffsetX: 2,
+  shadowOffsetY: 2,
+  shadowBlur: 4,
+};
+
+// Resolve the selected shape's IShapeProperties on the live snapshot.
+// Returns null when the unit / page / element / shape is missing.
+function getShapeProperties(
+  model: SlideDataModel,
+  pageId: string,
+  elementId: string,
+): IShapeProperties | null {
+  const page = model.getPage(pageId);
+  const el = page?.pageElements?.[elementId];
+  return el?.shape?.shapeProperties ?? null;
+}
+
+// Read the current style off the model for seeding the controls.
+function readShapeStyle(
+  model: SlideDataModel,
+  pageId: string,
+  elementId: string,
+): ShapeStyle {
+  const sp = getShapeProperties(model, pageId, elementId);
+  if (!sp) return { ...DEFAULT_SHAPE_STYLE };
+  const outline = sp.outline;
+  const shdw = sp.effectLst?.outerShdw;
+  let offX = DEFAULT_SHAPE_STYLE.shadowOffsetX;
+  let offY = DEFAULT_SHAPE_STYLE.shadowOffsetY;
+  let blur = DEFAULT_SHAPE_STYLE.shadowBlur;
+  if (shdw) {
+    const distPx = (shdw.dist ?? 0) / EMU_PER_PX;
+    const angleRad = ((shdw.dir ?? 0) / 60000) * (Math.PI / 180);
+    offX = Math.round(distPx * Math.cos(angleRad));
+    offY = Math.round(distPx * Math.sin(angleRad));
+    blur = Math.round((shdw.blurRad ?? 0) / EMU_PER_PX / 2);
+  }
+  return {
+    fill: sp.shapeBackgroundFill?.rgb ?? null,
+    borderColor: outline?.outlineFill?.rgb ?? null,
+    borderWidth: outline?.weight ?? DEFAULT_SHAPE_STYLE.borderWidth,
+    borderDash: outline?.dashStyle ?? DEFAULT_SHAPE_STYLE.borderDash,
+    shadowEnabled: !!shdw,
+    shadowColor: shdw?.color?.rgb ?? DEFAULT_SHAPE_STYLE.shadowColor,
+    shadowOffsetX: offX,
+    shadowOffsetY: offY,
+    shadowBlur: blur,
+  };
+}
+
+// Mutate the selected shape's properties in place on the snapshot and
+// repaint. Same pattern as ThemePicker's text cascade — the ShapeAdaptor
+// reads these fields on every render, so a snapshot write + incrementRev +
+// setActivePage visibly re-renders the shape.
+// TODO(collab): direct snapshot write, not collab-safe.
+function mutateShape(
+  pageId: string,
+  elementId: string,
+  patch: (sp: IShapeProperties) => void,
+): void {
+  const univer = getUniver();
+  if (!univer) return;
+  const model = getSlideModel(univer);
+  if (!model) return;
+  const page = model.getPage(pageId);
+  const el = page?.pageElements?.[elementId];
+  if (!el?.shape) return;
+  if (!el.shape.shapeProperties) {
+    el.shape.shapeProperties = { shapeBackgroundFill: {} } as IShapeProperties;
+  }
+  patch(el.shape.shapeProperties);
+  model.incrementRev();
+  const active = model.getActivePage();
+  if (active) model.setActivePage(active);
+}
+
+// Build an `effectLst.outerShdw` payload from px offsets. dist is the
+// hypotenuse (px→EMU), dir is the clockwise angle from east in
+// 60000ths-of-a-degree, blurRad is px→EMU then ×2 to invert the adaptor's
+// /2 blur scaling.
+function buildOuterShadow(
+  color: string,
+  offsetX: number,
+  offsetY: number,
+  blurPx: number,
+): NonNullable<IShapeProperties['effectLst']>['outerShdw'] {
+  const distPx = Math.hypot(offsetX, offsetY);
+  const angleDeg = (Math.atan2(offsetY, offsetX) * 180) / Math.PI;
+  return {
+    color: { rgb: color },
+    dist: Math.round(distPx * EMU_PER_PX),
+    dir: Math.round(((angleDeg + 360) % 360) * 60000),
+    blurRad: Math.round(blurPx * 2 * EMU_PER_PX),
+  };
 }
 
 // Snapshot of the currently selected element. We mirror the BaseObject's
@@ -164,10 +312,13 @@ export function FormatPane({ selection, onApply }: FormatPaneInnerProps) {
           lockedRatio={lockedRatio.current}
           onToggleLock={toggleAspectLock}
         />
-        {isShape && <FillSection />}
-        <BorderSection />
-        <ShadowSection />
-        <OpacitySection />
+        {isShape && (
+          <>
+            <FillSection selection={selection} />
+            <BorderSection selection={selection} />
+            <ShadowSection selection={selection} />
+          </>
+        )}
       </div>
     </aside>
   );
@@ -176,7 +327,7 @@ export function FormatPane({ selection, onApply }: FormatPaneInnerProps) {
 /* ============================================================ section wrapper */
 
 interface SectionProps {
-  sectionKey: 'position' | 'size' | 'fill' | 'border' | 'shadow' | 'opacity';
+  sectionKey: 'position' | 'size' | 'fill' | 'border' | 'shadow';
   defaultOpen?: boolean;
   children: React.ReactNode;
 }
@@ -345,23 +496,56 @@ function SizeSection({
   );
 }
 
+/* ============================================================ style hook == */
+
+// Seed each style section from the live model, re-reading whenever the
+// selected element changes. Returns the snapshot + a setter that updates
+// local state so controls stay responsive between model reads.
+function useShapeStyle(selection: SelectionSnapshot): [ShapeStyle, (next: ShapeStyle) => void] {
+  const [style, setStyle] = useState<ShapeStyle>(() => {
+    const univer = getUniver();
+    const model = univer ? getSlideModel(univer) : null;
+    return model
+      ? readShapeStyle(model, selection.pageId, selection.oKey)
+      : { ...DEFAULT_SHAPE_STYLE };
+  });
+  useEffect(() => {
+    const univer = getUniver();
+    const model = univer ? getSlideModel(univer) : null;
+    setStyle(
+      model
+        ? readShapeStyle(model, selection.pageId, selection.oKey)
+        : { ...DEFAULT_SHAPE_STYLE },
+    );
+  }, [selection.pageId, selection.oKey]);
+  return [style, setStyle];
+}
+
 /* ============================================================ fill ======== */
 
-// TODO(univer): UpdateSlideElementOperation only accepts left/top/width/
-// height/angle in v0.24.0. Shape fill is stored on
-// `IPageElement.shape.shapeProperties.shapeBackgroundFill` but there's no
-// mutation to patch it on a selected element. Once the fork-patch (see
-// docs/UNIVER_SLIDES_GAPS.md) extends the operation's `props` whitelist,
-// switch this to a live ColorPicker like the toolbar's.
-function FillSection() {
+// Fill writes `shapeProperties.shapeBackgroundFill = { rgb }` on the
+// snapshot; ShapeAdaptor.convert reads it into the engine-render Rect/Circle
+// `fill` prop on every render pass, so the bump repaints. "No fill" sets a
+// transparent rgba so the adaptor's getColorStyle resolves to transparent.
+function FillSection({ selection }: { selection: SelectionSnapshot }) {
   const { t } = useTranslation('dialogs');
-  const [value, setValue] = useState<string>('#ffffff');
+  const [style, setStyle] = useShapeStyle(selection);
+
+  function apply(rgb: string) {
+    mutateShape(selection.pageId, selection.oKey, (sp) => {
+      sp.shapeBackgroundFill = { rgb };
+    });
+    setStyle({ ...style, fill: rgb });
+  }
+
   return (
     <Section sectionKey="fill">
-      <DisabledColorRow
+      <ColorRow
         label={t('format.fill.label')}
-        value={value}
-        onChange={setValue}
+        value={style.fill}
+        onChange={apply}
+        onClear={() => apply('rgba(0,0,0,0)')}
+        clearLabel={t('format.fill.none')}
       />
     </Section>
   );
@@ -369,54 +553,89 @@ function FillSection() {
 
 /* ============================================================ border ===== */
 
-// TODO(univer): Same gap as fill. `outline` lives on
-// shape.shapeProperties.outline but no mutation exposes a single-element
-// patch. Disabled with a tooltip until the patch lands.
-function BorderSection() {
+// Maps the 3-way solid/dashed/dotted segmented control to BorderStyleTypes
+// (THIN=solid / DASHED / DOTTED) — the values ShapeAdaptor's dashMap honours.
+const DASH_OPTIONS: { key: 'solid' | 'dashed' | 'dotted'; value: BorderStyleTypes }[] = [
+  { key: 'solid', value: BorderStyleTypes.THIN },
+  { key: 'dashed', value: BorderStyleTypes.DASHED },
+  { key: 'dotted', value: BorderStyleTypes.DOTTED },
+];
+
+function dashKeyOf(v: BorderStyleTypes): 'solid' | 'dashed' | 'dotted' {
+  if (v === BorderStyleTypes.DASHED) return 'dashed';
+  if (v === BorderStyleTypes.DOTTED) return 'dotted';
+  return 'solid';
+}
+
+// Border writes `shapeProperties.outline = { outlineFill, weight, dashStyle }`.
+// ShapeAdaptor reads outlineFill→stroke, weight→strokeWidth, dashStyle→
+// strokeDashArray. We default the colour to near-black when the shape has no
+// outline yet so the first edit is visible.
+function BorderSection({ selection }: { selection: SelectionSnapshot }) {
   const { t } = useTranslation('dialogs');
-  const [color, setColor] = useState<string>('#222630');
-  const [width, setWidth] = useState<number>(1);
-  const [dash, setDash] = useState<'solid' | 'dashed' | 'dotted'>('solid');
+  const [style, setStyle] = useShapeStyle(selection);
+
+  function patchOutline(next: Partial<Pick<ShapeStyle, 'borderColor' | 'borderWidth' | 'borderDash'>>) {
+    const merged = { ...style, ...next };
+    mutateShape(selection.pageId, selection.oKey, (sp) => {
+      sp.outline = {
+        ...sp.outline,
+        outlineFill: { rgb: merged.borderColor ?? 'rgb(34, 38, 45)' },
+        weight: merged.borderWidth,
+        dashStyle: merged.borderDash,
+      };
+    });
+    setStyle(merged);
+  }
+
   return (
     <Section sectionKey="border">
-      <DisabledColorRow
+      <ColorRow
         label={t('format.border.colorLabel')}
-        value={color}
-        onChange={setColor}
+        value={style.borderColor}
+        onChange={(rgb) => patchOutline({ borderColor: rgb })}
+        onClear={() => {
+          mutateShape(selection.pageId, selection.oKey, (sp) => {
+            sp.outline = {
+              ...sp.outline,
+              outlineFill: { rgb: 'rgba(0,0,0,0)' },
+              weight: 0,
+              dashStyle: BorderStyleTypes.NONE,
+            };
+          });
+          setStyle({ ...style, borderColor: null, borderWidth: 0 });
+        }}
+        clearLabel={t('format.border.none')}
       />
       <div className="cs-format-pane__row">
         <NumericField
           label={t('format.border.widthLabel')}
           ariaLabel={t('format.border.widthAria')}
-          value={width}
-          onCommit={setWidth}
-          disabled
-          disabledTooltip={t('format.todoUniver')}
+          value={style.borderWidth}
+          onCommit={(width) => patchOutline({ borderWidth: width })}
           min={0}
         />
       </div>
-      <div
-        className="cs-format-pane__row cs-format-pane__row--col"
-        title={t('format.todoUniver')}
-      >
+      <div className="cs-format-pane__row cs-format-pane__row--col">
         <span className="cs-format-pane__field-label">
           {t('format.border.dashLabel')}
         </span>
         <div className="cs-format-pane__segmented" role="radiogroup">
-          {(['solid', 'dashed', 'dotted'] as const).map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              role="radio"
-              aria-checked={dash === opt}
-              className={`cs-format-pane__seg${dash === opt ? ' is-active' : ''}`}
-              onClick={() => setDash(opt)}
-              disabled
-              title={t('format.todoUniver')}
-            >
-              {t(`format.border.dash.${opt}`)}
-            </button>
-          ))}
+          {DASH_OPTIONS.map((opt) => {
+            const active = dashKeyOf(style.borderDash) === opt.key;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                className={`cs-format-pane__seg${active ? ' is-active' : ''}`}
+                onClick={() => patchOutline({ borderDash: opt.value })}
+              >
+                {t(`format.border.dash.${opt.key}`)}
+              </button>
+            );
+          })}
         </div>
       </div>
     </Section>
@@ -425,101 +644,70 @@ function BorderSection() {
 
 /* ============================================================ shadow ===== */
 
-// TODO(univer): No shadow primitive in IPageElement or shapeProperties in
-// v0.24.0. Effect lives on the OOXML side (a:effectLst) and would need a
-// new field on the model. Tracked in UNIVER_SLIDES_GAPS.md.
-function ShadowSection() {
+// Shadow writes `shapeProperties.effectLst.outerShdw` (EMU dist + 60000ths
+// dir + EMU blurRad). ShapeAdaptor.convert decodes outerShdw into the
+// engine-render shadow* props (shadowEnabled / shadowColor / shadowOffsetX/Y
+// / shadowBlur), so the bump repaints the drop shadow. Toggling off deletes
+// the effectLst so the shape renders flat again.
+function ShadowSection({ selection }: { selection: SelectionSnapshot }) {
   const { t } = useTranslation('dialogs');
-  const [enabled, setEnabled] = useState(false);
-  const [color, setColor] = useState<string>('#000000');
-  const [ox, setOx] = useState(2);
-  const [oy, setOy] = useState(2);
-  const [blur, setBlur] = useState(4);
+  const [style, setStyle] = useShapeStyle(selection);
+
+  function writeShadow(next: ShapeStyle) {
+    mutateShape(selection.pageId, selection.oKey, (sp) => {
+      if (!next.shadowEnabled) {
+        if (sp.effectLst) delete sp.effectLst.outerShdw;
+        return;
+      }
+      sp.effectLst = {
+        ...sp.effectLst,
+        outerShdw: buildOuterShadow(
+          next.shadowColor ?? '#000000',
+          next.shadowOffsetX,
+          next.shadowOffsetY,
+          next.shadowBlur,
+        ),
+      };
+    });
+    setStyle(next);
+  }
 
   return (
     <Section sectionKey="shadow" defaultOpen={false}>
-      <label
-        className="cs-format-pane__toggle"
-        title={t('format.todoUniver')}
-      >
+      <label className="cs-format-pane__toggle">
         <input
           type="checkbox"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-          disabled
+          checked={style.shadowEnabled}
+          onChange={(e) => writeShadow({ ...style, shadowEnabled: e.target.checked })}
         />
         <span>{t('format.shadow.enable')}</span>
       </label>
-      <DisabledColorRow
+      <ColorRow
         label={t('format.shadow.colorLabel')}
-        value={color}
-        onChange={setColor}
+        value={style.shadowColor}
+        onChange={(rgb) => writeShadow({ ...style, shadowEnabled: true, shadowColor: rgb })}
       />
       <div className="cs-format-pane__row">
         <NumericField
           label={t('format.shadow.offsetX')}
           ariaLabel={t('format.shadow.offsetXAria')}
-          value={ox}
-          onCommit={setOx}
-          disabled
-          disabledTooltip={t('format.todoUniver')}
+          value={style.shadowOffsetX}
+          onCommit={(v) => writeShadow({ ...style, shadowEnabled: true, shadowOffsetX: v })}
         />
         <NumericField
           label={t('format.shadow.offsetY')}
           ariaLabel={t('format.shadow.offsetYAria')}
-          value={oy}
-          onCommit={setOy}
-          disabled
-          disabledTooltip={t('format.todoUniver')}
+          value={style.shadowOffsetY}
+          onCommit={(v) => writeShadow({ ...style, shadowEnabled: true, shadowOffsetY: v })}
         />
       </div>
       <div className="cs-format-pane__row">
         <NumericField
           label={t('format.shadow.blur')}
           ariaLabel={t('format.shadow.blurAria')}
-          value={blur}
-          onCommit={setBlur}
-          disabled
-          disabledTooltip={t('format.todoUniver')}
+          value={style.shadowBlur}
+          onCommit={(v) => writeShadow({ ...style, shadowEnabled: true, shadowBlur: v })}
           min={0}
-        />
-      </div>
-    </Section>
-  );
-}
-
-/* ============================================================ opacity ==== */
-
-// TODO(univer): No opacity field on IPageElement / shapeProperties. Would
-// need an `alpha` add to the model + UpdateSlideElementOperation. Slider
-// is rendered disabled.
-function OpacitySection() {
-  const { t } = useTranslation('dialogs');
-  const [value, setValue] = useState(100);
-  return (
-    <Section sectionKey="opacity" defaultOpen={false}>
-      <div
-        className="cs-format-pane__row cs-format-pane__row--col"
-        title={t('format.todoUniver')}
-      >
-        <div className="cs-format-pane__opacity-head">
-          <span className="cs-format-pane__field-label">
-            {t('format.opacity.label')}
-          </span>
-          <span className="cs-format-pane__opacity-value">
-            {t('format.opacity.percent', { value })}
-          </span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={value}
-          onChange={(e) => setValue(Number(e.target.value))}
-          aria-label={t('format.opacity.aria')}
-          className="cs-format-pane__opacity"
-          disabled
         />
       </div>
     </Section>
@@ -609,27 +797,27 @@ function NumericField({
   );
 }
 
-interface DisabledColorRowProps {
+interface ColorRowProps {
   label: string;
-  value: string;
-  onChange: (next: string) => void;
+  // Null when the property is unset / transparent. The swatch then shows
+  // a placeholder and the hex falls back to a sensible default for editing.
+  value: string | null;
+  onChange: (rgb: string) => void;
+  // Optional "no fill" / clear affordance (fill + border only).
+  onClear?: () => void;
+  clearLabel?: string;
 }
 
-// Single-row colour input. Disabled because Univer has no mutation we can
-// dispatch yet (see file header). When the patch lands, replace with the
-// shared ColorPicker.
-function DisabledColorRow({ label, value, onChange }: DisabledColorRowProps) {
-  const { t } = useTranslation('dialogs');
-  const tip = t('format.todoUniver');
-  const hex = useMemo(() => {
-    if (value.startsWith('#')) return value;
-    return rgbToHex(value);
-  }, [value]);
+// Single-row colour input wired to the live model. The native `<input
+// type="color">` always edits in hex; `onChange` hands the parent an
+// `rgb(r, g, b)` string so the model only ever stores one colour shape
+// (matching the toolbar/BackgroundPicker convention). The optional clear
+// button sets the property transparent.
+function ColorRow({ label, value, onChange, onClear, clearLabel }: ColorRowProps) {
+  const isTransparent = !value || /rgba?\([^)]*,\s*0\s*\)/i.test(value);
+  const hex = useMemo(() => rgbToHex(value), [value]);
   return (
-    <label
-      className="cs-format-pane__color-row is-disabled"
-      title={tip}
-    >
+    <div className="cs-format-pane__color-row">
       <span className="cs-format-pane__field-label">{label}</span>
       <span className="cs-format-pane__color-input">
         <input
@@ -637,15 +825,26 @@ function DisabledColorRow({ label, value, onChange }: DisabledColorRowProps) {
           value={hex}
           onChange={(e) => {
             const rgb = hexToRgb(e.target.value);
-            if (rgb) onChange(rgb);
-            else onChange(e.target.value);
+            onChange(rgb ?? e.target.value);
           }}
-          disabled
           aria-label={label}
         />
-        <span className="cs-format-pane__color-hex">{hex.toUpperCase()}</span>
+        <span className="cs-format-pane__color-hex">
+          {isTransparent ? '—' : hex.toUpperCase()}
+        </span>
+        {onClear && (
+          <button
+            type="button"
+            className="cs-format-pane__color-clear"
+            onClick={onClear}
+            aria-label={clearLabel}
+            title={clearLabel}
+          >
+            <Icon name="close" size={12} />
+          </button>
+        )}
       </span>
-    </label>
+    </div>
   );
 }
 
@@ -659,6 +858,21 @@ function DisabledColorRow({ label, value, onChange }: DisabledColorRowProps) {
 // Mounted alongside <App /> in main.tsx — no prop drilling.
 export function FormatPaneProvider() {
   const [selection, setSelection] = useState<SelectionSnapshot | null>(null);
+
+  // Mirror the React selection into the module-level selection bridge so the
+  // Toolbar's fill/border colour pickers can target the same shape. The
+  // FormatPane is the single source of truth for "what's selected" (it owns
+  // the transformer subscription); the Toolbar only reads.
+  useEffect(() => {
+    setSelectedElement(
+      selection ? { pageId: selection.pageId, elementId: selection.oKey } : null,
+    );
+    return () => {
+      // On unmount, drop the shared selection so the toolbar disables its
+      // shape-targeted colour pickers.
+      setSelectedElement(null);
+    };
+  }, [selection]);
 
   // We chain three subscriptions:
   //   1. Poll for `window.univer` until the unit is mounted.

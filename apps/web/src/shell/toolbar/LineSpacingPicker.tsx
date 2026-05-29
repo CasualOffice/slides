@@ -1,17 +1,14 @@
-// Line-spacing popover — preset rows (1.0 / 1.15 / 1.5 / 2.0 / 2.5 / 3.0) +
-// a "Custom spacing…" row.
+// Line-spacing popover — preset rows (1.0 / 1.15 / 1.5 / 2.0 / 2.5 / 3.0).
 //
-// TODO(univer): docs-ui v0.24.0 exposes NO line-spacing command — the only
-// paragraph-level mutation surface is alignment + lists. Implementing this
-// upstream means a new `doc.command.set-line-spacing` that rewrites the
-// paragraph's `spaceBefore` / `spaceAfter` / `lineHeight` fields via the
-// same RichTextEditingMutation path the align/list commands use. Tracked in
-// `docs/UNIVER_SLIDES_GAPS.md`. Until the fork lands, the preset buttons
-// remain inert — they update local state so the popover highlights the
-// chosen value, but no mutation broadcasts.
+// Wired to `doc-paragraph-setting.command` (docs-ui v0.24.0) via the
+// `setLineSpacing` helper: each preset writes the paragraph's `lineSpacing`
+// multiplier with `SpacingRule.AUTO`, the same call the built-in docs-ui
+// paragraph-setting panel makes. Functional on any text frame the caret is
+// inside.
 import { useRef, useState } from 'react';
 import { Icon } from '../icons';
 import { useTranslation } from '../../i18n';
+import { setLineSpacing } from '../../univer/commands';
 import { anchorPosition, useDismiss } from './popover-utils';
 
 const PRESETS: { value: number; labelKey: string }[] = [
@@ -75,8 +72,7 @@ export function LineSpacingPicker({ value, onChange }: LineSpacingPickerProps) {
                   onClick={() => {
                     onChange(preset.value);
                     setAnchor(null);
-                    // TODO(univer): dispatch 'doc.command.set-line-spacing' once
-                    // the upstream command lands. Inert until then.
+                    void setLineSpacing(preset.value);
                   }}
                 >
                   {isActive && <Icon name="check" size={12} className="cs-toolbar2__check" />}
