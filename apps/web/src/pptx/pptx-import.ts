@@ -2296,6 +2296,38 @@ async function buildServicePlaceholders(
 // Resolve a slide's layout (then master) and merge their placeholder
 // rects. Layout overrides master where both define the same key —
 // that matches PowerPoint's inheritance order.
+// J6 — parse a slide master's `<p:txStyles>` into title / body / other
+// default run-props (lvl1 `<a:defRPr>` each). The title placeholder is
+// the title class, body / subtitle the body class, and everything else
+// (numbers, footers, free text) the otherStyle class. isTitle is passed
+// to parseRunProps so `+mj-lt` / `+mn-lt` sentinels resolve correctly.
+function parseMasterTextStyles(
+  masterXml: string,
+  theme: ThemeMap | null,
+): { title?: Partial<ISlideRichTextProps>; body?: Partial<ISlideRichTextProps>; other?: Partial<ISlideRichTextProps> } {
+  const out: { title?: Partial<ISlideRichTextProps>; body?: Partial<ISlideRichTextProps>; other?: Partial<ISlideRichTextProps> } = {};
+  const parsed = parser.parse(masterXml) as XmlNode;
+  const master = findChild(parsed, 'p:sldMaster');
+  const txStyles = findChild(master, 'p:txStyles');
+  if (!txStyles) return out;
+  const readStyle = (styleTag: string, isTitle: boolean): Partial<ISlideRichTextProps> | undefined => {
+    const style = findChild(txStyles, styleTag);
+    if (!style) return undefined;
+    const lvl1 = findChild(style, 'a:lvl1pPr');
+    const defRPr = findChild(lvl1, 'a:defRPr');
+    if (!defRPr) return undefined;
+    const props = parseRunProps(defRPr, theme, isTitle);
+    return Object.keys(props).length > 0 ? props : undefined;
+  };
+  const title = readStyle('p:titleStyle', true);
+  const body = readStyle('p:bodyStyle', false);
+  const other = readStyle('p:otherStyle', false);
+  if (title) out.title = title;
+  if (body) out.body = body;
+  if (other) out.other = other;
+  return out;
+}
+
 async function buildPlaceholderMap(
   slideRelsXml: string | null,
   zip: JSZip,
@@ -2318,14 +2350,32 @@ async function buildPlaceholderMap(
   const layoutRelsXml = await zip.file(layoutRelsPath)?.async('string');
 
   let masterMap = new Map<string, PlaceholderRect>();
+  // J6 — master `<p:txStyles>` (titleStyle / bodyStyle / otherStyle).
+  // These top-level style blocks are the lowest-priority text default
+  // for placeholders of the matching class, BELOW the placeholder's
+  // own lstStyle. PowerPoint themes routinely put the title COLOR +
+  // major font here (not on the placeholder), so without reading it a
+  // gold themed title renders black. lvl1 only for now.
+  let masterTxStyles: { title?: Partial<ISlideRichTextProps>; body?: Partial<ISlideRichTextProps>; other?: Partial<ISlideRichTextProps> } = {};
   if (layoutRelsXml) {
     const masterTarget = findRelTargetByType(layoutRelsXml, '/slideMaster');
     if (masterTarget) {
       const masterPath = resolveRelTarget(masterTarget, layoutDir);
       const masterXml = await zip.file(masterPath)?.async('string');
-      if (masterXml) masterMap = extractPlaceholderRects(masterXml, theme);
+      if (masterXml) {
+        masterMap = extractPlaceholderRects(masterXml, theme);
+        masterTxStyles = parseMasterTextStyles(masterXml, theme);
+      }
     }
   }
+
+  // Class a placeholder key into title / body / other for txStyles.
+  const txStyleForKey = (key: string): Partial<ISlideRichTextProps> | undefined => {
+    const t = key.split('|')[0];
+    if (t === 'title' || t === 'ctrTitle') return masterTxStyles.title;
+    if (t === 'body' || t === 'subTitle') return masterTxStyles.body;
+    return masterTxStyles.other;
+  };
 
   const layoutMap = extractPlaceholderRects(layoutXml, theme);
   // Master first, then layout overrides. Field-level merge: layout's
@@ -2349,6 +2399,15 @@ async function buildPlaceholderMap(
         ...(layoutEntry.defaultRunProps ?? {}),
       },
     });
+  }
+  // J6 — fold master txStyles UNDER each placeholder's resolved
+  // defaults (placeholder lstStyle still wins field-by-field). This
+  // supplies the title color / major font that themes park in
+  // <p:titleStyle> rather than on the placeholder.
+  for (const [k, entry] of merged) {
+    const tx = txStyleForKey(k);
+    if (!tx || Object.keys(tx).length === 0) continue;
+    merged.set(k, { ...entry, defaultRunProps: { ...tx, ...(entry.defaultRunProps ?? {}) } });
   }
   return merged;
 }
