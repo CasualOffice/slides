@@ -1,10 +1,38 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Univer } from '@univerjs/core';
 import { IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
 import { dispatchSlideCommand } from '../univer/commands';
+import { useTranslation } from '../i18n';
 import { LAYOUT_TEMPLATES, PREVIEW_VIEWBOX, buildPageFromLayout } from './layouts';
 import type { LayoutTemplate } from './layouts';
+
+type LayoutMode = 'insert' | 'apply';
+
+// Replace the ACTIVE page's elements with the chosen layout's placeholder
+// elements ("Change layout"). Direct snapshot write + incrementRev, the same
+// pattern the theme cascade / slide reorder use. Univer v0.24.0 has no
+// change-layout mutation. TODO(collab): not collab-safe until the fork
+// mutation lands.
+function applyLayoutToCurrent(template: LayoutTemplate): void {
+  const w = window as unknown as { univer?: Univer };
+  const univer = w.univer;
+  if (!univer) return;
+  try {
+    const instances = univer.__getInjector().get(IUniverInstanceService);
+    const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+    if (!model) return;
+    const active = model.getActivePage();
+    if (!active) return;
+    // Swap the page's elements for the template's placeholders; keep the
+    // existing background fill so a themed deck doesn't reset to white.
+    active.pageElements = template.buildElements();
+    model.incrementRev();
+    model.setActivePage(active);
+  } catch {
+    /* model not ready — nothing to do */
+  }
+}
 
 // Anchored popover for the toolbar's "Layout" button. Shows the six
 // layout templates as mini SVG previews; clicking one inserts a new
@@ -55,7 +83,9 @@ function insertSlideWithLayout(template: LayoutTemplate): void {
 }
 
 export function LayoutPicker({ anchorRect, onClose }: LayoutPickerProps) {
+  const { t } = useTranslation('dialogs');
   const ref = useRef<HTMLDivElement>(null);
+  const [mode, setMode] = useState<LayoutMode>('insert');
 
   useEffect(() => {
     if (!anchorRect) return;
@@ -84,7 +114,29 @@ export function LayoutPicker({ anchorRect, onClose }: LayoutPickerProps) {
       data-testid="layout-picker"
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div className="cs-layout-picker__header">Insert slide with layout</div>
+      <div className="cs-layout-picker__header">
+        {mode === 'insert' ? t('layout.headerInsert') : t('layout.headerApply')}
+      </div>
+      <div className="cs-layout-picker__modes" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'insert'}
+          className={`cs-layout-picker__mode ${mode === 'insert' ? 'is-active' : ''}`}
+          onClick={() => setMode('insert')}
+        >
+          {t('layout.modeInsert')}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'apply'}
+          className={`cs-layout-picker__mode ${mode === 'apply' ? 'is-active' : ''}`}
+          onClick={() => setMode('apply')}
+        >
+          {t('layout.modeApply')}
+        </button>
+      </div>
       <div className="cs-layout-picker__grid">
         {LAYOUT_TEMPLATES.map((tpl) => (
           <button
@@ -93,7 +145,8 @@ export function LayoutPicker({ anchorRect, onClose }: LayoutPickerProps) {
             className="cs-layout-picker__tile"
             data-testid={`layout-${tpl.id}`}
             onClick={() => {
-              insertSlideWithLayout(tpl);
+              if (mode === 'insert') insertSlideWithLayout(tpl);
+              else applyLayoutToCurrent(tpl);
               onClose();
             }}
             title={tpl.label}

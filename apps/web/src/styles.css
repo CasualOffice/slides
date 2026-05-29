@@ -3455,3 +3455,33 @@ body.cs-slide-rail-open .cs-notes {
   outline: 2px solid var(--cs-focus);
   outline-offset: -1px;
 }
+
+/* ================ Layout picker mode toggle ================ */
+.cs-layout-picker__modes {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  margin: 0 0 8px;
+  background: var(--cs-surface-2);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius);
+}
+.cs-layout-picker__mode {
+  flex: 1;
+  height: 26px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--cs-text-mute);
+  border-radius: 3px;
+  transition: background 80ms ease, color 80ms ease;
+}
+.cs-layout-picker__mode:hover { color: var(--cs-text); }
+.cs-layout-picker__mode.is-active {
+  background: var(--cs-surface);
+  color: var(--cs-accent);
+  box-shadow: var(--cs-shadow-1);
+}
+.cs-layout-picker__mode:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: 1px;
+}

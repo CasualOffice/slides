@@ -338,7 +338,11 @@
         "clickToAddContent": "Click to add content",
         "heading": "Heading",
         "sectionTitle": "Section title"
-      }
+      },
+      "modeInsert": "Insert new",
+      "modeApply": "Apply to current",
+      "headerInsert": "Insert slide with layout",
+      "headerApply": "Change current slide layout"
     },
     "properties": {
       "title": "Properties",
