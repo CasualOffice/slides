@@ -8,7 +8,9 @@ import {
   UpdateDocsAttributeType,
   UniverInstanceType,
 } from '@univerjs/core';
+import type { SlideDataModel } from '@univerjs/slides';
 import { DocSelectionManagerService } from '@univerjs/docs';
+import { printDeck } from '../shell/download-slide';
 
 // Thin façade over the live Univer instance for ribbon/status-bar dispatches.
 // Reads `window.univer` (set by UniverSlide on mount) so any React component
@@ -41,8 +43,32 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   // bus. Keeps small UI verbs (print, slideshow, fit-to-window) out of the
   // collab broadcast envelope.
   if (id === 'casual-slides.command.print') {
-    if (typeof window !== 'undefined') window.print();
-    return true;
+    // Real slide-by-slide print. Pulls the live deck snapshot and routes
+    // through the same offscreen-SlideTile rasterizer the PNG/PDF
+    // exports use. The previous `window.print()` printed the editor
+    // viewport (toolbar, slide panel, etc.) — useless for a deck print.
+    const univer = getUniver();
+    if (!univer) return false;
+    try {
+      const instances = univer.__getInjector().get(IUniverInstanceService);
+      const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+      if (!model) return false;
+      const snap = model.getSnapshot();
+      const pageSize = {
+        width: snap.pageSize?.width ?? 960,
+        height: snap.pageSize?.height ?? 540,
+      };
+      const order = snap.body?.pageOrder ?? [];
+      const pageMap = snap.body?.pages ?? {};
+      const pages = order.map((pid) => pageMap[pid]).filter((p): p is NonNullable<typeof p> => !!p);
+      if (!pages.length) return false;
+      await printDeck(pages, pageSize);
+      return true;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[casual-slides.command.print] failed:', err);
+      return false;
+    }
   }
 
   const univer = getUniver();
