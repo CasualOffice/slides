@@ -58,7 +58,8 @@
       },
       "pageSetup": "Page setup",
       "downloadPng": "Download slide as PNG",
-      "downloadPdf": "Download deck as PDF"
+      "downloadPdf": "Download deck as PDF",
+      "makeCopy": "Make a copy"
     },
     "edit": {
       "label": "Edit",

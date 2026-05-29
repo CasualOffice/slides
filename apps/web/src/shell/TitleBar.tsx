@@ -28,6 +28,7 @@ export interface TitleBarProps {
   onOpenPageSetup: () => void;
   onDownloadPng: () => void;
   onDownloadPdf: () => void;
+  onMakeCopy: () => void;
   onToggleNotes?: () => void;
   onFitToWindow?: () => void;
   onZoomIn?: () => void;
@@ -69,6 +70,7 @@ function buildMenus(t: (key: string) => string): MenuDef[] {
       { id: 'open', label: t('menu:file.open'), shortcut: t('menu:file.shortcut.open') },
       { id: 'recent', label: t('menu:file.recent') },
       { id: 'save', label: t('menu:file.save'), shortcut: t('menu:file.shortcut.save') },
+      { id: 'makeCopy', label: t('menu:file.makeCopy') },
       { id: 'sep1', label: '---' },
       { id: 'downloadPng', label: t('menu:file.downloadPng') },
       { id: 'downloadPdf', label: t('menu:file.downloadPdf') },
@@ -136,6 +138,7 @@ export function TitleBar({
   onOpenPageSetup,
   onDownloadPng,
   onDownloadPdf,
+  onMakeCopy,
   onToggleNotes,
   onFitToWindow,
   onZoomIn,
@@ -200,6 +203,7 @@ export function TitleBar({
         if (itemId === 'pageSetup') onOpenPageSetup();
         if (itemId === 'downloadPng') onDownloadPng();
         if (itemId === 'downloadPdf') onDownloadPdf();
+        if (itemId === 'makeCopy') onMakeCopy();
         if (itemId === 'recent') onOpenRecent();
         return;
       }
@@ -246,6 +250,7 @@ export function TitleBar({
       onOpenPageSetup,
       onDownloadPng,
       onDownloadPdf,
+      onMakeCopy,
       onToggleNotes,
       onFitToWindow,
       onZoomIn,

@@ -492,6 +492,20 @@ export function App() {
     setDirty(true);
   }
 
+  // File → Make a copy. Clones the live deck snapshot under a fresh id +
+  // " (copy)" title, then swaps state. UniverSlide is keyed on snapshot.id
+  // so React remounts a new Univer instance with the cloned content — the
+  // user can then File → Save to write the copy as a new .pptx.
+  function handleMakeCopy() {
+    const live = getCurrentSnapshot(snapshot);
+    const cloned = structuredClone(live);
+    cloned.id = `${live.id || 'deck'}-copy-${Date.now().toString(36)}`;
+    cloned.title = `${(live.title || 'Untitled deck').trim()} (copy)`;
+    setSnapshot(cloned);
+    setDirty(true);
+    setStatus(`Created a copy · ${cloned.title}`);
+  }
+
   // View → Fit to window. Re-invokes SlideRenderController.scrollToCenter
   // (same engine as UniverSlide.tsx mount-centering), then resets zoom to
   // 100% — the centering math assumes scale=1. Google Slides' Fit behaves
@@ -592,6 +606,7 @@ export function App() {
         onOpenPageSetup={() => setPageSetupOpen(true)}
         onDownloadPng={() => void handleDownloadPng()}
         onDownloadPdf={() => void handleDownloadPdf()}
+        onMakeCopy={handleMakeCopy}
         onToggleNotes={() => setNotesVisible((v) => !v)}
         onFitToWindow={handleFitToWindow}
         onZoomIn={() => setZoom((z) => Math.min(400, z + 10))}
