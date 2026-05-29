@@ -1102,13 +1102,19 @@ export function FormatPaneProvider() {
   // tree — same isolation pattern as ShortcutsProvider.
   useEffect(() => {
     const cls = 'cs-format-pane-open';
-    if (selection) {
+    const open = !!selection;
+    if (open) {
       document.body.classList.add(cls);
     } else {
       document.body.classList.remove(cls);
     }
+    // Fire a custom event so App.tsx can auto-zoom the canvas + recenter
+    // while the workspace margin animates. We can't drive zoom from here
+    // — it's owned by App.tsx — so we publish, App subscribes.
+    window.dispatchEvent(new CustomEvent('cs:format-pane', { detail: { open } }));
     return () => {
       document.body.classList.remove(cls);
+      window.dispatchEvent(new CustomEvent('cs:format-pane', { detail: { open: false } }));
     };
   }, [selection]);
 

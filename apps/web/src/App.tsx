@@ -260,6 +260,84 @@ export function App() {
     return () => window.clearTimeout(t);
   }, [zoom, snapshot.id]);
 
+  // When the FormatPane opens, the workspace squeezes 280 px from the
+  // right and the slide can end up partially hidden behind the pane.
+  // Animate the scene zoom DOWN to fit and recenter; on close, restore
+  // the user's prior zoom. We never zoom UP — if the user already had
+  // 75 %, opening the pane keeps it at 75 %. The animation runs at
+  // ~16 ms ticks via requestAnimationFrame (≈ 220 ms total, cubic
+  // ease-out) so the pane slide-in + canvas re-fit feel like one motion.
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => {
+    const PANE_FIT_ZOOM = 85;
+    const ANIMATION_MS = 220;
+    let rafId: number | null = null;
+    let priorZoom: number | null = null;
+
+    function recenter() {
+      const w = window as unknown as { univer?: Univer };
+      const univer = w.univer;
+      if (!univer) return;
+      try {
+        const instances = univer.__getInjector().get(IUniverInstanceService);
+        const unitId = instances.getCurrentUnitOfType(UniverInstanceType.UNIVER_SLIDE)?.getUnitId();
+        if (!unitId) return;
+        const renderManager = univer.__getInjector().get(IRenderManagerService);
+        const renderUnit = renderManager.getRenderById(unitId);
+        renderUnit?.engine?.resize();
+        void import('@univerjs/slides-ui').then(({ SlideRenderController }) => {
+          try { renderUnit?.with(SlideRenderController)?.scrollToCenter(); } catch { /* not ready */ }
+        });
+      } catch { /* ignore */ }
+    }
+
+    function animateZoomTo(target: number, onDone?: () => void) {
+      if (rafId != null) cancelAnimationFrame(rafId);
+      const startPct = (() => {
+        const s = getMainScene();
+        if (!s) return target;
+        const sc = s.scaleX ?? 1;
+        return sc * 100;
+      })();
+      const startTime = performance.now();
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - startTime) / ANIMATION_MS);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const v = startPct + (target - startPct) * eased;
+        applyZoom(v);
+        if (t < 1) rafId = requestAnimationFrame(tick);
+        else {
+          rafId = null;
+          setZoom(Math.round(target));
+          onDone?.();
+        }
+      };
+      rafId = requestAnimationFrame(tick);
+    }
+
+    const handler = (e: Event) => {
+      const open = (e as CustomEvent<{ open: boolean }>).detail?.open;
+      const live = zoomRef.current;
+      if (open) {
+        if (priorZoom == null) priorZoom = live;
+        const target = Math.min(live, PANE_FIT_ZOOM);
+        animateZoomTo(target, recenter);
+      } else {
+        const restore = priorZoom ?? live;
+        priorZoom = null;
+        animateZoomTo(restore, recenter);
+      }
+    };
+
+    window.addEventListener('cs:format-pane', handler);
+    return () => {
+      window.removeEventListener('cs:format-pane', handler);
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot.id]);
+
   // Global keyboard shortcuts. Each guards on the active element NOT being
   // an editable input (text-frame editor inside Univer manages its own
   // shortcuts; we don't want to step on those).
