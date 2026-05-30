@@ -177,6 +177,12 @@ button:disabled { cursor: not-allowed; }
   border-color: var(--cs-focus);
   outline: 0;
   min-width: 220px;
+  /* Grow when editing so a long deck title is fully visible while
+     renaming; chrome only has so much room, so we cap at 600 px. */
+  max-width: 600px;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .cs-titlebar__pill {

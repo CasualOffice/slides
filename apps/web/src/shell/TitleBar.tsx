@@ -313,7 +313,8 @@ export function TitleBar({
               type="button"
               className="cs-titlebar__filename"
               onClick={() => setFilenameEditing(true)}
-              title={t('titlebar.filenameRename')}
+              title={`${fileName} — ${t('titlebar.filenameRename')}`}
+              aria-label={`${fileName} — ${t('titlebar.filenameRename')}`}
             >
               {fileName}
             </button>
