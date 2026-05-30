@@ -2595,6 +2595,33 @@ body.cs-format-pane-open .cs-notes {
   gap: 6px;
 }
 
+.cs-format-pane__row--arrange {
+  align-items: center;
+  gap: 6px;
+}
+
+.cs-format-pane__arrange-btn {
+  flex: 1;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cs-radius);
+  border: 1px solid var(--cs-border);
+  background: var(--cs-surface);
+  color: var(--cs-text);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.cs-format-pane__arrange-btn:hover {
+  background: var(--cs-hover);
+  border-color: var(--cs-border-2);
+}
+.cs-format-pane__arrange-btn:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: 1px;
+}
+
 .cs-format-pane__field {
   display: flex;
   flex-direction: column;

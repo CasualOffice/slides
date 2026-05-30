@@ -528,7 +528,14 @@
         "size": "Size",
         "fill": "Fill",
         "border": "Border",
-        "shadow": "Shadow"
+        "shadow": "Shadow",
+        "arrange": "Arrange"
+      },
+      "arrange": {
+        "bringForward": "Bring forward (Ctrl+Shift+])",
+        "sendBackward": "Send backward (Ctrl+Shift+[)",
+        "bringToFront": "Bring to front (Ctrl+Alt+])",
+        "sendToBack": "Send to back (Ctrl+Alt+[)"
       },
       "position": {
         "x": "X",

@@ -58,6 +58,7 @@ type Subscription = { unsubscribe(): void };
 import { Icon } from './icons';
 import { useTranslation } from '../i18n';
 import { hexToRgb, rgbToHex } from './toolbar/popover-utils';
+import { dispatchSlideCommand } from '../univer/commands';
 
 /* ============================================================ helpers === */
 
@@ -319,15 +320,69 @@ export function FormatPane({ selection, onApply }: FormatPaneInnerProps) {
             <ShadowSection selection={selection} />
           </>
         )}
+        <ArrangeSection />
       </div>
     </aside>
+  );
+}
+
+/* ============================================================ arrange ===== */
+
+// Bring forward / send backward / bring to front / send to back. Dispatches
+// `casual-slides.command.z-order` (intercepted in dispatchSlideCommand —
+// see univer/commands.ts applyZOrder). Mirrors the keyboard bindings
+// documented in the Ctrl+/ Elements section, so users who don't know
+// the shortcuts can still rearrange the layer stack.
+function ArrangeSection() {
+  const { t } = useTranslation('dialogs');
+  return (
+    <Section sectionKey="arrange" defaultOpen={false}>
+      <div className="cs-format-pane__row cs-format-pane__row--arrange">
+        <button
+          type="button"
+          className="cs-format-pane__arrange-btn"
+          title={t('format.arrange.bringForward')}
+          aria-label={t('format.arrange.bringForward')}
+          onClick={() => void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'forward' })}
+        >
+          <Icon name="arrow_upward" size={16} />
+        </button>
+        <button
+          type="button"
+          className="cs-format-pane__arrange-btn"
+          title={t('format.arrange.sendBackward')}
+          aria-label={t('format.arrange.sendBackward')}
+          onClick={() => void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'backward' })}
+        >
+          <Icon name="arrow_downward" size={16} />
+        </button>
+        <button
+          type="button"
+          className="cs-format-pane__arrange-btn"
+          title={t('format.arrange.bringToFront')}
+          aria-label={t('format.arrange.bringToFront')}
+          onClick={() => void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'front' })}
+        >
+          <Icon name="vertical_align_top" size={16} />
+        </button>
+        <button
+          type="button"
+          className="cs-format-pane__arrange-btn"
+          title={t('format.arrange.sendToBack')}
+          aria-label={t('format.arrange.sendToBack')}
+          onClick={() => void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'back' })}
+        >
+          <Icon name="vertical_align_bottom" size={16} />
+        </button>
+      </div>
+    </Section>
   );
 }
 
 /* ============================================================ section wrapper */
 
 interface SectionProps {
-  sectionKey: 'position' | 'size' | 'fill' | 'border' | 'shadow';
+  sectionKey: 'position' | 'size' | 'fill' | 'border' | 'shadow' | 'arrange';
   defaultOpen?: boolean;
   children: React.ReactNode;
 }
