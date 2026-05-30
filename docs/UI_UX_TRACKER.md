@@ -263,6 +263,17 @@ Verified against a headless browser on both dev + a production build:
 - **Wave 2 (2026-05-28, commit 75a4eab)** — W2-D (Google Slides toolbar with font family, size ±, B/I/U/S, text+fill+border color, align, list, indent ±, line spacing, link, paint format, clear formatting, ResizeObserver overflow popover, 8 new toolbar/* components, ~70 toolbar i18n keys) + W2-KB (Ctrl+/ shortcut overview dialog with search, platform-aware kbd chips, self-mounting ShortcutsProvider). Plus full brand-to-cyan repaint: CSS tokens + favicon.svg + TitleBar/AboutDialog SVG logos + `<meta name="theme-color">`. Univer command gaps recorded as TODO(univer) on inert buttons (paint format, clear formatting, link, line spacing, shape fill/outline, vertical align).
 - **Wave 2 polish (commits 9ba5c5f / e018737 / 93aa6bb / 0dc12d6)** — Killed the Material Symbols text-fallback (icon names appearing as raw text). Added 45+ Lucide-style outlined SVG bodies and filled variants for state-bearing icons. Wired `filled={isActive}` on every toggle (Bold/Italic/Underline/Strikethrough, AlignPicker, ListPicker, StatusBar view + notes). Bumped icon sizes to Google Slides spec (18 px formatting, 16 px chrome, 14 px carets). Toolbar overflow detection now measures real scrollWidth vs clientWidth. Layout clamp at every chrome region (`#root` grid + cs-titlebar + cs-toolbar + cs-statusbar + cs-workspace get `min-width: 0` + `overflow: hidden`) so the app can never bleed past viewport.
 - **Wave 3 (commits a572cbb + 2266296)** — Right-side Format pane (W3-E) selection-aware with Position/Size/Fill/Border/Shadow/Opacity sections (transform props wire end-to-end via `UpdateSlideElementOperation`; non-transform props left TODO(univer) until the v0.24.0 whitelist widens). Slideshow + presenter view (W3-G) with two-pane current+next+notes+timer, B/W blackscreen, touch swipe, deferred fullscreen, jump-to-slide, cursor auto-hide. Integrated Find &amp; Replace (W3-J) with match-case/word/regex toggles, animated cyan ring highlight, replace-one + replace-all (direct snapshot write — TODO(collab) until Univer text-run mutation is reachable).
+- **Wave 6 (2026-05-30)** — Export + keyboard polish, closing every concrete item in Wave 5 / Buckets H + I + J. Commits:
+  - `eee53d8` — File → Download slide as PNG (offscreen SlideTile + html-to-image).
+  - `e33c85d` — Toolbar Insert link via `@univerjs/docs-hyper-link[-ui]` + Ctrl+K; doc-typed plugins force-started post-`createUnit` so the operation registers globally.
+  - `6549881` — File → Download deck as PDF (jspdf, sequential rasterize, status pill streams progress).
+  - `a0a7366` — File → Make a copy (`structuredClone` of live snapshot, fresh id, " (copy)" title, remount via key).
+  - `6eca0e4` — Arrow-key element nudge (1 px / 10 px with Shift). Bails on editable surfaces.
+  - `59bbdad` — Real slide-by-slide print preview replacing viewport `window.print()`; `@page` matches native slide size, `@media print` mounts a rasterized sheet.
+  - `2b6a432` — Tab / Shift+Tab cycle through page elements via `scene.getAllObjectsByOrder` + `transformer.attachTo`.
+  - `1a0afcd` — Auto-zoom + recenter canvas when FormatPane opens (RAF ease-out to 85 %, restore on close).
+  - `99e302e` — Filename input grows on focus (cap 600 px), full title in `title` + `aria-label`.
+  - `68be48f` — Recent files pin/favorite (IndexedDB `pinned: boolean`, pinned sort first + survive 10-row trim, star icon with filled variant).
 
 ---
 
