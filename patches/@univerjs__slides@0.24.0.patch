@@ -744,11 +744,12 @@ index 64a0ae3d173be258f5a54c58f1c3e650e8bea827..1490791e402bf1ec3a819381d32b23ca
  };
  var ShapeAdaptorFactory = class {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index dcfd4547354becd08a18a870e3d74d68fc076e09..d7879045b29b60a46628ea9690f359894f6bc1d1 100644
+index dcfd4547354becd08a18a870e3d74d68fc076e09..636fe19a0a5b307165687940a34fa7d4cfea4704 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -1,6 +1,6 @@
- import { DocumentDataModel, IConfigService, IContextService, IUniverInstanceService, Inject, Injector, LocaleService, Plugin, Registry, Styles, UnitModel, UniverInstanceType, Worksheet, generateRandomId, getColorStyle, merge, sortRules } from "@univerjs/core";
+-import { DocumentDataModel, IConfigService, IContextService, IUniverInstanceService, Inject, Injector, LocaleService, Plugin, Registry, Styles, UnitModel, UniverInstanceType, Worksheet, generateRandomId, getColorStyle, merge, sortRules } from "@univerjs/core";
++import { DocumentDataModel, ICommandService, IConfigService, IContextService, IUniverInstanceService, Inject, Injector, LocaleService, Plugin, Registry, Styles, UnitModel, UniverInstanceType, Worksheet, generateRandomId, getColorStyle, merge, sortRules } from "@univerjs/core";
  import { BehaviorSubject } from "rxjs";
 -import { Circle, DocumentSkeleton, DocumentViewModel, Documents, IRenderingEngine, Image, Liquid, PageLayoutType, Rect, RichText, Scene, SceneViewer, ScrollBar, Slide, Spreadsheet, SpreadsheetColumnHeader, SpreadsheetRowHeader, SpreadsheetSkeleton, Viewport, getColor } from "@univerjs/engine-render";
 +import { Circle, DocumentSkeleton, DocumentViewModel, Documents, Group, IRenderingEngine, Image, Liquid, PageLayoutType, Path, Rect, RichText, Scene, SceneViewer, ScrollBar, Slide, Spreadsheet, SpreadsheetColumnHeader, SpreadsheetRowHeader, SpreadsheetSkeleton, Viewport, getColor } from "@univerjs/engine-render";
@@ -1484,8 +1485,8 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..d7879045b29b60a46628ea9690f35989
 -				...strokeStyle
 +				...strokeStyle,
 +				...shadowStyle
- 			});
- 		}
++			});
++		}
 +		// Casual Slides patch — per-prstGeom Path rendering for the most
 +		// common non-rect shapes. Falls back to Rect for anything not
 +		// listed. Coordinates are in object-local space (0..w / 0..h).
@@ -1673,8 +1674,8 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..d7879045b29b60a46628ea9690f35989
 +				forceRender: true,
 +				...strokeStyle,
 +				...shadowStyle
-+			});
-+		}
+ 			});
+ 		}
 +		// Fallback for everything else — at least keep the element visible
 +		// as a bounding rect with the right fill + outline. Better than
 +		// disappearing entirely.
@@ -1699,6 +1700,37 @@ index dcfd4547354becd08a18a870e3d74d68fc076e09..d7879045b29b60a46628ea9690f35989
  	}
  };
  var ShapeAdaptorFactory = class {
+@@ -916,6 +1741,30 @@ let SlideAdaptor = class SlideAdaptor extends ObjectAdaptor {
+ 			slideComponent.addPageScene(this._createScene(id, slideComponent, page, mainScene, model));
+ 		}
+ 		slideComponent.activeFirstPage();
++		// Casual Slides patch — re-paint the cached "canvas" bg Rect
++		// when slide.mutation.update-page lands. Without this, theme
++		// + bg-picker changes update the SlideDataModel snapshot
++		// (thumbnails + presenter re-read it on every render) but
++		// the main canvas keeps its stale Rect because the scene
++		// was built once at convert() time and nothing ties the
++		// snapshot back to the live Rect.
++		try {
++			const _cmdSvc = this._injector.get(ICommandService);
++			_cmdSvc.onCommandExecuted((info) => {
++				if (!info || info.id !== "slide.mutation.update-page") return;
++				const _params = info.params;
++				if (!_params || !_params.pageId) return;
++				const _patch = _params.patch;
++				if (!_patch || !("pageBackgroundFill" in _patch)) return;
++				const _scene = slideComponent.getSubScene(_params.pageId);
++				if (!_scene) return;
++				const _rect = _scene.getObject("canvas");
++				if (!_rect) return;
++				_rect.setProps({ fill: getColorStyle(_patch.pageBackgroundFill) || "rgba(255,255,255, 1)" });
++				if (typeof _rect.makeDirty === "function") _rect.makeDirty(true);
++				if (typeof _scene.makeDirty === "function") _scene.makeDirty(true);
++			});
++		} catch (_e) {}
+ 		return slideComponent;
+ 	}
+ 	_createScene(pageId, parent, page, mainScene, model) {
 diff --git a/lib/types/data-model/slide-data-model.d.ts b/lib/types/data-model/slide-data-model.d.ts
 index f22ab09ec126799709980b2d50cf54585e2d634d..c4d21f0b7baee04bc3b5e19295ca0c09464151af 100644
 --- a/lib/types/data-model/slide-data-model.d.ts

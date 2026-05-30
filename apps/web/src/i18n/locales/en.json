@@ -164,6 +164,7 @@
     "line": "Insert line",
     "newSlide": "New slide",
     "newSlideShortcut": "New slide (Ctrl+M)",
+    "duplicateSlide": "Duplicate slide",
     "layout": "Layout",
     "theme": "Theme",
     "background": "Background",

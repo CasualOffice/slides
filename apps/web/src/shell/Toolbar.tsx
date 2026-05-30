@@ -708,6 +708,10 @@ export function Toolbar() {
             <Icon name="add_to_photos" size={16} /><span>{t('toolbar:newSlide')}</span>
           </button>
           <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setSlideAnchor(null); void dispatchSlideCommand('slide.command.duplicate-slide'); }}>
+            <Icon name="content_copy" size={16} /><span>{t('toolbar:duplicateSlide')}</span>
+          </button>
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
             onClick={() => { const r = slideAnchor; setSlideAnchor(null); setLayoutAnchor(r); }}>
             <Icon name="view_compact" size={16} /><span>{t('toolbar:layout')}</span>
           </button>

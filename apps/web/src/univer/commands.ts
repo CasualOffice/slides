@@ -42,6 +42,15 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   // Casual-Slides-local commands are handled here, not via Univer's command
   // bus. Keeps small UI verbs (print, slideshow, fit-to-window) out of the
   // collab broadcast envelope.
+  if (id === 'slide.command.duplicate-slide') {
+    // Univer v0.24.0 ships no built-in duplicate-page mutation. We clone
+    // the target page on the snapshot directly — same TODO(collab) caveat
+    // as reorderPage in SlideContextMenu (not collab-safe until a real
+    // mutation lands in the fork). The accepted param is `pageId`; if
+    // omitted we duplicate the active page.
+    const targetId = (params as { pageId?: string } | undefined)?.pageId;
+    return duplicateSlide(targetId);
+  }
   if (id === 'casual-slides.command.print') {
     // Real slide-by-slide print. Pulls the live deck snapshot and routes
     // through the same offscreen-SlideTile rasterizer the PNG/PDF
@@ -175,4 +184,59 @@ export async function clearFormatting(): Promise<boolean> {
     }
   }
   return ok;
+}
+
+// Duplicate a slide. Defaults to the active slide if no id is given.
+// Deep-clones the source page via structuredClone, rewrites every
+// element id (so Univer's transformer + per-page render unit don't see
+// duplicate oKeys), inserts the clone into pageOrder right after the
+// source, then bumps the rev + re-pings setActivePage so subscribers
+// re-read. Returns true on success.
+//
+// TODO(collab): bypasses the command bus, same caveat as the move-up/
+// move-down in SlideContextMenu. Replace with a fork-side
+// `slide.mutation.duplicate-page` once it lands.
+export function duplicateSlide(sourcePageId?: string): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  const snap = model.getSnapshot();
+  const order = snap.body?.pageOrder;
+  const pages = snap.body?.pages;
+  if (!order || !pages) return false;
+  const activeId = model.getActivePage()?.id;
+  const srcId = sourcePageId ?? activeId ?? order[0];
+  if (!srcId) return false;
+  const src = pages[srcId];
+  if (!src) return false;
+
+  const stamp = Date.now().toString(36);
+  const rand = Math.random().toString(36).slice(2, 6);
+  const newPageId = `page-${stamp}-${rand}`;
+  const clone = structuredClone(src);
+  clone.id = newPageId;
+
+  // Re-id every page element + rewrite the pageElements map so the
+  // canvas renders the clone as a fresh set of BaseObjects (Univer
+  // keys its transformer by oKey — leaving the source ids would make
+  // a click on the clone select the source instead).
+  const reKeyed: Record<string, (typeof clone.pageElements)[string]> = {};
+  for (const [oldKey, el] of Object.entries(clone.pageElements ?? {})) {
+    if (!el) continue;
+    const newKey = `${oldKey}-dup-${stamp}-${Math.random().toString(36).slice(2, 6)}`;
+    el.id = newKey;
+    reKeyed[newKey] = el;
+  }
+  clone.pageElements = reKeyed;
+
+  pages[newPageId] = clone;
+  const idx = order.indexOf(srcId);
+  order.splice(idx + 1, 0, newPageId);
+
+  model.incrementRev();
+  // Move to the clone so the user sees what they just made.
+  model.setActivePage(clone);
+  return true;
 }
