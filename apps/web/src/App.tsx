@@ -275,7 +275,7 @@ export function App() {
     let rafId: number | null = null;
     let priorZoom: number | null = null;
 
-    function recenter() {
+    function recenterOnce() {
       const w = window as unknown as { univer?: Univer };
       const univer = w.univer;
       if (!univer) return;
@@ -290,6 +290,18 @@ export function App() {
           try { renderUnit?.with(SlideRenderController)?.scrollToCenter(); } catch { /* not ready */ }
         });
       } catch { /* ignore */ }
+    }
+
+    // The CSS workspace margin transition is 200 ms (see styles.css).
+    // Firing scrollToCenter at the end of our 220 ms zoom animation alone
+    // catches a stale container width — the browser's layout engine often
+    // hasn't reflowed yet. Cascade three calls so the final one lands
+    // after both transitions + a paint pass. Same idea as UniverSlide.tsx's
+    // mount-centering (80 / 400 / 1200 ms).
+    function recenter() {
+      recenterOnce();
+      window.setTimeout(recenterOnce, 100);
+      window.setTimeout(recenterOnce, 320);
     }
 
     function animateZoomTo(target: number, onDone?: () => void) {
