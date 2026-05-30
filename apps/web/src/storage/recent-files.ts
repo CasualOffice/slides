@@ -19,6 +19,8 @@ export interface RecentMeta {
   name: string;
   size: number;
   openedAt: number; // epoch ms
+  /** Pinned entries sort to the top and survive the 10-row trim. */
+  pinned?: boolean;
 }
 
 interface RecentRow extends RecentMeta {
@@ -54,14 +56,17 @@ function makeId(): string {
   return `r-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Sorted newest-first.
+// Sorted pinned-first, then newest-first within each group.
 export async function listRecents(): Promise<RecentMeta[]> {
   const db = await openDb();
   try {
     const rows = await awaitRequest<RecentRow[]>(tx(db, 'readonly').getAll());
     return rows
-      .map(({ id, name, size, openedAt }) => ({ id, name, size, openedAt }))
-      .sort((a, b) => b.openedAt - a.openedAt);
+      .map(({ id, name, size, openedAt, pinned }) => ({ id, name, size, openedAt, pinned: !!pinned }))
+      .sort((a, b) => {
+        if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+        return b.openedAt - a.openedAt;
+      });
   } finally {
     db.close();
   }
@@ -89,18 +94,44 @@ export async function addRecent(name: string, bytes: ArrayBuffer): Promise<strin
     const all = await awaitRequest<RecentRow[]>(store.getAll());
     const dup = all.find((r) => r.name === name && r.size === bytes.byteLength);
     const id = dup?.id ?? makeId();
-    const row: RecentRow = { id, name, size: bytes.byteLength, openedAt: Date.now(), bytes };
+    // Preserve the pinned flag when re-saving an existing entry.
+    const row: RecentRow = {
+      id,
+      name,
+      size: bytes.byteLength,
+      openedAt: Date.now(),
+      pinned: !!dup?.pinned,
+      bytes,
+    };
     await awaitRequest(tx(db, 'readwrite').put(row));
 
-    // Re-read after the put, then drop the oldest until we're under cap.
+    // Re-read after the put, then drop the oldest UNPINNED rows until
+    // we're under cap. Pinned rows are sticky — the user explicitly
+    // marked them and shouldn't lose them to age-out.
     const after = await awaitRequest<RecentRow[]>(tx(db, 'readonly').getAll());
-    after.sort((a, b) => b.openedAt - a.openedAt);
-    const overflow = after.slice(MAX_ENTRIES);
+    const unpinned = after.filter((r) => !r.pinned).sort((a, b) => b.openedAt - a.openedAt);
+    const overflow = unpinned.slice(MAX_ENTRIES);
     if (overflow.length) {
       const trimStore = tx(db, 'readwrite');
       await Promise.all(overflow.map((r) => awaitRequest(trimStore.delete(r.id))));
     }
     return id;
+  } finally {
+    db.close();
+  }
+}
+
+// Toggle the pinned flag on an existing entry. No-op if the entry has
+// been evicted (returns false), so callers can refresh the list and
+// surface "entry no longer available" without crashing.
+export async function setRecentPinned(id: string, pinned: boolean): Promise<boolean> {
+  const db = await openDb();
+  try {
+    const row = await awaitRequest<RecentRow | undefined>(tx(db, 'readonly').get(id));
+    if (!row) return false;
+    row.pinned = pinned;
+    await awaitRequest(tx(db, 'readwrite').put(row));
+    return true;
   } finally {
     db.close();
   }

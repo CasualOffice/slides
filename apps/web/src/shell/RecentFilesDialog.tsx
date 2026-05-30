@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RecentMeta } from '../storage/recent-files';
-import { clearRecents, listRecents, loadRecent, removeRecent } from '../storage/recent-files';
+import { clearRecents, listRecents, loadRecent, removeRecent, setRecentPinned } from '../storage/recent-files';
 import { Icon } from './icons';
 import { useFocusTrap } from './use-focus-trap';
 
@@ -105,6 +105,19 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
     [refresh],
   );
 
+  const handleTogglePin = useCallback(
+    async (entry: RecentMeta, e: React.MouseEvent) => {
+      e.stopPropagation();
+      try {
+        await setRecentPinned(entry.id, !entry.pinned);
+        await refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [refresh],
+  );
+
   const handleClear = useCallback(async () => {
     try {
       await clearRecents();
@@ -145,7 +158,7 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
         {entries && entries.length > 0 && (
           <ul className="cs-recent__list" data-testid="recent-list">
             {entries.map((entry) => (
-              <li key={entry.id} className="cs-recent__item">
+              <li key={entry.id} className={`cs-recent__item${entry.pinned ? ' cs-recent__item--pinned' : ''}`}>
                 <button
                   type="button"
                   className="cs-recent__open"
@@ -160,6 +173,16 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
                   <span className="cs-recent__meta">
                     {formatSize(entry.size)} · {formatRelative(entry.openedAt)}
                   </span>
+                </button>
+                <button
+                  type="button"
+                  className={`cs-recent__pin${entry.pinned ? ' cs-recent__pin--on' : ''}`}
+                  onClick={(e) => void handleTogglePin(entry, e)}
+                  title={entry.pinned ? 'Unpin' : 'Pin to top'}
+                  aria-label={entry.pinned ? `Unpin ${entry.name}` : `Pin ${entry.name}`}
+                  aria-pressed={!!entry.pinned}
+                >
+                  <Icon name="star" size={14} filled={!!entry.pinned} />
                 </button>
                 <button
                   type="button"

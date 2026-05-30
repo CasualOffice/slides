@@ -329,6 +329,13 @@ const ICONS: Record<string, IconBody> = {
     outlined: (
       <polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9" />
     ),
+    filled: (
+      <polygon
+        points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9"
+        fill="currentColor"
+        stroke="none"
+      />
+    ),
   },
   double_arrow: {
     outlined: (

@@ -1152,6 +1152,7 @@ button:disabled { cursor: not-allowed; }
   white-space: nowrap;
 }
 
+.cs-recent__pin,
 .cs-recent__remove {
   width: 28px;
   display: inline-flex;
@@ -1162,9 +1163,13 @@ button:disabled { cursor: not-allowed; }
   color: var(--cs-text-mute);
   cursor: pointer;
   border-radius: var(--cs-radius);
-  margin-right: 6px;
 }
+.cs-recent__remove { margin-right: 6px; }
+.cs-recent__pin:hover,
 .cs-recent__remove:hover { background: var(--cs-border-2); color: var(--cs-text); }
+.cs-recent__pin--on { color: var(--cs-accent); }
+.cs-recent__pin--on:hover { color: var(--cs-accent-dk); }
+.cs-recent__item--pinned { background: color-mix(in srgb, var(--cs-accent) 4%, transparent); }
 
 .cs-recent__error {
   margin: 0;
