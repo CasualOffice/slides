@@ -535,7 +535,10 @@
         "bringForward": "Bring forward (Ctrl+Shift+])",
         "sendBackward": "Send backward (Ctrl+Shift+[)",
         "bringToFront": "Bring to front (Ctrl+Alt+])",
-        "sendToBack": "Send to back (Ctrl+Alt+[)"
+        "sendToBack": "Send to back (Ctrl+Alt+[)",
+        "centerH": "Center horizontally on slide",
+        "centerV": "Center vertically on slide",
+        "centerBoth": "Center on slide"
       },
       "position": {
         "x": "X",

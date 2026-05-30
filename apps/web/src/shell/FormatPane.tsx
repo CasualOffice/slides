@@ -375,6 +375,35 @@ function ArrangeSection() {
           <Icon name="vertical_align_bottom" size={16} />
         </button>
       </div>
+      <div className="cs-format-pane__row cs-format-pane__row--arrange">
+        <button
+          type="button"
+          className="cs-format-pane__arrange-btn"
+          title={t('format.arrange.centerH')}
+          aria-label={t('format.arrange.centerH')}
+          onClick={() => void dispatchSlideCommand('casual-slides.command.center-on-slide', { axis: 'h' })}
+        >
+          <Icon name="format_align_center" size={16} />
+        </button>
+        <button
+          type="button"
+          className="cs-format-pane__arrange-btn"
+          title={t('format.arrange.centerV')}
+          aria-label={t('format.arrange.centerV')}
+          onClick={() => void dispatchSlideCommand('casual-slides.command.center-on-slide', { axis: 'v' })}
+        >
+          <Icon name="vertical_align_center" size={16} />
+        </button>
+        <button
+          type="button"
+          className="cs-format-pane__arrange-btn"
+          title={t('format.arrange.centerBoth')}
+          aria-label={t('format.arrange.centerBoth')}
+          onClick={() => void dispatchSlideCommand('casual-slides.command.center-on-slide', { axis: 'both' })}
+        >
+          <Icon name="filter_center_focus" size={16} />
+        </button>
+      </div>
     </Section>
   );
 }

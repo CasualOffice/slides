@@ -48,6 +48,10 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
     if (!dir) return false;
     return applyZOrder(dir);
   }
+  if (id === 'casual-slides.command.center-on-slide') {
+    const axis = (params as { axis?: CenterAxis } | undefined)?.axis ?? 'both';
+    return centerSelectionOnSlide(axis);
+  }
   if (id === 'slide.command.duplicate-slide') {
     // Univer v0.24.0 ships no built-in duplicate-page mutation. We clone
     // the target page on the snapshot directly — same TODO(collab) caveat
@@ -257,6 +261,45 @@ export function applyZOrder(direction: ZOrderDirection): boolean {
   }
 
   target.zIndex = newZ;
+  model.incrementRev();
+  const active = model.getActivePage();
+  if (active) model.setActivePage(active);
+  return true;
+}
+
+// Center the selected element on the slide. `axis` controls which
+// dimensions are centred:
+//   'h'    — horizontal only: left = (slide.width - el.width) / 2
+//   'v'    — vertical only:   top  = (slide.height - el.height) / 2
+//   'both' — both axes
+//
+// Mutates the snapshot directly + bumps the rev. TODO(collab): no
+// fork-side mutation reachable in v0.24.0; this writes element transform
+// off the command bus so peers won't see the move.
+export type CenterAxis = 'h' | 'v' | 'both';
+
+export function centerSelectionOnSlide(axis: CenterAxis): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  const sel = getSelectedElement();
+  if (!sel) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  const snap = model.getSnapshot();
+  const slideW = snap.pageSize?.width ?? 960;
+  const slideH = snap.pageSize?.height ?? 540;
+  const page = model.getPage(sel.pageId);
+  const el = page?.pageElements?.[sel.elementId];
+  if (!el) return false;
+  const w = el.width ?? 0;
+  const h = el.height ?? 0;
+  if (axis === 'h' || axis === 'both') {
+    el.left = Math.round((slideW - w) / 2);
+  }
+  if (axis === 'v' || axis === 'both') {
+    el.top = Math.round((slideH - h) / 2);
+  }
   model.incrementRev();
   const active = model.getActivePage();
   if (active) model.setActivePage(active);

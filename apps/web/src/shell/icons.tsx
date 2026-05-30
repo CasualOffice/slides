@@ -729,6 +729,14 @@ const ICONS: Record<string, IconBody> = {
       </>
     ),
   },
+  filter_center_focus: {
+    outlined: (
+      <>
+        <rect x="4" y="4" width="16" height="16" rx="2" />
+        <circle cx="12" cy="12" r="2.5" />
+      </>
+    ),
+  },
   vertical_align_bottom: {
     outlined: (
       <>
