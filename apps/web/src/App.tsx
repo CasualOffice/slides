@@ -260,6 +260,18 @@ export function App() {
     return () => window.clearTimeout(t);
   }, [zoom, snapshot.id]);
 
+  // Auto-dismiss the status pill after 3.5 s. The pill carries transient
+  // confirmations ("Saved · slide-1.png", "Created a copy", "Loaded · 3
+  // slides") that the user doesn't need to manually close — Google Slides
+  // / Office both fade these out. Errors aren't auto-cleared (different
+  // state — see the `error` pill); progress messages ("Rendering N / M…")
+  // get overwritten by the next setStatus call before the timer fires.
+  useEffect(() => {
+    if (!status) return;
+    const t = window.setTimeout(() => setStatus(null), 3500);
+    return () => window.clearTimeout(t);
+  }, [status]);
+
   // When the FormatPane opens, the workspace squeezes 280 px from the
   // right and the slide can end up partially hidden behind the pane.
   // Animate the scene zoom DOWN to fit and recenter; on close, restore
