@@ -56,7 +56,7 @@ interface ShortcutEntry {
 
 interface ShortcutSection {
   /** i18n key under `dialogs.shortcuts.categories` */
-  categoryKey: 'file' | 'edit' | 'slides' | 'view' | 'slideshow' | 'help';
+  categoryKey: 'file' | 'edit' | 'slides' | 'elements' | 'view' | 'slideshow' | 'help';
   /** Optional i18n key for a section-level hint (e.g. "Active while presenting") */
   hintKey?: string;
   rows: ShortcutEntry[];
@@ -74,6 +74,7 @@ interface ShortcutSection {
 function buildSections(isMac: boolean): ShortcutSection[] {
   const mod = isMac ? '⌘' : 'Ctrl';
   const shift = isMac ? '⇧' : 'Shift';
+  const alt = isMac ? '⌥' : 'Alt';
   const del = isMac ? 'Delete' : 'Del';
 
   return [
@@ -104,6 +105,21 @@ function buildSections(isMac: boolean): ShortcutSection[] {
         { labelKey: 'newSlide',       binds: [{ keys: [mod, 'M'] }] },
         { labelKey: 'duplicateSlide', binds: [{ keys: [mod, 'D'] }] },
         { labelKey: 'deleteSlide',    binds: [{ keys: [shift, del] }] },
+      ],
+    },
+    {
+      categoryKey: 'elements',
+      hintKey: 'elementsHint',
+      rows: [
+        { labelKey: 'insertLink',     binds: [{ keys: [mod, 'K'] }] },
+        { labelKey: 'nudge',          binds: [{ keys: ['←'] }, { keys: ['→'] }, { keys: ['↑'] }, { keys: ['↓'] }] },
+        { labelKey: 'nudgeBig',       binds: [{ keys: [shift, '←'] }, { keys: [shift, '→'] }, { keys: [shift, '↑'] }, { keys: [shift, '↓'] }] },
+        { labelKey: 'cycleNext',      binds: [{ keys: ['Tab'] }] },
+        { labelKey: 'cyclePrev',      binds: [{ keys: [shift, 'Tab'] }] },
+        { labelKey: 'bringForward',   binds: [{ keys: [mod, shift, ']'] }] },
+        { labelKey: 'sendBackward',   binds: [{ keys: [mod, shift, '['] }] },
+        { labelKey: 'bringToFront',   binds: [{ keys: [mod, alt, ']'] }] },
+        { labelKey: 'sendToBack',     binds: [{ keys: [mod, alt, '['] }] },
       ],
     },
     {
@@ -229,8 +245,9 @@ export function ShortcutsDialog({ open, onClose }: ShortcutsDialogProps) {
         'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
       );
       if (focusables.length === 0) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
+      // length > 0 was just asserted — both ends are inhabited.
+      const first = focusables[0]!;
+      const last = focusables[focusables.length - 1]!;
       const active = document.activeElement as HTMLElement | null;
       if (e.shiftKey && active === first) {
         e.preventDefault();

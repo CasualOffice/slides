@@ -476,6 +476,7 @@
         "file": "File",
         "edit": "Edit",
         "slides": "Slides",
+        "elements": "Elements",
         "view": "View",
         "slideshow": "Slideshow",
         "help": "Help"
@@ -489,6 +490,15 @@
         "newSlide": "New slide",
         "duplicateSlide": "Duplicate slide",
         "deleteSlide": "Delete slide",
+        "insertLink": "Insert link",
+        "nudge": "Nudge selection 1 px",
+        "nudgeBig": "Nudge selection 10 px",
+        "cycleNext": "Select next element",
+        "cyclePrev": "Select previous element",
+        "bringForward": "Bring forward",
+        "sendBackward": "Send backward",
+        "bringToFront": "Bring to front",
+        "sendToBack": "Send to back",
         "zoomIn": "Zoom in",
         "zoomOut": "Zoom out",
         "resetZoom": "Reset zoom to 100%",
@@ -502,6 +512,7 @@
         "slideshowExit": "Exit slideshow",
         "showShortcuts": "Show keyboard shortcuts"
       },
+      "elementsHint": "Active when an element is selected on the slide.",
       "slideshowHint": "Active while presenting (F5)."
     },
     "format": {
