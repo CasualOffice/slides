@@ -377,6 +377,22 @@ export function App() {
         // (Google Slides does the same).
         e.preventDefault();
         void dispatchSlideCommand('slide.command.duplicate-slide');
+      } else if (k === ']' && e.shiftKey && !e.altKey) {
+        // Ctrl+Shift+] — bring selected element forward by one layer.
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'forward' });
+      } else if (k === '[' && e.shiftKey && !e.altKey) {
+        // Ctrl+Shift+[ — send selected element back by one layer.
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'backward' });
+      } else if (k === ']' && e.altKey) {
+        // Ctrl+Alt+] — bring to front.
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'front' });
+      } else if (k === '[' && e.altKey) {
+        // Ctrl+Alt+[ — send to back.
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'back' });
       } else if (k === '=' || k === '+') {
         e.preventDefault();
         setZoom((z) => Math.min(400, z + 10));

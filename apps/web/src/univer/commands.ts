@@ -11,6 +11,7 @@ import {
 import type { SlideDataModel } from '@univerjs/slides';
 import { DocSelectionManagerService } from '@univerjs/docs';
 import { printDeck } from '../shell/download-slide';
+import { getSelectedElement } from '../shell/selection';
 
 // Thin façade over the live Univer instance for ribbon/status-bar dispatches.
 // Reads `window.univer` (set by UniverSlide on mount) so any React component
@@ -42,6 +43,11 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   // Casual-Slides-local commands are handled here, not via Univer's command
   // bus. Keeps small UI verbs (print, slideshow, fit-to-window) out of the
   // collab broadcast envelope.
+  if (id === 'casual-slides.command.z-order') {
+    const dir = (params as { direction?: ZOrderDirection } | undefined)?.direction;
+    if (!dir) return false;
+    return applyZOrder(dir);
+  }
   if (id === 'slide.command.duplicate-slide') {
     // Univer v0.24.0 ships no built-in duplicate-page mutation. We clone
     // the target page on the snapshot directly — same TODO(collab) caveat
@@ -184,6 +190,77 @@ export async function clearFormatting(): Promise<boolean> {
     }
   }
   return ok;
+}
+
+// Adjust the selected element's z-order on the active slide. Direction
+// matches PowerPoint / Google Slides:
+//   'forward'  — swap with the element directly above (+1 layer)
+//   'backward' — swap with the element directly below (-1 layer)
+//   'front'    — jump to max(zIndex)+1, painting on top of everything
+//   'back'     — jump to min(zIndex)-1, hiding behind everything
+//
+// Mutates the snapshot directly + bumps the rev — same TODO(collab)
+// caveat as duplicateSlide / reorderPage.
+export type ZOrderDirection = 'forward' | 'backward' | 'front' | 'back';
+
+export function applyZOrder(direction: ZOrderDirection): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  const sel = getSelectedElement();
+  if (!sel) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  const page = model.getPage(sel.pageId);
+  const els = page?.pageElements;
+  const target = els?.[sel.elementId];
+  if (!els || !target) return false;
+
+  const ids = Object.keys(els);
+  if (ids.length < 2) return false;
+  const sorted = ids
+    .map((id) => ({ id, z: els[id]?.zIndex ?? 0 }))
+    .sort((a, b) => a.z - b.z);
+  const idx = sorted.findIndex((e) => e.id === sel.elementId);
+  if (idx < 0) return false;
+
+  let newZ: number;
+  if (direction === 'front') {
+    newZ = (sorted[sorted.length - 1]!.z ?? 0) + 1;
+  } else if (direction === 'back') {
+    newZ = (sorted[0]!.z ?? 0) - 1;
+  } else if (direction === 'forward') {
+    if (idx === sorted.length - 1) return false; // already on top
+    const above = sorted[idx + 1]!;
+    // Swap z values with the neighbour so the relative gap survives.
+    const targetEl = els[sel.elementId]!;
+    const aboveEl = els[above.id]!;
+    const tmp = targetEl.zIndex ?? 0;
+    targetEl.zIndex = aboveEl.zIndex ?? 0;
+    aboveEl.zIndex = tmp;
+    model.incrementRev();
+    const active = model.getActivePage();
+    if (active) model.setActivePage(active);
+    return true;
+  } else {
+    if (idx === 0) return false; // already at back
+    const below = sorted[idx - 1]!;
+    const targetEl = els[sel.elementId]!;
+    const belowEl = els[below.id]!;
+    const tmp = targetEl.zIndex ?? 0;
+    targetEl.zIndex = belowEl.zIndex ?? 0;
+    belowEl.zIndex = tmp;
+    model.incrementRev();
+    const active = model.getActivePage();
+    if (active) model.setActivePage(active);
+    return true;
+  }
+
+  target.zIndex = newZ;
+  model.incrementRev();
+  const active = model.getActivePage();
+  if (active) model.setActivePage(active);
+  return true;
 }
 
 // Duplicate a slide. Defaults to the active slide if no id is given.
