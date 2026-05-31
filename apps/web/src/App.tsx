@@ -380,6 +380,13 @@ export function App() {
         // (Google Slides does the same).
         e.preventDefault();
         void dispatchSlideCommand('slide.command.duplicate-slide');
+      } else if (k === 'k') {
+        // Ctrl+K — Insert link. Routed through our wrapper so the
+        // docs-hyper-link plugin lazy-inits on first invocation. The
+        // plugin itself also registers Ctrl+K once started — that becomes
+        // a no-op duplicate after the first dispatch, harmless.
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.insert-link');
       } else if (k === ']' && e.shiftKey && !e.altKey) {
         // Ctrl+Shift+] — bring selected element forward by one layer.
         e.preventDefault();
@@ -459,6 +466,10 @@ export function App() {
       if (e.key !== 'F2') return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      // Defer to any open modal — F2 inside the shortcuts/properties/
+      // recent/etc. dialog shouldn't kick rename mode in the chrome
+      // behind it. Same DOM check Esc handler uses.
+      if (typeof document !== 'undefined' && document.querySelector('[role="dialog"]')) return;
       e.preventDefault();
       window.dispatchEvent(new CustomEvent('cs:rename-filename'));
     };

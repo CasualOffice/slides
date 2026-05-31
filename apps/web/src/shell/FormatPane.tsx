@@ -1255,6 +1255,11 @@ export function FormatPaneProvider() {
         const tag = target.tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
         if (target.isContentEditable) return;
+        // Bail when focus is on chrome (toolbar buttons, menus, dialogs,
+        // slide rail thumbnails). Tab there means "next button" — we
+        // should never hijack focus navigation. Only cycle canvas
+        // elements when focus is on the body or the canvas itself.
+        if (target.closest('button, [role="button"], [role="menuitem"], a[href], [role="dialog"], .cs-titlebar, .cs-toolbar, [data-u-comp="left-sidebar"]')) return;
       }
       const univer = getUniver();
       if (!univer) return;
@@ -1278,7 +1283,9 @@ export function FormatPaneProvider() {
           : (currentIdx + 1) % objs.length;
         e.preventDefault();
         transformer.clearControls();
-        transformer.attachTo(objs[nextIdx]);
+        // nextIdx is the result of a modulo against objs.length (proven
+        // ≥ 2 above), so the slot is inhabited.
+        transformer.attachTo(objs[nextIdx]!);
       } catch {
         /* unit torn down mid-cycle — ignore */
       }
