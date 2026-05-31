@@ -20,6 +20,7 @@ import { RecentFilesDialog } from './shell/RecentFilesDialog';
 import { AboutDialog } from './shell/AboutDialog';
 import { SlideContextMenu } from './shell/SlideContextMenu';
 import { dispatchSlideCommand } from './univer/commands';
+import { getSelectedElement } from './shell/selection';
 import { useCollabBridge } from './collab/CollabProvider';
 import { addRecent } from './storage/recent-files';
 
@@ -429,8 +430,8 @@ export function App() {
       }
     };
     const deleteSlideHandler = (e: KeyboardEvent) => {
-      // Bare Delete key. Skip if focus is in any editable surface — the
-      // text-frame editor uses Delete for character deletion.
+      // Bare Delete / Backspace. Skip if focus is in any editable surface
+      // — the text-frame editor uses Delete for character deletion.
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       const target = e.target as HTMLElement | null;
       const inEditable = !!target && (
@@ -439,12 +440,19 @@ export function App() {
         target.isContentEditable
       );
       if (inEditable) return;
-      // Shift+Delete acts on the active slide as a guarded variant —
-      // bare Delete should not delete slides unless focus is on the
-      // slide-bar, which we don't track today.
-      if (!e.shiftKey) return;
-      e.preventDefault();
-      void dispatchSlideCommand('slide.command.delete-slide');
+      // Shift+Delete deletes the active slide. Bare Delete deletes the
+      // currently-selected SHAPE — Google Slides / PowerPoint UX when a
+      // non-text element has focus.
+      if (e.shiftKey) {
+        e.preventDefault();
+        void dispatchSlideCommand('slide.command.delete-slide');
+        return;
+      }
+      const sel = getSelectedElement();
+      if (sel) {
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.delete-element');
+      }
     };
     const f5Handler = (e: KeyboardEvent) => {
       if (e.key === 'F5') {

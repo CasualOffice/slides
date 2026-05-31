@@ -52,6 +52,9 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
     const axis = (params as { axis?: CenterAxis } | undefined)?.axis ?? 'both';
     return centerSelectionOnSlide(axis);
   }
+  if (id === 'casual-slides.command.delete-element') {
+    return deleteSelectedElement();
+  }
   if (id === 'slide.command.duplicate-slide') {
     // Univer v0.24.0 ships no built-in duplicate-page mutation. We clone
     // the target page on the snapshot directly — same TODO(collab) caveat
@@ -261,6 +264,28 @@ export function applyZOrder(direction: ZOrderDirection): boolean {
   }
 
   target.zIndex = newZ;
+  model.incrementRev();
+  const active = model.getActivePage();
+  if (active) model.setActivePage(active);
+  return true;
+}
+
+// Delete the currently-selected slide element from its page. Returns
+// false when no selection is registered, the unit/page/element is gone,
+// or Univer isn't ready. Same TODO(collab) caveat as the other direct-
+// snapshot mutations.
+export function deleteSelectedElement(): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  const sel = getSelectedElement();
+  if (!sel) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  const page = model.getPage(sel.pageId);
+  const els = page?.pageElements;
+  if (!els || !els[sel.elementId]) return false;
+  delete els[sel.elementId];
   model.incrementRev();
   const active = model.getActivePage();
   if (active) model.setActivePage(active);
