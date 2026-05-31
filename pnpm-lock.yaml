@@ -12,7 +12,7 @@ patchedDependencies:
     hash: 82ec8237ede468a956b917c6e3ae91bdb7a3c650a1b8b7b71b73dd59249acb1f
     path: patches/@univerjs__engine-render@0.24.0.patch
   '@univerjs/slides-ui@0.24.0':
-    hash: c86f8195aceb6cfddd73f8e8fb0f4240bb8da69450689b56409f6b32dee7439e
+    hash: 708127eae5c918f30af5fbcb0d849836da55b3b5bab546dd92972fd104494596
     path: patches/@univerjs__slides-ui@0.24.0.patch
   '@univerjs/slides@0.24.0':
     hash: 1cf2b739c715d06e2ef001092cc5b75cea37f7212b3734d44da9c012bfeca89e
@@ -37,6 +37,9 @@ importers:
 
   apps/server:
     dependencies:
+      tsx:
+        specifier: ^4.22.3
+        version: 4.22.3
       ws:
         specifier: ^8.18.0
         version: 8.21.0
@@ -47,12 +50,12 @@ importers:
       '@types/ws':
         specifier: ^8.5.12
         version: 8.18.1
-      tsx:
-        specifier: ^4.22.3
-        version: 4.22.3
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
+      vitest:
+        specifier: ^1.6.1
+        version: 1.6.1(@types/node@22.19.19)
 
   apps/web:
     dependencies:
@@ -88,7 +91,7 @@ importers:
         version: 0.24.0(patch_hash=1cf2b739c715d06e2ef001092cc5b75cea37f7212b3734d44da9c012bfeca89e)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/slides-ui':
         specifier: 0.24.0
-        version: 0.24.0(patch_hash=c86f8195aceb6cfddd73f8e8fb0f4240bb8da69450689b56409f6b32dee7439e)(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
+        version: 0.24.0(patch_hash=708127eae5c918f30af5fbcb0d849836da55b3b5bab546dd92972fd104494596)(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/themes':
         specifier: 0.24.0
         version: 0.24.0
@@ -3027,7 +3030,7 @@ snapshots:
     transitivePeerDependencies:
       - react
 
-  '@univerjs/slides-ui@0.24.0(patch_hash=c86f8195aceb6cfddd73f8e8fb0f4240bb8da69450689b56409f6b32dee7439e)(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)':
+  '@univerjs/slides-ui@0.24.0(patch_hash=708127eae5c918f30af5fbcb0d849836da55b3b5bab546dd92972fd104494596)(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rxjs@7.8.2)':
     dependencies:
       '@univerjs/core': 0.24.0(patch_hash=c39d6c5b6f04ba21d13bb8b0640d0de60a03bc947b9e53f3d6a9c64d881dd69a)(react@18.3.1)(rxjs@7.8.2)
       '@univerjs/design': 0.24.0(@types/react-dom@18.3.7(@types/react@18.3.29))(@types/react@18.3.29)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -3864,6 +3867,24 @@ snapshots:
       base64-arraybuffer: 1.0.2
     optional: true
 
+  vite-node@1.6.1(@types/node@22.19.19):
+    dependencies:
+      cac: 6.7.14
+      debug: 4.4.3
+      pathe: 1.1.2
+      picocolors: 1.1.1
+      vite: 5.4.21(@types/node@22.19.19)
+    transitivePeerDependencies:
+      - '@types/node'
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+
   vite-node@1.6.1(@types/node@25.9.1):
     dependencies:
       cac: 6.7.14
@@ -3882,6 +3903,15 @@ snapshots:
       - supports-color
       - terser
 
+  vite@5.4.21(@types/node@22.19.19):
+    dependencies:
+      esbuild: 0.21.5
+      postcss: 8.5.15
+      rollup: 4.60.4
+    optionalDependencies:
+      '@types/node': 22.19.19
+      fsevents: 2.3.3
+
   vite@5.4.21(@types/node@25.9.1):
     dependencies:
       esbuild: 0.21.5
@@ -3890,6 +3920,40 @@ snapshots:
     optionalDependencies:
       '@types/node': 25.9.1
       fsevents: 2.3.3
+
+  vitest@1.6.1(@types/node@22.19.19):
+    dependencies:
+      '@vitest/expect': 1.6.1
+      '@vitest/runner': 1.6.1
+      '@vitest/snapshot': 1.6.1
+      '@vitest/spy': 1.6.1
+      '@vitest/utils': 1.6.1
+      acorn-walk: 8.3.5
+      chai: 4.5.0
+      debug: 4.4.3
+      execa: 8.0.1
+      local-pkg: 0.5.1
+      magic-string: 0.30.21
+      pathe: 1.1.2
+      picocolors: 1.1.1
+      std-env: 3.10.0
+      strip-literal: 2.1.1
+      tinybench: 2.9.0
+      tinypool: 0.8.4
+      vite: 5.4.21(@types/node@22.19.19)
+      vite-node: 1.6.1(@types/node@22.19.19)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 22.19.19
+    transitivePeerDependencies:
+      - less
+      - lightningcss
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
 
   vitest@1.6.1(@types/node@25.9.1):
     dependencies:

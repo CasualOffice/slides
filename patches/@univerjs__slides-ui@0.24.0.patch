@@ -604,35 +604,116 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..f95b690180985d4849d1b43a275c8b06
  Object.defineProperty(exports, 'SlidesUIController', {
    enumerable: true,
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f196d2feeaf 100644
+index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..e5b05823f4f2b4ef3bc7465ebba88b302f8237d7 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
-@@ -131,11 +131,115 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -131,11 +131,196 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  		this._renderContext.mainComponent = slide;
  		this._createSlidePages(slideDataModel, slide);
  		this.createThumbs();
-+		// Casual Slides patch — re-paint the cached "canvas" bg Rect when
-+		// slide.mutation.update-page lands. Without this the main canvas
-+		// keeps its stale Rect even though the SlideDataModel snapshot
-+		// (which thumbs + presenter re-read on every render) is current.
++		// Casual Slides patch — wire mutation events back into the live
++		// scene. Univer v0.24.0's mutation handlers (slide.mutation.*) only
++		// update the SlideDataModel snapshot + bump rev; they don't touch
++		// the cached scene. Result: anything that goes through the
++		// mutation bus (collab peers, ThemePicker, BackgroundPicker,
++		// FormatPane, future commands that target a non-active slide)
++		// makes the model current while the main canvas stays stale.
++		// Per-mutation handlers below patch the live scene so the
++		// snapshot and the canvas stay in lockstep.
 +		try {
 +			const _cmdSvc = this._injector.get(ICommandService);
++			const _self = this;
 +			const _disp = _cmdSvc.onCommandExecuted((info) => {
-+				if (!info || info.id !== "slide.mutation.update-page") return;
++				if (!info) return;
 +				const _params = info.params;
-+				if (!_params || !_params.pageId) return;
-+				const _patch = _params.patch;
-+				if (!_patch || !("pageBackgroundFill" in _patch)) return;
-+				const _scene = slide.getSubScene(_params.pageId);
-+				if (!_scene) return;
-+				const _rect = _scene.getObject("canvas");
-+				if (!_rect) return;
-+				_rect.setProps({ fill: getColorStyle(_patch.pageBackgroundFill) || "rgba(255,255,255,1)" });
-+				if (typeof _rect.makeDirty === "function") _rect.makeDirty(true);
-+				if (typeof _scene.makeDirty === "function") _scene.makeDirty(true);
-+				const _layer = typeof _scene.getLayer === "function" ? _scene.getLayer() : null;
-+				if (_layer && typeof _layer.makeDirty === "function") _layer.makeDirty(true);
-+				this._refreshThumb();
++				if (!_params) return;
++				// update-page: re-paint the cached "canvas" bg Rect when
++				// pageBackgroundFill changes.
++				if (info.id === "slide.mutation.update-page") {
++					if (!_params.pageId) return;
++					const _patch = _params.patch;
++					if (!_patch || !("pageBackgroundFill" in _patch)) return;
++					const _scene = slide.getSubScene(_params.pageId);
++					if (!_scene) return;
++					const _rect = _scene.getObject("canvas");
++					if (!_rect) return;
++					_rect.setProps({ fill: getColorStyle(_patch.pageBackgroundFill) || "rgba(255,255,255,1)" });
++					if (typeof _rect.makeDirty === "function") _rect.makeDirty(true);
++					if (typeof _scene.makeDirty === "function") _scene.makeDirty(true);
++					const _layer = typeof _scene.getLayer === "function" ? _scene.getLayer() : null;
++					if (_layer && typeof _layer.makeDirty === "function") _layer.makeDirty(true);
++					_self._refreshThumb();
++					return;
++				}
++				// insert-element: build the render object via the same
++				// ObjectProvider pipeline createPageScene uses and add it
++				// to the page scene.
++				if (info.id === "slide.mutation.insert-element") {
++					if (!_params.pageId || !_params.element) return;
++					const _scene = slide.getSubScene(_params.pageId);
++					if (!_scene || !_self._objectProvider) return;
++					const _existing = _scene.getObject(_params.element.id);
++					if (_existing) _scene.removeObject(_existing);
++					const _obj = _self._objectProvider.convertToRenderObject(_params.element, _self._renderContext.scene);
++					if (_obj) {
++						_scene.addObject(_obj);
++						if (typeof _scene.attachTransformerTo === "function") _scene.attachTransformerTo(_obj);
++					}
++					if (typeof _scene.makeDirty === "function") _scene.makeDirty(true);
++					_self._refreshThumb();
++					return;
++				}
++				// delete-element: remove the render object from the scene.
++				if (info.id === "slide.mutation.delete-element") {
++					if (!_params.pageId || !_params.elementId) return;
++					const _scene = slide.getSubScene(_params.pageId);
++					if (!_scene) return;
++					const _obj = _scene.getObject(_params.elementId);
++					if (_obj) _scene.removeObject(_obj);
++					if (typeof _scene.makeDirty === "function") _scene.makeDirty(true);
++					_self._refreshThumb();
++					return;
++				}
++				// update-element: swap the render object for a fresh one
++				// built from the now-merged snapshot element. Object swap
++				// (rather than in-place setProps) covers every prop —
++				// geometry, fill, outline, text — without per-prop logic.
++				if (info.id === "slide.mutation.update-element") {
++					if (!_params.pageId || !_params.elementId) return;
++					const _scene = slide.getSubScene(_params.pageId);
++					if (!_scene || !_self._objectProvider) return;
++					const _snap = slideDataModel.getSnapshot && slideDataModel.getSnapshot();
++					const _el = _snap && _snap.body && _snap.body.pages && _snap.body.pages[_params.pageId] && _snap.body.pages[_params.pageId].pageElements && _snap.body.pages[_params.pageId].pageElements[_params.elementId];
++					if (!_el) return;
++					const _existing = _scene.getObject(_params.elementId);
++					if (_existing) _scene.removeObject(_existing);
++					const _obj = _self._objectProvider.convertToRenderObject(_el, _self._renderContext.scene);
++					if (_obj) {
++						_scene.addObject(_obj);
++						if (typeof _scene.attachTransformerTo === "function") _scene.attachTransformerTo(_obj);
++					}
++					if (typeof _scene.makeDirty === "function") _scene.makeDirty(true);
++					_self._refreshThumb();
++					return;
++				}
++				// insert-page: build a page scene + thumb for the new
++				// slide so it shows up immediately in the rail.
++				if (info.id === "slide.mutation.insert-page") {
++					if (!_params.page) return;
++					if (slide.hasPage(_params.page.id)) return;
++					if (typeof _self.createPageScene === "function") _self.createPageScene(_params.page.id, _params.page);
++					if (typeof _self._createThumb === "function") _self._createThumb(_params.page.id);
++					_self._refreshThumb();
++					return;
++				}
++				// delete-page: tear down the scene + thumb for the
++				// removed slide so memory and the rail stay correct.
++				if (info.id === "slide.mutation.delete-page") {
++					if (!_params.pageId) return;
++					if (typeof slide.removeSubScene === "function") slide.removeSubScene(_params.pageId);
++					_self._refreshThumb();
++					return;
++				}
 +			});
 +			if (_disp && typeof this.disposeWithMe === "function") this.disposeWithMe(_disp);
 +		} catch (_e) {}
@@ -724,7 +805,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  		var _this$_currentRender;
  		const mainScene = (_this$_currentRender = this._currentRender()) === null || _this$_currentRender === void 0 ? void 0 : _this$_currentRender.scene;
  		const viewMain = mainScene === null || mainScene === void 0 ? void 0 : mainScene.getViewport(SLIDE_KEY.VIEW);
-@@ -148,6 +252,9 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -148,6 +333,9 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  			y
  		});
  	}
@@ -734,7 +815,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  	_currentRender() {
  		return getCurrentTypeOfRenderer(UniverInstanceType.UNIVER_SLIDE, this._univerInstanceService, this._renderManagerService);
  	}
-@@ -155,7 +262,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -155,7 +343,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  	* @param mainScene
  	*/
  	_createSlide(mainScene) {
@@ -743,7 +824,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  		const { width: sceneWidth, height: sceneHeight } = mainScene;
  		const { width = 100, height = 100 } = model.getPageSize();
  		const slideComponent = new Slide(SLIDE_KEY.COMPONENT, {
-@@ -170,7 +277,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -170,7 +358,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  		return slideComponent;
  	}
  	_addBackgroundRect(scene, fill) {
@@ -752,7 +833,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  		const page = new Rect("canvas", {
  			left: 0,
  			top: 0,
-@@ -232,11 +339,12 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -232,11 +420,12 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  	* SlideDataModel is UnitModel
  	*/
  	_getCurrUnitModel() {
@@ -766,7 +847,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  		let page;
  		if (pageId) page = model.getPage(pageId);
  		else {
-@@ -258,7 +366,9 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -258,7 +447,9 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  		this.createPageScene(id, page);
  	}
  	createThumbs() {
@@ -777,7 +858,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  		const render = this._currentRender();
  		if (!pageOrder || !render) return;
  		if (pageOrder.length === 0) return;
-@@ -349,6 +459,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -349,6 +540,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  	}
  	appendPage() {
  		const model = this._getCurrUnitModel();
@@ -785,7 +866,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  		const page = model.getBlankPage();
  		const render = this._currentRender();
  		if (page == null || render == null || render.mainComponent == null) return;
-@@ -428,11 +539,24 @@ const ActivateSlidePageOperation = {
+@@ -428,11 +620,24 @@ const ActivateSlidePageOperation = {
  //#region src/commands/operations/append-slide.operation.ts
  const AppendSlideOperation = {
  	id: "slide.operation.append-slide",
@@ -814,7 +895,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  		return true;
  	}
  };
-@@ -441,16 +565,27 @@ const AppendSlideOperation = {
+@@ -441,16 +646,27 @@ const AppendSlideOperation = {
  //#region src/commands/operations/delete-element.operation.ts
  const DeleteSlideElementOperation = {
  	id: "slide.operation.delete-element",
@@ -851,7 +932,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  		return true;
  	}
  };
-@@ -496,11 +631,20 @@ const InsertSlideFloatImageCommand = {
+@@ -496,11 +712,20 @@ const InsertSlideFloatImageCommand = {
  				image
  			} }
  		};
@@ -874,7 +955,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  		return true;
  	}
  };
-@@ -509,16 +653,97 @@ const InsertSlideFloatImageCommand = {
+@@ -509,16 +734,97 @@ const InsertSlideFloatImageCommand = {
  //#region src/commands/operations/update-element.operation.ts
  const UpdateSlideElementOperation = {
  	id: "slide.operation.update-element",
@@ -981,7 +1062,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  		return true;
  	}
  };
-@@ -881,40 +1106,51 @@ const InsertSlideShapeRectangleCommand = {
+@@ -881,40 +1187,51 @@ const InsertSlideShapeRectangleCommand = {
  		return commandService.executeCommand(InsertSlideShapeRectangleOperation.id, { unitId });
  	}
  };
@@ -1065,7 +1146,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  };
  const ToggleSlideEditSidebarOperation = {
  	id: "sidebar.operation.slide-shape",
-@@ -957,8 +1193,32 @@ const InsertSlideShapeEllipseCommand = {
+@@ -957,8 +1274,32 @@ const InsertSlideShapeEllipseCommand = {
  };
  const InsertSlideShapeEllipseOperation = {
  	id: "slide.operation.insert-float-shape.ellipse",
@@ -1100,7 +1181,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  		const id = generateRandomId(6);
  		const univerInstanceService = accessor.get(IUniverInstanceService);
  		const unitId = params.unitId;
-@@ -994,58 +1254,161 @@ const InsertSlideShapeEllipseOperation = {
+@@ -994,58 +1335,161 @@ const InsertSlideShapeEllipseOperation = {
  	}
  };
  
@@ -1292,7 +1373,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  
  //#endregion
  //#region src/commands/operations/set-thumb.operation.ts
-@@ -1548,6 +1911,14 @@ let SlidesUIController = class SlidesUIController extends Disposable {
+@@ -1548,6 +1992,14 @@ let SlidesUIController = class SlidesUIController extends Disposable {
  			ToggleSlideEditSidebarOperation,
  			DeleteSlideElementOperation,
  			UpdateSlideElementOperation,
@@ -1307,7 +1388,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..670ae04a3b4643e719365251e5ff2f19
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
-@@ -2682,4 +3053,4 @@ UniverSlidesUIPlugin = __decorate([
+@@ -2682,4 +3134,4 @@ UniverSlidesUIPlugin = __decorate([
  ], UniverSlidesUIPlugin);
  
  //#endregion
