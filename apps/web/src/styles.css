@@ -2540,6 +2540,28 @@ body.cs-format-pane-open .cs-notes {
   flex-shrink: 0;
 }
 
+.cs-format-pane__close {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--cs-radius);
+  color: var(--cs-text-mute);
+  cursor: pointer;
+}
+.cs-format-pane__close:hover {
+  background: var(--cs-hover);
+  color: var(--cs-text);
+}
+.cs-format-pane__close:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: 1px;
+}
+
 .cs-format-pane__body {
   flex: 1 1 auto;
   overflow-y: auto;

@@ -298,6 +298,15 @@ export function FormatPane({ selection, onApply }: FormatPaneInnerProps) {
       <header className="cs-format-pane__title">
         <Icon name="format_size" size={16} />
         <span>{t('format.title')}</span>
+        <button
+          type="button"
+          className="cs-format-pane__close"
+          title={t('format.closeTooltip')}
+          aria-label={t('format.closeTooltip')}
+          onClick={() => void dispatchSlideCommand('casual-slides.command.clear-selection')}
+        >
+          <Icon name="close" size={14} />
+        </button>
       </header>
 
       <div className="cs-format-pane__body">
