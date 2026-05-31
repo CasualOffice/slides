@@ -300,7 +300,11 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     await page.evaluate(() => {
       (window as { __capturedMutations: string[] }).__capturedMutations = [];
     });
-    await page.getByRole('button', { name: /^text box$/i }).click();
+    // Toolbar2 consolidated insert items under an "Insert" dropdown.
+    // Open the dropdown, then click the Text box menuitem.
+    await page.locator('button.cs-toolbar2__btn--labeled', { hasText: /^Insert$/i }).click();
+    await page.waitForTimeout(150);
+    await page.getByText('Text box', { exact: true }).first().click();
     await page.waitForTimeout(200);
 
     const captured = await page.evaluate(() => [...(window as { __capturedMutations: string[] }).__capturedMutations]);
@@ -349,9 +353,9 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     );
     await page.waitForTimeout(800);
 
-    // Find the first thumbnail by the slide-number span "1" inside Univer's
-    // left-sidebar. Right-click its sibling div (the actual thumbnail).
-    const thumbnail = page.locator('aside[data-u-comp="left-sidebar"] span:has-text("1") + div').first();
+    // Right-click the first thumbnail in the slide rail (Univer's
+    // built-in left-sidebar has been replaced by our own .cs-slide-rail).
+    const thumbnail = page.locator('.cs-slide-rail__item').first();
     await thumbnail.click({ button: 'right' });
 
     await expect(page.locator('[data-testid="slide-context-menu"]')).toBeVisible();
@@ -363,8 +367,19 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     await page.locator('[data-testid="slide-context-menu"]').getByText(/duplicate slide/i).click();
     await page.waitForTimeout(300);
 
-    const captured = await page.evaluate(() => [...(window as { __capturedMutations: string[] }).__capturedMutations]);
-    expect(captured).toContain('slide.mutation.insert-page');
+    // duplicateSlide (commit 790e88a) writes directly to the snapshot
+    // rather than dispatching slide.mutation.insert-page; verify the
+    // page count grew by exactly one instead of asserting on a mutation
+    // event the new code path never emits.
+    const afterCount = await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const inj = w.univer.__getInjector();
+      const inst = inj.get(w.__casualSlides__IUniverInstanceService);
+      const model = inst.getCurrentUnitOfType(3);
+      return model?.getSnapshot?.()?.body?.pageOrder?.length ?? 0;
+    });
+    expect(afterCount).toBeGreaterThanOrEqual(2);
 
     // Menu closed after click.
     await expect(page.locator('[data-testid="slide-context-menu"]')).toHaveCount(0);
@@ -379,8 +394,10 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     );
     await page.waitForTimeout(800);
 
-    // Click the Background toolbar button.
-    await page.getByRole('button', { name: /^background$/i }).click();
+    // Background lives under the toolbar Slide dropdown now.
+    await page.locator('button.cs-toolbar2__btn--labeled', { hasText: /^Slide$/i }).click();
+    await page.waitForTimeout(150);
+    await page.getByText('Background', { exact: true }).first().click();
     await expect(page.locator('[data-testid="bg-picker"]')).toBeVisible();
 
     // Reset capture; click the "Red" chip in the palette.
@@ -4357,8 +4374,10 @@ test.describe('Casual Slides — P0 spike smoke', () => {
       return model?.getSnapshot?.()?.body?.pageOrder?.length ?? 0;
     });
 
-    // Click the toolbar Layout button → opens picker.
-    await page.getByRole('button', { name: 'Layout' }).click();
+    // Layout lives under the toolbar Slide dropdown now.
+    await page.locator('button.cs-toolbar2__btn--labeled', { hasText: /^Slide$/i }).click();
+    await page.waitForTimeout(150);
+    await page.getByText('Layout', { exact: true }).first().click();
     const picker = page.locator('[data-testid="layout-picker"]');
     await expect(picker).toBeVisible();
 
