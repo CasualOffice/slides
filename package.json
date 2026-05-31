@@ -9,6 +9,7 @@
     "dev:web": "pnpm --filter @point/web dev",
     "build:web": "pnpm --filter @point/web build",
     "typecheck": "pnpm -r typecheck",
+    "test:unit": "pnpm -r --workspace-concurrency=1 test",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:collab": "playwright test --config=playwright.collab.config.ts",

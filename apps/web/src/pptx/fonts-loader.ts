@@ -56,7 +56,9 @@ function normaliseFamily(raw: string): string | null {
   if (!f) return null;
   // Strip surrounding quotes some authors include.
   f = f.replace(/^['"]|['"]$/g, '').trim();
-  if (FONT_SUBSTITUTION[f]) f = FONT_SUBSTITUTION[f];
+  // The truthiness check on the indexed access also narrows it to string.
+  const sub = FONT_SUBSTITUTION[f];
+  if (sub) f = sub;
   if (SKIP_FAMILIES.has(f)) return null;
   // Reject anything with characters Google Fonts can't accept in the
   // family= URL param — only Latin letters, digits, spaces and `+`.

@@ -1,0 +1,40 @@
+# Casual Slides — single-service production compose.
+#
+#   docker compose up -d
+#   open http://localhost:3000
+#
+# No Redis, no separate web tier — the one image hosts both the editor
+# bundle and the in-memory /collab WebSocket relay. Rooms live only in
+# this process's memory; restarting the container drains every active
+# room. That's deliberate for the v0.0.x spike; the Yjs + persistence
+# migration lands with v0.1.0.
+
+services:
+  app:
+    image: schnsrw/casual-slides:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Vite bakes this into the bundle at build time. Default to
+        # `true` here so the compose-built image honours `?room=…`
+        # URLs; flip to `false` if you want a static-only deploy where
+        # the gate stays closed by default.
+        VITE_COLLAB_ENABLED: ${VITE_COLLAB_ENABLED:-true}
+    container_name: casual-slides
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      HOST: ${HOST:-0.0.0.0}
+      PORT: ${PORT:-3000}
+      # STATIC_DIR is baked by the Dockerfile; override only if you've
+      # mounted a different bundle path into the container.
+      STATIC_DIR: ${STATIC_DIR:-/app/apps/web/dist}
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:3000/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

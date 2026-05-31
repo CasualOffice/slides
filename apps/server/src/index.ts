@@ -1,8 +1,19 @@
 import { createServer } from 'node:http';
 import { URL } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
+import { createStaticHandler } from './static';
 
-// Minimal viable collab relay for Casual Slides P2.
+// Minimal viable collab relay for Casual Slides P2 — and, since the v0.1
+// self-host pass, the static web bundle host too.
+//
+// Routing:
+//   GET  /health  → JSON health probe (Docker HEALTHCHECK + uptime checks).
+//   WS   /collab  → room-broadcast WebSocket (see RoomEntry below).
+//   GET  /*       → static asset under STATIC_DIR (defaults to
+//                   apps/web/dist), with SPA fallback to index.html.
+//                   If STATIC_DIR isn't a built web bundle, we fall
+//                   back to the legacy "collab relay" identity page
+//                   so a bare-relay deploy still works.
 //
 // Architecture: rooms keyed by `?room=<id>` in the WebSocket URL. Every
 // client connected to a room receives every mutation message any other
@@ -22,6 +33,10 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 const PORT = Number(process.env.PORT ?? 4173);
 const HOST = process.env.HOST ?? '127.0.0.1';
+// STATIC_DIR is set in the Docker image to `/app/apps/web/dist`. In a
+// bare-relay deployment (no built bundle) the static handler short-
+// circuits and the legacy identity response below takes over.
+const STATIC_DIR = process.env.STATIC_DIR ?? '';
 
 interface RoomEntry {
   clients: Set<WebSocket>;
@@ -29,12 +44,18 @@ interface RoomEntry {
 
 const rooms = new Map<string, RoomEntry>();
 
+const serveStatic = STATIC_DIR ? createStaticHandler({ staticDir: STATIC_DIR }) : null;
+
 const http = createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ ok: true, rooms: rooms.size, ts: Date.now() }));
     return;
   }
+  // Try the static bundle first. The handler returns false (without
+  // writing) when no STATIC_DIR / no index.html is configured, so the
+  // legacy relay identity below stays reachable for bare-relay deploys.
+  if (serveStatic && serveStatic(req, res)) return;
   res.writeHead(200, { 'content-type': 'text/plain' });
   res.end('Casual Slides collab relay');
 });

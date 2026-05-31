@@ -66,9 +66,35 @@ Today's collab is the v0.0.x "good enough for one editor at a time" spike:
 
 See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the system diagram and target Y.Doc shape.
 
-### Self-host platform (P6)
+### Self-host
 
-Lifted from sheet — `host.Integration` interface (memory / local / S3 / postgres), WOPI endpoints, JWT auth, admin panel at `/admin`, 9 webhook events with HMAC-SHA256 signing, multi-arch Docker image.
+**One image, one port.** The repo's root `Dockerfile` is a multi-stage build (deps → build-web → runtime) that produces a single `node:22-alpine` image. The runtime serves the built Vite bundle from `apps/web/dist` *and* the `/collab` WebSocket relay on the same port — no nginx, no reverse-proxy WS plumbing.
+
+```sh
+docker build -t schnsrw/casual-slides:latest .
+docker run -p 3000:3000 schnsrw/casual-slides:latest
+# open http://localhost:3000
+# verify: curl http://localhost:3000/health → {"ok":true,"rooms":N,"ts":…}
+```
+
+Or via the included `docker-compose.yml`:
+
+```sh
+docker compose up -d
+```
+
+**Heads up — single-node, in-memory rooms.** Restarting the container drains every active room. The Yjs + persistence migration lands with v0.1.0 (see Roadmap below); until then, treat the image as a session-only relay.
+
+Build args worth knowing about:
+
+| Build arg | Default | What it does |
+|---|---|---|
+| `VITE_COLLAB_ENABLED` | `true` | Whether the bundle honours `?room=…` URLs. Flip to `false` to ship a static-only deploy where the gate stays closed. |
+| `CASUAL_VERSION` / `CASUAL_GIT_SHA` / `CASUAL_BUILD_DATE` | `dev` / `unknown` / `unknown` | OCI image labels — set by the publish workflow at tag time so `docker inspect` shows provenance. |
+
+The `docker-publish.yml` workflow (triggered on `v*` tags) builds multi-arch (`linux/amd64`, `linux/arm64`), signs with SLSA provenance + SBOM, and pushes the rolling tag set (`:0.1.0`, `:0.1`, `:0`, `:latest`) to Docker Hub.
+
+**Roadmap (P6, post-v0.1):** lift sheet's full self-host platform — `host.Integration` interface (memory / local / S3 / postgres), WOPI endpoints, JWT auth, admin panel at `/admin`, 9 webhook events with HMAC-SHA256 signing. Today's image is single-node, in-memory rooms.
 
 ---
 

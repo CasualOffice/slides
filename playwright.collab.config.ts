@@ -23,5 +23,8 @@ export default defineConfig({
     stdout: 'pipe',
     stderr: 'pipe',
     timeout: 120_000,
+    // CollabProvider gates `?room=…` on this build-time flag. The
+    // multi-tab spec lives or dies on the gate being open here.
+    env: { VITE_COLLAB_ENABLED: 'true' },
   },
 });

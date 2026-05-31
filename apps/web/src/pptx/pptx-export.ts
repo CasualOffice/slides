@@ -51,7 +51,9 @@ function normalizeColor(rgb: string | null | undefined | void, fallback = '00000
 
   const m = trimmed.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
   if (m) {
-    return [m[1], m[2], m[3]]
+    // The regex has exactly 3 numeric capture groups; truthy `m` means
+    // all three groups are present.
+    return [m[1]!, m[2]!, m[3]!]
       .map((n) => Math.max(0, Math.min(255, parseInt(n, 10))).toString(16).padStart(2, '0'))
       .join('')
       .toUpperCase();

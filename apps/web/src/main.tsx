@@ -1,5 +1,6 @@
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
+import { ErrorBoundary } from './shell/ErrorBoundary';
 import { ShortcutsProvider } from './shell/ShortcutsDialog';
 import { FormatPaneProvider } from './shell/FormatPane';
 import { FindReplaceProvider } from './shell/FindReplaceDialog';
@@ -35,11 +36,11 @@ if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
 // an inconsistent state. Same pattern most editor SDKs (Monaco, Univer, Lexical)
 // require. Do NOT wrap App in StrictMode at this boundary.
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <>
+  <ErrorBoundary>
     <App />
     <SlideRailProvider />
     <ShortcutsProvider />
     <FormatPaneProvider />
     <FindReplaceProvider />
-  </>,
+  </ErrorBoundary>,
 );
