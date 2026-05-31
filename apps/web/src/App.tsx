@@ -500,6 +500,15 @@ export function App() {
         setSlideshowOpen(true);
       }
     };
+    // F2 enters filename rename mode (standard Windows / Mac convention).
+    // TitleBar listens for the event and flips its filenameEditing flag.
+    const f2Handler = (e: KeyboardEvent) => {
+      if (e.key !== 'F2') return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent('cs:rename-filename'));
+    };
     // Esc clears the canvas selection. We skip when a dialog is open
     // (the dialog's own Esc handler closes it first) and when focus is
     // in an editable surface (Univer's text-frame editor uses Esc to
@@ -526,11 +535,13 @@ export function App() {
     };
     window.addEventListener('keydown', handler);
     window.addEventListener('keydown', f5Handler);
+    window.addEventListener('keydown', f2Handler);
     window.addEventListener('keydown', deleteSlideHandler);
     window.addEventListener('keydown', escHandler);
     return () => {
       window.removeEventListener('keydown', handler);
       window.removeEventListener('keydown', f5Handler);
+      window.removeEventListener('keydown', f2Handler);
       window.removeEventListener('keydown', deleteSlideHandler);
       window.removeEventListener('keydown', escHandler);
     };

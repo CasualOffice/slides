@@ -176,6 +176,16 @@ export function TitleBar({
     }
   }, [filenameEditing]);
 
+  // App.tsx dispatches `cs:rename-filename` when the user presses F2
+  // outside an editable surface — the TitleBar owns the editing flag,
+  // so we listen here and flip it. Keeps the rename wiring local to
+  // the titlebar without prop-drilling a setter to App.
+  useEffect(() => {
+    const handler = () => setFilenameEditing(true);
+    window.addEventListener('cs:rename-filename', handler);
+    return () => window.removeEventListener('cs:rename-filename', handler);
+  }, []);
+
   useEffect(() => {
     if (!openMenu) return;
     const handler = (e: MouseEvent) => {
