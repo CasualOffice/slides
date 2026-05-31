@@ -502,6 +502,7 @@
         "zoomIn": "Zoom in",
         "zoomOut": "Zoom out",
         "resetZoom": "Reset zoom to 100%",
+        "fitToWindow": "Fit to window",
         "startSlideshow": "Start slideshow",
         "slideshowNext": "Next slide",
         "slideshowPrev": "Previous slide",

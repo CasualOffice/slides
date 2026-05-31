@@ -424,6 +424,11 @@ export function App() {
       } else if (k === '-') {
         e.preventDefault();
         setZoom((z) => Math.max(25, z - 10));
+      } else if (k === '0' && e.shiftKey) {
+        // Ctrl+Shift+0 — fit to window (recenter + reset zoom to 100 %).
+        // Mirrors View ▸ Fit to window.
+        e.preventDefault();
+        handleFitToWindow();
       } else if (k === '0') {
         e.preventDefault();
         setZoom(100);
