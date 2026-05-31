@@ -261,6 +261,20 @@ export function App() {
     return () => window.clearTimeout(t);
   }, [zoom, snapshot.id]);
 
+  // In-editor commands (z-order, center on slide, duplicate slide, move
+  // slide, delete element …) fire a `cs:status` CustomEvent with the
+  // confirmation copy. Pipe it into the same status pill the export /
+  // save paths use — that way one auto-dismiss handler covers every
+  // transient feedback the editor surfaces.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ message?: string }>).detail;
+      if (detail?.message) setStatus(detail.message);
+    };
+    window.addEventListener('cs:status', handler);
+    return () => window.removeEventListener('cs:status', handler);
+  }, []);
+
   // Auto-dismiss the status pill after 3.5 s. The pill carries transient
   // confirmations ("Saved · slide-1.png", "Created a copy", "Loaded · 3
   // slides") that the user doesn't need to manually close — Google Slides

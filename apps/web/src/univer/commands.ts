@@ -23,6 +23,17 @@ interface Win {
   univer?: Univer;
 }
 
+// Fire a transient status message into the TitleBar pill. App.tsx listens
+// for `cs:status` and pushes the message through setStatus(); the existing
+// 3.5 s auto-dismiss handles cleanup. Use this to surface a "you did X"
+// confirmation for actions that otherwise feel silent (duplicate slide,
+// bring forward, center on slide, …).
+function notify(message: string): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cs:status', { detail: { message } }));
+  }
+}
+
 function getUniver(): Univer | null {
   return ((globalThis as Win).univer ?? null) as Univer | null;
 }
@@ -257,6 +268,7 @@ export function applyZOrder(direction: ZOrderDirection): boolean {
     model.incrementRev();
     const active = model.getActivePage();
     if (active) model.setActivePage(active);
+    notify('Brought forward');
     return true;
   } else {
     if (idx === 0) return false; // already at back
@@ -269,6 +281,7 @@ export function applyZOrder(direction: ZOrderDirection): boolean {
     model.incrementRev();
     const active = model.getActivePage();
     if (active) model.setActivePage(active);
+    notify('Sent backward');
     return true;
   }
 
@@ -276,6 +289,7 @@ export function applyZOrder(direction: ZOrderDirection): boolean {
   model.incrementRev();
   const active = model.getActivePage();
   if (active) model.setActivePage(active);
+  notify(direction === 'front' ? 'Brought to front' : 'Sent to back');
   return true;
 }
 
@@ -306,6 +320,7 @@ export function moveActiveSlide(delta: -1 | 1): boolean {
   // next press of the same shortcut act on the wrong slide.
   const moved = model.getPage(activeId);
   if (moved) model.setActivePage(moved);
+  notify(delta < 0 ? 'Slide moved up' : 'Slide moved down');
   return true;
 }
 
@@ -360,6 +375,7 @@ export function deleteSelectedElement(): boolean {
   model.incrementRev();
   const active = model.getActivePage();
   if (active) model.setActivePage(active);
+  notify('Element deleted');
   return true;
 }
 
@@ -399,6 +415,7 @@ export function centerSelectionOnSlide(axis: CenterAxis): boolean {
   model.incrementRev();
   const active = model.getActivePage();
   if (active) model.setActivePage(active);
+  notify(axis === 'both' ? 'Centered on slide' : axis === 'h' ? 'Centered horizontally' : 'Centered vertically');
   return true;
 }
 
@@ -454,5 +471,6 @@ export function duplicateSlide(sourcePageId?: string): boolean {
   model.incrementRev();
   // Move to the clone so the user sees what they just made.
   model.setActivePage(clone);
+  notify('Slide duplicated');
   return true;
 }
