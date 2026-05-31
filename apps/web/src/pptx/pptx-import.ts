@@ -618,9 +618,15 @@ function readColor(parent: unknown, theme: ThemeMap | null): string | null {
 // shape varies with run nesting).
 function readT(node: unknown): string {
   if (typeof node === 'string') return node;
+  // fast-xml-parser converts numeric tag content to numbers by default
+  // (`<a:t>1</a:t>` → `1`, not `"1"`). Slide-number placeholders,
+  // year-only date fields and single-character bullets all hit this.
+  // Coerce so downstream string checks keep working.
+  if (typeof node === 'number' || typeof node === 'boolean') return String(node);
   if (node && typeof node === 'object') {
     const t = (node as XmlNode)['#text'];
     if (typeof t === 'string') return t;
+    if (typeof t === 'number' || typeof t === 'boolean') return String(t);
   }
   return '';
 }
@@ -2891,9 +2897,7 @@ async function processSpTree(
       const ps = toArray(findChild(txBody, 'a:p'));
       for (const p of ps) {
         for (const r of toArray(findChild(p, 'a:r'))) {
-          const t = findChild(r, 'a:t');
-          if (typeof t === 'string' && t.length > 0) return true;
-          if (t && typeof t === 'object' && typeof (t as XmlNode)['#text'] === 'string' && ((t as XmlNode)['#text'] as string).length > 0) return true;
+          if (readT(findChild(r, 'a:t')).length > 0) return true;
         }
       }
       return false;
