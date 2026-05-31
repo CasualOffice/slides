@@ -24,11 +24,16 @@ interface Preset {
   height: number;
 }
 
-// 96px/inch. Widescreen 10"×5.63" and Standard 10"×7.5" — the PowerPoint
-// defaults, matching the app's 960×540 base.
+// 96 px/inch. Widescreen 10"×5.63" + Standard 10"×7.5" match PowerPoint
+// defaults. 16:10 + A4 + US Letter added 2026-06-01 to match Google Slides'
+// 5-preset menu (audit P6). A4 ≈ 8.27"×11.69"; US Letter 8.5"×11".
 const PRESETS: Preset[] = [
-  { id: 'wide', labelKey: 'widescreen', width: 960, height: 540 },
-  { id: 'standard', labelKey: 'standard', width: 960, height: 720 },
+  { id: 'wide',             labelKey: 'widescreen',       width: 960,  height: 540  },
+  { id: 'wide1610',         labelKey: 'widescreen1610',   width: 960,  height: 600  },
+  { id: 'standard',         labelKey: 'standard',         width: 960,  height: 720  },
+  { id: 'a4Landscape',      labelKey: 'a4Landscape',      width: 1123, height: 794  },
+  { id: 'a4Portrait',       labelKey: 'a4Portrait',       width: 794,  height: 1123 },
+  { id: 'letterLandscape',  labelKey: 'letterLandscape',  width: 1056, height: 816  },
 ];
 
 function matchPreset(w: number, h: number): string {

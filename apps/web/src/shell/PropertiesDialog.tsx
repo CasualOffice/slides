@@ -24,6 +24,47 @@ interface DeckStats {
   pageHeight: number;
   elementCount: number;
   textChars: number;
+  // K1b — from CASUAL_SLIDES_CORE_PROPS resource (pptx-import.ts). Each
+  // is optional: imported decks carry them; the default deck does not.
+  creator?: string;
+  created?: string;     // ISO-8601
+  modified?: string;    // ISO-8601
+  lastModifiedBy?: string;
+}
+
+interface CorePropsResource {
+  creator?: string;
+  created?: string;
+  modified?: string;
+  lastModifiedBy?: string;
+  description?: string;
+  subject?: string;
+}
+
+function readCoreProps(snapshot: ISlideData): CorePropsResource | null {
+  const resources = (snapshot as ISlideData & { resources?: Array<{ name: string; data: string }> }).resources;
+  if (!resources) return null;
+  const entry = resources.find((r) => r.name === 'CASUAL_SLIDES_CORE_PROPS');
+  if (!entry) return null;
+  try {
+    return JSON.parse(entry.data) as CorePropsResource;
+  } catch {
+    return null;
+  }
+}
+
+function formatDate(iso: string | undefined): string | undefined {
+  if (!iso) return undefined;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return iso; // surface as-is when not parseable
+  // "Apr 12, 2024, 3:42 PM" — matches Google Slides' locale-friendly shape.
+  return new Date(t).toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function getLiveSnapshot(fallback: ISlideData): ISlideData {
@@ -57,6 +98,7 @@ function computeStats(snapshot: ISlideData): DeckStats {
       }
     }
   }
+  const core = readCoreProps(snapshot);
   return {
     title: (snapshot.title || 'Untitled deck').trim(),
     slideCount: order.length,
@@ -64,6 +106,10 @@ function computeStats(snapshot: ISlideData): DeckStats {
     pageHeight: snapshot.pageSize?.height ?? 540,
     elementCount,
     textChars,
+    creator: core?.creator,
+    created: core?.created,
+    modified: core?.modified,
+    lastModifiedBy: core?.lastModifiedBy,
   };
 }
 
@@ -118,7 +164,27 @@ export function PropertiesDialog({ open, onClose, fallback }: PropertiesDialogPr
           </button>
         </header>
         <dl className="cs-properties__list">
+          {/* Identity + provenance first — matches Google Slides / PowerPoint
+              Online properties dialogs. Created / Modified / Author only
+              render when the deck was imported from a .pptx that carried
+              them; the default deck simply omits those rows. */}
           <PropRow testId="title" label={t('properties.keys.title')} value={stats.title} />
+          {stats.creator && (
+            <PropRow testId="author" label={t('properties.keys.author')} value={stats.creator} />
+          )}
+          {formatDate(stats.created) && (
+            <PropRow testId="created" label={t('properties.keys.created')} value={formatDate(stats.created)!} />
+          )}
+          {formatDate(stats.modified) && (
+            <PropRow testId="modified" label={t('properties.keys.modified')} value={formatDate(stats.modified)!} />
+          )}
+          {stats.lastModifiedBy && stats.lastModifiedBy !== stats.creator && (
+            <PropRow
+              testId="last-modified-by"
+              label={t('properties.keys.lastModifiedBy')}
+              value={stats.lastModifiedBy}
+            />
+          )}
           <PropRow testId="slides" label={t('properties.keys.slides')} value={String(stats.slideCount)} />
           <PropRow
             testId="page-size"

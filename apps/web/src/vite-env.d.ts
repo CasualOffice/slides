@@ -2,6 +2,10 @@
 
 declare module '*.css';
 
+// Compile-time constants injected via vite.config.ts `define`. Listed
+// here so callers get type-checked references and the IDE can autocomplete.
+declare const __APP_VERSION__: string;
+
 // Build-time env contract. Keep narrow — every flag here imposes a
 // surface area that must be honoured at runtime, so add deliberately.
 interface ImportMetaEnv {

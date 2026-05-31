@@ -19,6 +19,33 @@ import { SlideTile } from './SlideTile';
 const RAIL_WIDTH = 220;
 const THUMB_WIDTH = 168; // rail width minus number column + padding
 
+// Inline styles for the hover-action overlay (audit P3). Inlined so the
+// feature ships independently of when the parallel UI/UX lane adds the
+// proper styles.css block. Values match Google Slides' rail action icons.
+const hoverActionsContainerStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 6,
+  right: 6,
+  display: 'inline-flex',
+  gap: 4,
+  zIndex: 2,
+};
+
+const hoverActionBtnStyle: React.CSSProperties = {
+  width: 22,
+  height: 22,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'rgba(255, 255, 255, 0.95)',
+  border: '1px solid rgba(0, 0, 0, 0.08)',
+  borderRadius: 4,
+  color: '#3c4043',
+  cursor: 'pointer',
+  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
+  padding: 0,
+};
+
 function getModel(): SlideDataModel | null {
   const w = window as unknown as { univer?: Univer };
   const univer = w.univer;
@@ -52,7 +79,9 @@ function movePage(fromIdx: number, toIdx: number): void {
   if (fromIdx < 0 || fromIdx >= order.length) return;
   if (toIdx < 0 || toIdx >= order.length) return;
   if (fromIdx === toIdx) return;
-  const [moved] = order.splice(fromIdx, 1);
+  // The bounds checks above guarantee splice(fromIdx, 1) returns a
+  // single-element array; destructuring is safe.
+  const [moved] = order.splice(fromIdx, 1) as [string];
   order.splice(toIdx, 0, moved);
   model.incrementRev();
   const active = model.getActivePage();
@@ -66,6 +95,10 @@ export function SlideRail() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<{ idx: number; below: boolean } | null>(null);
+  // Hover overlay for Duplicate / Delete inline actions on each tile.
+  // Only one item is hovered at a time; cleared on mouseleave so the
+  // overlay disappears immediately when the pointer exits.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const anchorRef = useRef<string | null>(null);
   const pageSize = useRef<{ width: number; height: number }>({ width: 960, height: 540 });
 
@@ -232,12 +265,14 @@ export function SlideRail() {
       if (!document.activeElement?.closest('.cs-slide-rail')) return;
       if (e.key === 'ArrowDown' && activeIdx >= 0 && activeIdx < slides.length - 1) {
         e.preventDefault();
-        const next = slides[activeIdx + 1];
+        // activeIdx < slides.length - 1 → activeIdx + 1 is in bounds.
+        const next = slides[activeIdx + 1]!;
         setSelected(new Set([next.id]));
         activate(next.id);
       } else if (e.key === 'ArrowUp' && activeIdx > 0) {
         e.preventDefault();
-        const prev = slides[activeIdx - 1];
+        // activeIdx > 0 → activeIdx - 1 is in bounds.
+        const prev = slides[activeIdx - 1]!;
         setSelected(new Set([prev.id]));
         activate(prev.id);
       }
@@ -306,6 +341,9 @@ export function SlideRail() {
               onDragOver={(e) => onDragOverThumb(e, idx)}
               onDrop={(e) => onDrop(e, idx)}
               onDragEnd={onDragEnd}
+              onMouseEnter={() => setHoveredId(slide.id)}
+              onMouseLeave={() => setHoveredId((cur) => (cur === slide.id ? null : cur))}
+              style={{ position: 'relative' }}
             >
               <span className="cs-slide-rail__num">{idx + 1}</span>
               <button
@@ -333,6 +371,42 @@ export function SlideRail() {
                   </div>
                 </div>
               </button>
+              {/* Hover-only action overlay — Duplicate + Delete inline,
+                  matching the Google Slides rail. Visibility tracked via
+                  hoveredId React state (set on the parent item's mouse
+                  events). e.stopPropagation on the button onClicks
+                  prevents the parent thumb-button from activating the
+                  slide. Audit P3. */}
+              {hoveredId === slide.id && (
+                <div className="cs-slide-rail__hover-actions" style={hoverActionsContainerStyle}>
+                  <button
+                    type="button"
+                    className="cs-slide-rail__hover-btn"
+                    title={t('slideRail.duplicate')}
+                    aria-label={t('slideRail.duplicate')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void dispatchSlideCommand('slide.command.duplicate-slide', { pageId: slide.id });
+                    }}
+                    style={hoverActionBtnStyle}
+                  >
+                    <Icon name="content_copy" size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="cs-slide-rail__hover-btn cs-slide-rail__hover-btn--danger"
+                    title={t('slideRail.delete')}
+                    aria-label={t('slideRail.delete')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void dispatchSlideCommand('slide.command.delete-slide', { pageId: slide.id });
+                    }}
+                    style={hoverActionBtnStyle}
+                  >
+                    <Icon name="delete" size={14} />
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}

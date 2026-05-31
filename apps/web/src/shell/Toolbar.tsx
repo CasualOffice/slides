@@ -131,13 +131,15 @@ function useUndoRedoCounts(): { undos: number; redos: number } {
   const [counts, setCounts] = useState<{ undos: number; redos: number }>({ undos: 0, redos: 0 });
   useEffect(() => {
     let disposed = false;
+    let retryHandle: number | null = null;
     let sub: { unsubscribe?: () => void } | undefined;
     const tryWire = () => {
       if (disposed) return;
+      retryHandle = null;
       const w = window as unknown as { univer?: Univer };
       const univer = w.univer;
       if (!univer) {
-        window.setTimeout(tryWire, 200);
+        retryHandle = window.setTimeout(tryWire, 200);
         return;
       }
       try {
@@ -147,12 +149,13 @@ function useUndoRedoCounts(): { undos: number; redos: number } {
           if (!disposed) setCounts({ undos: s.undos, redos: s.redos });
         });
       } catch {
-        window.setTimeout(tryWire, 200);
+        retryHandle = window.setTimeout(tryWire, 200);
       }
     };
     tryWire();
     return () => {
       disposed = true;
+      if (retryHandle != null) window.clearTimeout(retryHandle);
       sub?.unsubscribe?.();
     };
   }, []);
@@ -449,6 +452,67 @@ export function Toolbar() {
     </button>
   );
 
+  // Theme / Background / Layout as INLINE toolbar buttons (Audit S2).
+  // Promoted out of the Slide ▾ dropdown so users coming from Google
+  // Slides see them at first glance. The Slide ▾ dropdown still keeps
+  // them for habit-path users. All three reuse the existing picker
+  // anchor state (no new state needed).
+  const groupTheme = (
+    <button
+      type="button"
+      className="cs-toolbar2__btn cs-toolbar2__btn--labeled"
+      title={t('toolbar:theme')}
+      aria-label={t('toolbar:theme')}
+      onClick={() => {
+        setInsertAnchor(null);
+        setSlideAnchor(null);
+        (window as Window & { __casualSlides_openThemes?: () => void })
+          .__casualSlides_openThemes?.();
+      }}
+    >
+      <Icon name="palette" size={18} />
+      <span className="cs-toolbar2__btn-label">{t('toolbar:theme')}</span>
+    </button>
+  );
+
+  const groupBackground = (
+    <button
+      type="button"
+      className="cs-toolbar2__btn cs-toolbar2__btn--labeled"
+      title={t('toolbar:background')}
+      aria-label={t('toolbar:background')}
+      aria-haspopup="dialog"
+      aria-expanded={!!bgAnchor}
+      onClick={(e) => {
+        setInsertAnchor(null);
+        setSlideAnchor(null);
+        setBgAnchor(bgAnchor ? null : e.currentTarget.getBoundingClientRect());
+      }}
+    >
+      <Icon name="gradient" size={18} />
+      <span className="cs-toolbar2__btn-label">{t('toolbar:background')}</span>
+    </button>
+  );
+
+  const groupLayout = (
+    <button
+      type="button"
+      className="cs-toolbar2__btn cs-toolbar2__btn--labeled"
+      title={t('toolbar:layout')}
+      aria-label={t('toolbar:layout')}
+      aria-haspopup="dialog"
+      aria-expanded={!!layoutAnchor}
+      onClick={(e) => {
+        setInsertAnchor(null);
+        setSlideAnchor(null);
+        setLayoutAnchor(layoutAnchor ? null : e.currentTarget.getBoundingClientRect());
+      }}
+    >
+      <Icon name="view_module" size={18} />
+      <span className="cs-toolbar2__btn-label">{t('toolbar:layout')}</span>
+    </button>
+  );
+
   const group6 = (
     <>
       <FontFamilyPicker
@@ -603,6 +667,12 @@ export function Toolbar() {
         <span className="cs-toolbar__sep" aria-hidden="true" />
         {groupInsert}
         {groupSlide}
+        {/* Audit S2 — inline Theme / Background / Layout, promoted out
+            of the Slide ▾ dropdown so they're discoverable at a glance. */}
+        <span className="cs-toolbar__sep" aria-hidden="true" />
+        {groupLayout}
+        {groupTheme}
+        {groupBackground}
         {/* Character formatting (font / size / B I U S / colours) is ALWAYS
             visible — never hidden behind "More". Only the secondary paragraph
             group (align / list / indent) collapses when space is tight. */}
@@ -635,7 +705,7 @@ export function Toolbar() {
         <div className="cs-toolbar__spacer" />
         <button
           type="button"
-          className="cs-btn cs-btn--accent"
+          className="cs-btn cs-btn--ghost"
           title={t('toolbar:slideshowShortcut')}
           aria-label={t('toolbar:slideshow')}
           onClick={() => {
@@ -644,6 +714,10 @@ export function Toolbar() {
             open?.();
           }}
         >
+          {/* De-saturated to ghost styling — Present is the bottom-right
+              status-bar primary path (Audit S3). This stays for users
+              who reach for the toolbar end out of habit, but doesn't
+              compete for color hierarchy with Save. Audit P4. */}
           <Icon name="play_arrow" size={18} />
           <span>{t('toolbar:slideshow')}</span>
         </button>

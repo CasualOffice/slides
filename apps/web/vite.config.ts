@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import pkg from './package.json' with { type: 'json' };
 
 // `PAGES_BASE` lets the GitHub Pages workflow build for /slides/ without
 // committing that path into the repo (local dev stays at /). Mirrors the
@@ -8,6 +9,12 @@ const base = process.env.PAGES_BASE ?? '/';
 
 export default defineConfig({
   base,
+  // Inject the package.json version into the bundle as a compile-time
+  // constant so AboutDialog can surface it without a runtime JSON fetch.
+  // Updates automatically when `npm version` bumps the manifest.
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [react()],
   server: {
     host: '127.0.0.1',

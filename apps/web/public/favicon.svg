@@ -1,19 +1,14 @@
 <svg width="32" height="40" viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Casual Slides">
   <title>Casual Slides</title>
-  <!-- Refreshed brand (2026-05-30): teal/emerald gradient page with
-       a centred play disc. Same "page + play" idea as before; new
-       colour family aligns with the sister-product marks. -->
-  <defs>
-    <linearGradient id="cs-page" x1="2" y1="0" x2="30" y2="40" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#2DD4BF"/>
-      <stop offset="1" stop-color="#0D9488"/>
-    </linearGradient>
-  </defs>
+  <!-- Flat teal — no gradient. Renders identically at every size from
+       16 px (browser tab) to 32 × 40 (titlebar) and beyond. Earlier
+       gradient version (2026-05-30) read inconsistently between tab
+       and titlebar; flat is safer for brand identity. -->
   <!-- Page body with rounded corners and a cut at the top-right. -->
-  <path d="M3 0C1.34 0 0 1.34 0 3V37C0 38.66 1.34 40 3 40H29C30.66 40 32 38.66 32 37V10L22 0H3Z" fill="url(#cs-page)"/>
-  <!-- Folded-corner triangle — subtle highlight reading as the
-       underside of the page curling back. -->
-  <path d="M22 0L32 10H24C22.9 10 22 9.1 22 8V0Z" fill="#fff" opacity="0.22"/>
+  <path d="M3 0C1.34 0 0 1.34 0 3V37C0 38.66 1.34 40 3 40H29C30.66 40 32 38.66 32 37V10L22 0H3Z" fill="#0D9488"/>
+  <!-- Folded-corner triangle — slightly lighter shade reads as
+       the underside of the page curling back. -->
+  <path d="M22 0L32 10H24C22.9 10 22 9.1 22 8V0Z" fill="#0F766E"/>
   <!-- Translucent disc behind the play mark. -->
   <circle cx="16" cy="22" r="7" fill="#fff" opacity="0.3"/>
   <!-- Play triangle — signals "present". -->

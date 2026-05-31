@@ -89,6 +89,23 @@ export function StatusBar({
         >
           {t('zoomValue', { percent: zoom })}
         </button>
+        <span className="cs-statusbar__sep" aria-hidden="true" />
+        {/* Present icon — bottom-right is the most direct mouse path to
+            slideshow once the deck is done. Dispatches via the same
+            window global the Toolbar Slideshow CTA uses (App.tsx exposes
+            it on mount). Audit S3. */}
+        <button
+          type="button"
+          className="cs-statusbar__zoom-btn cs-statusbar__present-btn"
+          title={t('presentTooltip')}
+          aria-label={t('present')}
+          onClick={() => {
+            const w = window as Window & { __casualSlides_openSlideshow?: () => void };
+            w.__casualSlides_openSlideshow?.();
+          }}
+        >
+          <Icon name="slideshow" size={16} filled />
+        </button>
       </div>
     </footer>
   );

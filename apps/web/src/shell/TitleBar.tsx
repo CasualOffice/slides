@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Icon } from './icons';
-import { dispatchSlideCommand } from '../univer/commands';
+import { clearFormatting, dispatchSlideCommand } from '../univer/commands';
 
 // Google Docs-style title bar — single chrome block with brand on the
 // left, editable filename + menu strip stacked in the middle, action
@@ -51,6 +51,10 @@ interface MenuItem {
   id: string;
   label: string;
   shortcut?: string;
+  /** Left-icon name from the existing `icons.tsx` map. Optional so existing
+      callers don't break; menu rendering renders a 16-px spacer slot when
+      omitted so columns stay aligned. UX audit S5. */
+  icon?: string;
 }
 
 interface MenuDef {
@@ -66,43 +70,78 @@ interface MenuDef {
 function buildMenus(t: (key: string) => string): MenuDef[] {
   return [
     { id: 'file', label: t('menu:file.label'), items: [
-      { id: 'new', label: t('menu:file.new'), shortcut: t('menu:file.shortcut.new') },
-      { id: 'open', label: t('menu:file.open'), shortcut: t('menu:file.shortcut.open') },
-      { id: 'recent', label: t('menu:file.recent') },
-      { id: 'save', label: t('menu:file.save'), shortcut: t('menu:file.shortcut.save') },
-      { id: 'makeCopy', label: t('menu:file.makeCopy') },
+      { id: 'new',         label: t('menu:file.new'),         shortcut: t('menu:file.shortcut.new'),  icon: 'add' },
+      { id: 'open',        label: t('menu:file.open'),        shortcut: t('menu:file.shortcut.open'), icon: 'folder_open' },
+      { id: 'recent',      label: t('menu:file.recent'),                                              icon: 'history' },
+      { id: 'save',        label: t('menu:file.save'),        shortcut: t('menu:file.shortcut.save'),                                                                                          icon: 'download' },
+      { id: 'makeCopy',    label: t('menu:file.makeCopy'),                                            icon: 'content_copy' },
       { id: 'sep1', label: '---' },
-      { id: 'downloadPng', label: t('menu:file.downloadPng') },
-      { id: 'downloadPdf', label: t('menu:file.downloadPdf') },
-      { id: 'pageSetup', label: t('menu:file.pageSetup') },
-      { id: 'properties', label: t('menu:file.properties') },
+      { id: 'downloadPng', label: t('menu:file.downloadPng'),                                         icon: 'image' },
+      { id: 'downloadPdf', label: t('menu:file.downloadPdf'),                                         icon: 'print' },
+      { id: 'pageSetup',   label: t('menu:file.pageSetup'),                                           icon: 'straighten' },
+      { id: 'properties',  label: t('menu:file.properties'),                                          icon: 'info' },
     ] },
     { id: 'edit', label: t('menu:edit.label'), items: [
-      { id: 'undo', label: t('menu:edit.undo'), shortcut: t('menu:edit.shortcut.undo') },
-      { id: 'redo', label: t('menu:edit.redo'), shortcut: t('menu:edit.shortcut.redo') },
+      { id: 'undo',  label: t('menu:edit.undo'),  shortcut: t('menu:edit.shortcut.undo'),  icon: 'undo' },
+      { id: 'redo',  label: t('menu:edit.redo'),  shortcut: t('menu:edit.shortcut.redo'),  icon: 'redo' },
       { id: 'sep1', label: '---' },
-      { id: 'cut', label: t('menu:edit.cut'), shortcut: t('menu:edit.shortcut.cut') },
-      { id: 'copy', label: t('menu:edit.copy'), shortcut: t('menu:edit.shortcut.copy') },
+      { id: 'cut',   label: t('menu:edit.cut'),   shortcut: t('menu:edit.shortcut.cut') },
+      { id: 'copy',  label: t('menu:edit.copy'),  shortcut: t('menu:edit.shortcut.copy'),  icon: 'content_copy' },
       { id: 'paste', label: t('menu:edit.paste'), shortcut: t('menu:edit.shortcut.paste') },
     ] },
     { id: 'view', label: t('menu:view.label'), items: [
-      { id: 'fit', label: t('menu:view.fit') },
-      { id: 'zoom-in', label: t('menu:view.zoomIn'), shortcut: t('menu:view.shortcut.zoomIn') },
-      { id: 'zoom-out', label: t('menu:view.zoomOut'), shortcut: t('menu:view.shortcut.zoomOut') },
+      { id: 'fit',      label: t('menu:view.fit'),                                                   icon: 'fullscreen' },
+      { id: 'zoom-in',  label: t('menu:view.zoomIn'),  shortcut: t('menu:view.shortcut.zoomIn'),     icon: 'add' },
+      { id: 'zoom-out', label: t('menu:view.zoomOut'), shortcut: t('menu:view.shortcut.zoomOut'),    icon: 'remove' },
       { id: 'sep1', label: '---' },
-      { id: 'thumbs', label: t('menu:view.thumbs') },
-      { id: 'notes', label: t('menu:view.notes') },
+      { id: 'thumbs',   label: t('menu:view.thumbs'),                                                icon: 'view_module' },
+      { id: 'notes',    label: t('menu:view.notes'),                                                 icon: 'sticky_note_2' },
     ] },
     { id: 'insert', label: t('menu:insert.label'), items: [
-      { id: 'text', label: t('menu:insert.text') },
-      { id: 'shape', label: t('menu:insert.shape') },
-      { id: 'image', label: t('menu:insert.image') },
+      { id: 'text',  label: t('menu:insert.text'),                                                     icon: 'text_fields' },
+      { id: 'shape', label: t('menu:insert.shape'),                                                    icon: 'rectangle' },
+      { id: 'image', label: t('menu:insert.image'),                                                    icon: 'image' },
       { id: 'sep1', label: '---' },
-      { id: 'slide', label: t('menu:insert.slide'), shortcut: t('menu:insert.shortcut.slide') },
+      { id: 'slide', label: t('menu:insert.slide'), shortcut: t('menu:insert.shortcut.slide'),         icon: 'add_to_photos' },
+    ] },
+    { id: 'format', label: t('menu:format.label'), items: [
+      { id: 'bold',          label: t('menu:format.bold'),          shortcut: t('menu:format.shortcut.bold'),          icon: 'bold' },
+      { id: 'italic',        label: t('menu:format.italic'),        shortcut: t('menu:format.shortcut.italic'),        icon: 'italic' },
+      { id: 'underline',     label: t('menu:format.underline'),     shortcut: t('menu:format.shortcut.underline'),     icon: 'underline' },
+      { id: 'strikethrough', label: t('menu:format.strikethrough'), shortcut: t('menu:format.shortcut.strikethrough'), icon: 'strikethrough' },
+      { id: 'sep1', label: '---' },
+      { id: 'alignLeft',     label: t('menu:format.alignLeft'),                                                       icon: 'format_align_left' },
+      { id: 'alignCenter',   label: t('menu:format.alignCenter'),                                                     icon: 'format_align_center' },
+      { id: 'alignRight',    label: t('menu:format.alignRight'),                                                      icon: 'format_align_right' },
+      { id: 'alignJustify',  label: t('menu:format.alignJustify'),                                                    icon: 'format_align_justify' },
+      { id: 'sep2', label: '---' },
+      { id: 'indentDecrease', label: t('menu:format.indentDecrease'), shortcut: t('menu:format.shortcut.indentDecrease'), icon: 'format_indent_decrease' },
+      { id: 'indentIncrease', label: t('menu:format.indentIncrease'), shortcut: t('menu:format.shortcut.indentIncrease'), icon: 'format_indent_increase' },
+      { id: 'sep3', label: '---' },
+      { id: 'insertLink',     label: t('menu:format.insertLink'),     shortcut: t('menu:format.shortcut.insertLink'),     icon: 'link' },
+      { id: 'clearFormatting',label: t('menu:format.clearFormatting'),shortcut: t('menu:format.shortcut.clearFormatting'),icon: 'format_clear' },
+    ] },
+    { id: 'slide', label: t('menu:slide.label'), items: [
+      { id: 'new',       label: t('menu:slide.new'),       shortcut: t('menu:slide.shortcut.new'),       icon: 'add_to_photos' },
+      { id: 'duplicate', label: t('menu:slide.duplicate'), shortcut: t('menu:slide.shortcut.duplicate'), icon: 'content_copy' },
+      { id: 'sep1', label: '---' },
+      { id: 'theme',     label: t('menu:slide.theme'),                                                  icon: 'palette' },
+      { id: 'sep2', label: '---' },
+      { id: 'delete',    label: t('menu:slide.delete'),    shortcut: t('menu:slide.shortcut.delete'),   icon: 'delete' },
+    ] },
+    { id: 'arrange', label: t('menu:arrange.label'), items: [
+      { id: 'bringToFront', label: t('menu:arrange.bringToFront'), shortcut: t('menu:arrange.shortcut.bringToFront'), icon: 'arrow_upward' },
+      { id: 'bringForward', label: t('menu:arrange.bringForward'), shortcut: t('menu:arrange.shortcut.bringForward'), icon: 'chevron_up' },
+      { id: 'sendBackward', label: t('menu:arrange.sendBackward'), shortcut: t('menu:arrange.shortcut.sendBackward'), icon: 'chevron_down' },
+      { id: 'sendToBack',   label: t('menu:arrange.sendToBack'),   shortcut: t('menu:arrange.shortcut.sendToBack'),   icon: 'arrow_downward' },
+      { id: 'sep1', label: '---' },
+      { id: 'centerH',      label: t('menu:arrange.centerH'),                                                         icon: 'filter_center_focus' },
+      { id: 'centerV',      label: t('menu:arrange.centerV'),                                                         icon: 'filter_center_focus' },
+      { id: 'centerBoth',   label: t('menu:arrange.centerBoth'),                                                      icon: 'filter_center_focus' },
     ] },
     { id: 'help', label: t('menu:help.label'), items: [
-      { id: 'about', label: t('menu:help.about') },
-      { id: 'repo', label: t('menu:help.repo') },
+      { id: 'about', label: t('menu:help.about'),                                                       icon: 'info' },
+      { id: 'repo',  label: t('menu:help.repo'),                                                        icon: 'link' },
     ] },
   ];
 }
@@ -243,6 +282,51 @@ export function TitleBar({
         if (itemId === 'slide') void dispatchSlideCommand('slide.operation.append-slide');
         return;
       }
+      // Format menu — text styling + paragraph alignment + indent + link.
+      // Each command requires a TEXT selection on the active slide; the
+      // doc.* commands no-op silently when no text frame has focus.
+      // Audit S1.
+      if (menuId === 'format') {
+        if (itemId === 'bold')           void dispatchSlideCommand('doc.command.set-inline-format-bold');
+        if (itemId === 'italic')         void dispatchSlideCommand('doc.command.set-inline-format-italic');
+        if (itemId === 'underline')      void dispatchSlideCommand('doc.command.set-inline-format-underline');
+        if (itemId === 'strikethrough')  void dispatchSlideCommand('doc.command.set-inline-format-strikethrough');
+        if (itemId === 'alignLeft')      void dispatchSlideCommand('doc.command.align-left');
+        if (itemId === 'alignCenter')    void dispatchSlideCommand('doc.command.align-center');
+        if (itemId === 'alignRight')     void dispatchSlideCommand('doc.command.align-right');
+        if (itemId === 'alignJustify')   void dispatchSlideCommand('doc.command.align-justify');
+        if (itemId === 'indentDecrease') void dispatchSlideCommand('doc.command.change-list-nesting-level', { type: 'decrease' });
+        if (itemId === 'indentIncrease') void dispatchSlideCommand('doc.command.change-list-nesting-level', { type: 'increase' });
+        if (itemId === 'insertLink')     void dispatchSlideCommand('casual-slides.command.insert-link');
+        if (itemId === 'clearFormatting') void clearFormatting();
+        return;
+      }
+      // Slide menu — deck-level slide operations + theme picker.
+      // Layout and Background live in the toolbar's Slide ▾ popover
+      // since they need anchor rects we can't synthesize from a menu
+      // (handled by S2 inline toolbar buttons in a follow-up).
+      if (menuId === 'slide') {
+        if (itemId === 'new')       void dispatchSlideCommand('slide.operation.append-slide');
+        if (itemId === 'duplicate') void dispatchSlideCommand('slide.command.duplicate-slide');
+        if (itemId === 'theme') {
+          (window as Window & { __casualSlides_openThemes?: () => void })
+            .__casualSlides_openThemes?.();
+        }
+        if (itemId === 'delete')    void dispatchSlideCommand('slide.command.delete-slide');
+        return;
+      }
+      // Arrange menu — z-order + center-on-slide. Both require an
+      // element selection; commands no-op when no element is focused.
+      if (menuId === 'arrange') {
+        if (itemId === 'bringToFront') void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'front' });
+        if (itemId === 'bringForward') void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'forward' });
+        if (itemId === 'sendBackward') void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'backward' });
+        if (itemId === 'sendToBack')   void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'back' });
+        if (itemId === 'centerH')      void dispatchSlideCommand('casual-slides.command.center-on-slide', { axis: 'h' });
+        if (itemId === 'centerV')      void dispatchSlideCommand('casual-slides.command.center-on-slide', { axis: 'v' });
+        if (itemId === 'centerBoth')   void dispatchSlideCommand('casual-slides.command.center-on-slide', { axis: 'both' });
+        return;
+      }
       // Help menu
       if (menuId === 'help') {
         if (itemId === 'about') onOpenAbout();
@@ -286,15 +370,12 @@ export function TitleBar({
   return (
     <header className="cs-titlebar">
       <a className="cs-titlebar__brand" href="#" aria-label={t('titlebar.brand')}>
-        <svg viewBox="0 0 32 40" width="28" height="36" aria-hidden="true">
-          <path d="M2 0C0.9 0 0 0.9 0 2V38C0 39.1 0.9 40 2 40H30C31.1 40 32 39.1 32 38V10L22 0H2Z" fill="#0891B2" />
-          <path d="M22 0L32 10H24C22.9 10 22 9.1 22 8V0Z" fill="#0E7490" />
-          <rect x="6" y="17" width="20" height="14" rx="1" fill="#fff" opacity="0.95" />
-          <rect x="8" y="19" width="10" height="2" rx="0.5" fill="#0891B2" />
-          <rect x="8" y="23" width="14" height="1.5" rx="0.5" fill="#0891B2" opacity="0.7" />
-          <rect x="8" y="26" width="10" height="1.5" rx="0.5" fill="#0891B2" opacity="0.7" />
-          <path d="M20.5 26 L24 27.75 L20.5 29.5 Z" fill="#0891B2" />
-        </svg>
+        <img
+          src={`${import.meta.env.BASE_URL}brand.svg`}
+          alt={t('titlebar.brand')}
+          width={32}
+          height={40}
+        />
       </a>
       <div className="cs-titlebar__center">
         <div className="cs-titlebar__row cs-titlebar__row--top">
@@ -333,6 +414,15 @@ export function TitleBar({
             className={`cs-titlebar__saved cs-titlebar__saved--${saving ? 'saving' : dirty ? 'dirty' : 'clean'}`}
             data-testid="saved-indicator"
             title={savedLabel}
+            style={{
+              // Whisper styling — de-emphasised so the filename reads as
+              // the primary identity. Mirrors Google Docs / Slides
+              // "All changes saved in Drive" treatment. Audit P2.
+              fontSize: 12,
+              fontWeight: 400,
+              color: 'var(--cs-text-mute, #5f6368)',
+              marginLeft: 8,
+            }}
           >
             {savedLabel}
           </span>
@@ -393,6 +483,27 @@ export function TitleBar({
                           data-menu-item={item.id}
                           onClick={() => handleMenuItem(menu.id, item.id)}
                         >
+                          {/* Left icon slot — Google Slides / PowerPoint
+                              menu pattern. 18 px slot keeps text columns
+                              aligned even when an item has no icon. */}
+                          <span
+                            className="cs-menu__item-icon"
+                            aria-hidden="true"
+                            style={{
+                              display: 'inline-flex',
+                              width: 18,
+                              height: 18,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              marginRight: 8,
+                              color: 'var(--cs-text-mute, #5f6368)',
+                            }}
+                          >
+                            {(item as MenuItem).icon && (
+                              <Icon name={(item as MenuItem).icon!} size={16} />
+                            )}
+                          </span>
                           <span>{item.label}</span>
                           {(item as MenuItem).shortcut && (
                             <span className="cs-menu__shortcut">{(item as MenuItem).shortcut}</span>

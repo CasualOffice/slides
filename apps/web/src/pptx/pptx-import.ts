@@ -4632,8 +4632,24 @@ function extractDeckDefaultRunProps(presentation: XmlNode | undefined, theme: Th
 // filename. Other metadata (creator / description / subject) is
 // captured here too in case future UI surfaces them; for now we only
 // thread the title back into `snapshot.title`.
-function extractCoreProps(coreXml: string): { title?: string; creator?: string; description?: string; subject?: string } {
-  const out: { title?: string; creator?: string; description?: string; subject?: string } = {};
+function extractCoreProps(coreXml: string): {
+  title?: string;
+  creator?: string;
+  description?: string;
+  subject?: string;
+  created?: string;
+  modified?: string;
+  lastModifiedBy?: string;
+} {
+  const out: {
+    title?: string;
+    creator?: string;
+    description?: string;
+    subject?: string;
+    created?: string;
+    modified?: string;
+    lastModifiedBy?: string;
+  } = {};
   const parsed = parser.parse(coreXml) as XmlNode;
   const root = findChild(parsed, 'cp:coreProperties') as XmlNode | undefined;
   if (!root) return out;
@@ -4650,10 +4666,19 @@ function extractCoreProps(coreXml: string): { title?: string; creator?: string; 
   const creator = readText('dc:creator');
   const description = readText('dc:description');
   const subject = readText('dc:subject');
+  // ISO-8601 timestamps. dcterms:created and dcterms:modified are the
+  // canonical OOXML created/last-saved fields; cp:lastModifiedBy is the
+  // most recent author. PropertiesDialog surfaces these (UX_AUDIT P9).
+  const created = readText('dcterms:created');
+  const modified = readText('dcterms:modified');
+  const lastModifiedBy = readText('cp:lastModifiedBy');
   if (title && title.length > 0) out.title = title;
   if (creator && creator.length > 0) out.creator = creator;
   if (description && description.length > 0) out.description = description;
   if (subject && subject.length > 0) out.subject = subject;
+  if (created && created.length > 0) out.created = created;
+  if (modified && modified.length > 0) out.modified = modified;
+  if (lastModifiedBy && lastModifiedBy.length > 0) out.lastModifiedBy = lastModifiedBy;
   return out;
 }
 
@@ -5078,44 +5103,69 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
   // back to filename when absent so legacy decks still round-trip.
   const title = coreProps.title ?? fileName.replace(/\.pptx$/i, '');
 
+  // K1b — Surface the metadata Properties dialog wants (creator, created,
+  // modified, lastModifiedBy) via the resources passthrough channel. Done
+  // as a separate resource entry so a deck with NO passthrough payload
+  // still carries its author + dates. PropertiesDialog reads this by
+  // name; consumers that don't know the key just ignore it.
+  const hasCorePropsForUi =
+    !!coreProps.creator ||
+    !!coreProps.created ||
+    !!coreProps.modified ||
+    !!coreProps.lastModifiedBy ||
+    !!coreProps.description ||
+    !!coreProps.subject;
+
+  const resources: Array<{ name: string; data: string }> = [];
+  if (hasPassthrough) {
+    resources.push({
+      name: 'CASUAL_SLIDES_PPTX_RAW',
+      data: JSON.stringify({
+        layouts: rawLayouts,
+        masters: rawMasters,
+        themes: rawThemes,
+        notesSlides: rawNotesSlides,
+        comments: rawComments,
+        diagrams: rawDiagrams,
+        ink: rawInk,
+        charts: rawCharts,
+        rels: rawRels,
+        // K6 — base64-encoded binary parts (audio / video media +
+        // chart-embedded xlsx + OLE payloads). restorePassthrough
+        // decodes back to binary before injecting into the
+        // exported zip.
+        ...(Object.keys(rawMediaBin).length > 0
+          ? { mediaBin: rawMediaBin }
+          : {}),
+        // K2 — opaque passthrough of docProps/custom.xml. Only
+        // emitted when the source deck carried one so most
+        // pptxs (which omit custom.xml entirely) stay lean.
+        ...(hasCustomProps
+          ? { customProps: { 'docProps/custom.xml': customPropsXml! } }
+          : {}),
+      }),
+    });
+  }
+  if (hasCorePropsForUi) {
+    resources.push({
+      name: 'CASUAL_SLIDES_CORE_PROPS',
+      data: JSON.stringify({
+        creator: coreProps.creator,
+        created: coreProps.created,
+        modified: coreProps.modified,
+        lastModifiedBy: coreProps.lastModifiedBy,
+        description: coreProps.description,
+        subject: coreProps.subject,
+      }),
+    });
+  }
+
   const snapshot: ISlideData = {
     id: `imported-${Date.now().toString(36)}`,
     title,
     pageSize,
     body: { pages, pageOrder },
-    ...(hasPassthrough
-      ? {
-          resources: [
-            {
-              name: 'CASUAL_SLIDES_PPTX_RAW',
-              data: JSON.stringify({
-                layouts: rawLayouts,
-                masters: rawMasters,
-                themes: rawThemes,
-                notesSlides: rawNotesSlides,
-                comments: rawComments,
-                diagrams: rawDiagrams,
-                ink: rawInk,
-                charts: rawCharts,
-                rels: rawRels,
-                // K6 — base64-encoded binary parts (audio / video media +
-                // chart-embedded xlsx + OLE payloads). restorePassthrough
-                // decodes back to binary before injecting into the
-                // exported zip.
-                ...(Object.keys(rawMediaBin).length > 0
-                  ? { mediaBin: rawMediaBin }
-                  : {}),
-                // K2 — opaque passthrough of docProps/custom.xml. Only
-                // emitted when the source deck carried one so most
-                // pptxs (which omit custom.xml entirely) stay lean.
-                ...(hasCustomProps
-                  ? { customProps: { 'docProps/custom.xml': customPropsXml! } }
-                  : {}),
-              }),
-            },
-          ],
-        }
-      : {}),
+    ...(resources.length > 0 ? { resources } : {}),
   } as ISlideData;
 
   // Font loading happens in pptx/client.ts on the MAIN thread —

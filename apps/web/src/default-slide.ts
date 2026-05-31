@@ -1,18 +1,23 @@
 import type { ISlideData } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
 
-// Minimal default deck for the Spike A bootstrap. Three pages with title +
-// body text elements. Replace with a parsed pptx snapshot once PPTX_PIPELINE
-// (Spike B) is wired up.
+// Single blank starting slide — matches the "open the app, see one
+// empty title slide" defaults of Google Slides and PowerPoint Online.
+// The 3-slide Spike A debug deck this replaced was leaking alpha-era
+// branding into the v0.1.0 cold-boot impression. See UX_AUDIT_v0.1.0
+// item S4.
 //
 // Coordinate system: Univer uses pixels. PageSize 960x540 = 16:9 at 96 DPI.
+// Empty richText.text means the placeholder reads as visually blank; users
+// click to start typing — same affordance Google Slides / PowerPoint Online
+// expose on a fresh deck.
 
 export const DEFAULT_SLIDE_DATA: ISlideData = {
-  id: 'spike-a-deck',
-  title: 'Casual Slides — Spike A',
+  id: 'untitled-deck',
+  title: 'Untitled presentation',
   pageSize: { width: 960, height: 540 },
   body: {
-    pageOrder: ['page-1', 'page-2', 'page-3'],
+    pageOrder: ['page-1'],
     pages: {
       'page-1': {
         id: 'page-1',
@@ -33,9 +38,9 @@ export const DEFAULT_SLIDE_DATA: ISlideData = {
             description: '',
             type: PageElementType.TEXT,
             richText: {
-              text: 'Casual Slides',
+              text: 'Click to add title',
               fs: 60,
-              cl: { rgb: 'rgb(17, 24, 39)' },
+              cl: { rgb: 'rgb(156, 163, 175)' },
               bl: 1,
             },
           },
@@ -50,79 +55,9 @@ export const DEFAULT_SLIDE_DATA: ISlideData = {
             description: '',
             type: PageElementType.TEXT,
             richText: {
-              text: 'PowerPoint-flavored web presentations',
+              text: 'Click to add subtitle',
               fs: 28,
-              cl: { rgb: 'rgb(75, 85, 99)' },
-            },
-          },
-        },
-      },
-      'page-2': {
-        id: 'page-2',
-        pageType: PageType.SLIDE,
-        zIndex: 2,
-        title: 'Goals',
-        description: '',
-        pageBackgroundFill: { rgb: 'rgb(255, 255, 255)' },
-        pageElements: {
-          'el-2-title': {
-            id: 'el-2-title',
-            zIndex: 1,
-            left: 60,
-            top: 60,
-            width: 840,
-            height: 60,
-            title: 'title',
-            description: '',
-            type: PageElementType.TEXT,
-            richText: {
-              text: 'P0 Spike A — bootstrap',
-              fs: 40,
-              cl: { rgb: 'rgb(17, 24, 39)' },
-              bl: 1,
-            },
-          },
-          'el-2-body': {
-            id: 'el-2-body',
-            zIndex: 2,
-            left: 60,
-            top: 160,
-            width: 840,
-            height: 340,
-            title: 'body',
-            description: '',
-            type: PageElementType.TEXT,
-            richText: {
-              text: '• Mount @univerjs/slides + slides-ui via pnpm overrides to the fork\n• Hide native chrome\n• Render a default deck\n• Confirm Univer DI + plugin lifecycle run cleanly',
-              fs: 22,
-              cl: { rgb: 'rgb(31, 41, 55)' },
-            },
-          },
-        },
-      },
-      'page-3': {
-        id: 'page-3',
-        pageType: PageType.SLIDE,
-        zIndex: 3,
-        title: 'Next',
-        description: '',
-        pageBackgroundFill: { rgb: 'rgb(255, 255, 255)' },
-        pageElements: {
-          'el-3-title': {
-            id: 'el-3-title',
-            zIndex: 1,
-            left: 60,
-            top: 60,
-            width: 840,
-            height: 60,
-            title: 'title',
-            description: '',
-            type: PageElementType.TEXT,
-            richText: {
-              text: 'Next: Spike B (pptx round-trip) and Spike C (collab patch)',
-              fs: 32,
-              cl: { rgb: 'rgb(17, 24, 39)' },
-              bl: 1,
+              cl: { rgb: 'rgb(156, 163, 175)' },
             },
           },
         },

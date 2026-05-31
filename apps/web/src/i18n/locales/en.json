@@ -34,12 +34,23 @@
       }
     },
     "workspace": {
-      "dropPptx": "Drop .pptx to open"
+      "dropPptx": "Drop .pptx to open",
+      "busyOpening": "Opening deck…",
+      "busySaving": "Saving deck…",
+      "bootSplash": "Starting the editor…"
+    },
+    "autosave": {
+      "title": "Restore unsaved deck?",
+      "subtitle": "{{name}} · last edited {{when}}",
+      "restore": "Restore",
+      "dismiss": "Discard"
     },
     "slideRail": {
       "ariaLabel": "Slide thumbnails",
       "slideLabel": "Slide {{index}}",
-      "newSlide": "New slide"
+      "newSlide": "New slide",
+      "duplicate": "Duplicate slide",
+      "delete": "Delete slide"
     }
   },
   "menu": {
@@ -96,6 +107,59 @@
       "slide": "New slide",
       "shortcut": {
         "slide": "Ctrl+M"
+      }
+    },
+    "format": {
+      "label": "Format",
+      "bold": "Bold",
+      "italic": "Italic",
+      "underline": "Underline",
+      "strikethrough": "Strikethrough",
+      "alignLeft": "Align left",
+      "alignCenter": "Align center",
+      "alignRight": "Align right",
+      "alignJustify": "Justify",
+      "indentDecrease": "Decrease indent",
+      "indentIncrease": "Increase indent",
+      "clearFormatting": "Clear formatting",
+      "insertLink": "Insert link",
+      "shortcut": {
+        "bold": "Ctrl+B",
+        "italic": "Ctrl+I",
+        "underline": "Ctrl+U",
+        "strikethrough": "Alt+Shift+5",
+        "indentDecrease": "Shift+Tab",
+        "indentIncrease": "Tab",
+        "clearFormatting": "Ctrl+\\",
+        "insertLink": "Ctrl+K"
+      }
+    },
+    "slide": {
+      "label": "Slide",
+      "new": "New slide",
+      "duplicate": "Duplicate slide",
+      "theme": "Apply theme…",
+      "delete": "Delete slide",
+      "shortcut": {
+        "new": "Ctrl+M",
+        "duplicate": "Ctrl+D",
+        "delete": "Shift+Del"
+      }
+    },
+    "arrange": {
+      "label": "Arrange",
+      "bringToFront": "Bring to front",
+      "bringForward": "Bring forward",
+      "sendBackward": "Send backward",
+      "sendToBack": "Send to back",
+      "centerH": "Center on slide (horizontal)",
+      "centerV": "Center on slide (vertical)",
+      "centerBoth": "Center on slide",
+      "shortcut": {
+        "bringToFront":  "Ctrl+Alt+]",
+        "bringForward":  "Ctrl+Shift+]",
+        "sendBackward":  "Ctrl+Shift+[",
+        "sendToBack":    "Ctrl+Alt+["
       }
     },
     "help": {
@@ -273,7 +337,9 @@
     "zoomOut": "Zoom out",
     "zoomLabel": "Zoom",
     "zoomValue": "{{percent}}%",
-    "zoomReset": "Reset zoom to 100%"
+    "zoomReset": "Reset zoom to 100%",
+    "present": "Slideshow",
+    "presentTooltip": "Start slideshow (F5)"
   },
   "notes": {
     "title": "Speaker notes",
@@ -357,6 +423,10 @@
       "untitled": "Untitled deck",
       "keys": {
         "title": "Title",
+        "author": "Author",
+        "created": "Created",
+        "modified": "Last modified",
+        "lastModifiedBy": "Last modified by",
         "slides": "Slides",
         "pageSize": "Page size",
         "elements": "Elements",
@@ -405,6 +475,7 @@
       "close": "Close",
       "product": "Casual Slides",
       "tagline": "Web-based PowerPoint-equivalent \u2014 built on Univer OSS, licensed Apache-2.0.",
+      "version": "Version",
       "license": "License",
       "licenseValue": "Apache-2.0",
       "source": "Source",
@@ -532,7 +603,13 @@
         "fill": "Fill",
         "border": "Border",
         "shadow": "Shadow",
+        "opacity": "Opacity",
         "arrange": "Arrange"
+      },
+      "opacity": {
+        "label": "Opacity",
+        "disabledTooltip": "Coming with the next Univer upgrade",
+        "disabledHint": "Shape opacity will land with the next Univer engine upgrade — IShapeProperties has no alpha field in the current version."
       },
       "arrange": {
         "bringForward": "Bring forward (Ctrl+Shift+])",
@@ -615,7 +692,11 @@
       "cancel": "Cancel",
       "apply": "Apply",
       "widescreen": "Widescreen 16:9",
+      "widescreen1610": "Widescreen 16:10",
       "standard": "Standard 4:3",
+      "a4Landscape": "A4 landscape",
+      "a4Portrait": "A4 portrait",
+      "letterLandscape": "US Letter landscape",
       "custom": "Custom",
       "width": "Width",
       "height": "Height",
@@ -646,7 +727,8 @@
       "notesEmpty": "No notes on this slide.",
       "resetTimer": "Reset",
       "resetTimerTooltip": "Reset elapsed timer",
-      "currentLabel": "Current slide"
+      "currentLabel": "Current slide",
+      "elapsedAria": "Elapsed time {{elapsed}}"
     },
     "jump": {
       "title": "Go to slide",
@@ -657,6 +739,15 @@
   "errors": {
     "generic": "Something went wrong.",
     "unknown": "Unknown error",
-    "notPptx": "Only .pptx files are supported"
+    "notPptx": "Only .pptx files are supported",
+    "pptxTooLarge": "File is too large to open ({{size}}). Limit is {{limit}}.",
+    "pptxCorrupt": "This .pptx is corrupt or not a PowerPoint file.",
+    "pptxEncrypted": "This .pptx is password-protected. Decrypt it in PowerPoint first, then re-open.",
+    "boundary": {
+      "title": "Casual Slides hit an unexpected error",
+      "lede": "The editor caught a render error and stopped to avoid corrupting your deck. Reload to start fresh. Recent unsaved edits since the last save may be lost.",
+      "reload": "Reload editor",
+      "detailsLabel": "Technical details"
+    }
   }
 }
