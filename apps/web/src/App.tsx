@@ -298,39 +298,86 @@ export function App() {
     return () => window.clearTimeout(t);
   }, [status]);
 
-  // When the FormatPane opens/closes, the workspace width changes
-  // (CSS `transition: margin 200 ms`). UniverSlide.tsx already has a
-  // ResizeObserver on `.univer-mount` that calls engine.resize +
-  // scrollToCenter on every size change, so the canvas recenters
-  // automatically. We DON'T apply our own scene.scale — Univer's
-  // scrollToCenter math is `(scene.width - engine.width) / 2` and is
-  // scale-unaware; a custom zoom breaks the centring. If the slide
-  // doesn't fit at 100 %, the user can hit Ctrl+Shift+0.
-  //
-  // What we DO add: a small cascade of explicit recenter calls so we
-  // catch the final post-transition tick (some browsers debounce
-  // ResizeObserver too aggressively and miss it).
+  // When the FormatPane opens/closes the workspace width changes by
+  // 280 px (CSS `transition: margin 200 ms`). We do two things:
+  //   1) Apply scene.scale(0.85) on open — the slide visually shrinks
+  //      so it fits the smaller workspace; restore prior scale on close.
+  //   2) After the scale + the CSS transition settle, scroll the
+  //      viewport so the slide centre is at the canvas centre. Univer's
+  //      built-in scrollToCenter math `(sceneWidth - canvasWidth) / 2`
+  //      is scale-unaware — we replace it with the scale-aware version
+  //      `(sceneWidth - canvasWidth / scale) / 2` so a slide rendered
+  //      at scale=0.85 lands centred, not 100 px to the left.
+  const zoomStateRef = useRef<{ priorZoom: number | null }>({ priorZoom: null });
   useEffect(() => {
-    function recenter() {
+    function getRenderUnit() {
       const w = window as unknown as { univer?: Univer };
       const univer = w.univer;
-      if (!univer) return;
+      if (!univer) return null;
       try {
         const instances = univer.__getInjector().get(IUniverInstanceService);
         const unitId = instances.getCurrentUnitOfType(UniverInstanceType.UNIVER_SLIDE)?.getUnitId();
-        if (!unitId) return;
-        const renderManager = univer.__getInjector().get(IRenderManagerService);
-        const renderUnit = renderManager.getRenderById(unitId);
-        renderUnit?.engine?.resize();
-        void import('@univerjs/slides-ui').then(({ SlideRenderController }) => {
-          try { renderUnit?.with(SlideRenderController)?.scrollToCenter(); } catch { /* not ready */ }
-        });
+        if (!unitId) return null;
+        return univer.__getInjector().get(IRenderManagerService).getRenderById(unitId);
+      } catch { return null; }
+    }
+
+    function recenter() {
+      const renderUnit = getRenderUnit();
+      if (!renderUnit) return;
+      try {
+        renderUnit.engine?.resize();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const scene = (renderUnit as any).scene;
+        if (!scene) return;
+        const scale = scene.scaleX ?? 1;
+        // SLIDE_KEY.VIEW = "__mainView__" — inline the literal so we
+        // don't pull @univerjs/slides for one constant.
+        const viewMain = scene.getViewport?.('__mainView__');
+        if (!viewMain) return;
+        const sceneW = scene.width;
+        const sceneH = scene.height;
+        const canvasW = renderUnit.engine?.width ?? 0;
+        const canvasH = renderUnit.engine?.height ?? 0;
+        // Scale-aware: at scale<1, the viewport shows canvasW/scale
+        // scene units. Centred scrollLeft = (sceneW - canvasW/scale)/2.
+        const left = (sceneW - canvasW / scale) / 2;
+        const top = (sceneH - canvasH / scale) / 2;
+        const { x, y } = viewMain.transViewportScroll2ScrollValue(left, top);
+        viewMain.scrollToBarPos({ x, y });
+      } catch { /* render unit gone */ }
+    }
+
+    function applyAutoZoom(targetPercent: number) {
+      const renderUnit = getRenderUnit();
+      if (!renderUnit) return;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const scene = (renderUnit as any).scene;
+        const f = targetPercent / 100;
+        scene?.scale?.(f, f);
       } catch { /* ignore */ }
     }
 
-    const handler = () => {
-      // CSS transition is 200 ms. Fire recenter at 0 / 120 / 260 / 420 ms
-      // so the final call lands well after the transition completes.
+    const PANE_FIT_PCT = 85;
+    const handler = (e: Event) => {
+      const open = (e as CustomEvent<{ open: boolean }>).detail?.open;
+      if (open) {
+        if (zoomStateRef.current.priorZoom == null) {
+          zoomStateRef.current.priorZoom = zoom;
+        }
+        const target = Math.min(zoom, PANE_FIT_PCT);
+        applyAutoZoom(target);
+        setZoom(target);
+      } else {
+        const restore = zoomStateRef.current.priorZoom ?? zoom;
+        zoomStateRef.current.priorZoom = null;
+        applyAutoZoom(restore);
+        setZoom(restore);
+      }
+      // CSS transition is 200 ms. Cascade recenter at 0 / 120 / 260 /
+      // 420 ms so the last call lands after the canvas resize + the
+      // workspace margin transition both settle.
       recenter();
       window.setTimeout(recenter, 120);
       window.setTimeout(recenter, 260);
@@ -339,6 +386,7 @@ export function App() {
 
     window.addEventListener('cs:format-pane', handler);
     return () => window.removeEventListener('cs:format-pane', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.id]);
 
   // Global keyboard shortcuts. Each guards on the active element NOT being
