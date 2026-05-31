@@ -429,6 +429,16 @@ export function App() {
         // Mirrors View ▸ Fit to window.
         e.preventDefault();
         handleFitToWindow();
+      } else if (e.key === 'ArrowUp' && e.shiftKey) {
+        // Ctrl+Shift+↑ — move active slide up. Same swap reorderPage
+        // does from the slide-rail context menu, but reachable without
+        // mousing.
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.move-active-slide', { direction: 'up' });
+      } else if (e.key === 'ArrowDown' && e.shiftKey) {
+        // Ctrl+Shift+↓ — move active slide down.
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.move-active-slide', { direction: 'down' });
       } else if (k === '0') {
         e.preventDefault();
         setZoom(100);

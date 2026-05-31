@@ -105,6 +105,8 @@ function buildSections(isMac: boolean): ShortcutSection[] {
         { labelKey: 'newSlide',       binds: [{ keys: [mod, 'M'] }] },
         { labelKey: 'duplicateSlide', binds: [{ keys: [mod, 'D'] }] },
         { labelKey: 'deleteSlide',    binds: [{ keys: [shift, del] }] },
+        { labelKey: 'moveSlideUp',    binds: [{ keys: [mod, shift, '↑'] }] },
+        { labelKey: 'moveSlideDown',  binds: [{ keys: [mod, shift, '↓'] }] },
       ],
     },
     {

@@ -490,6 +490,8 @@
         "newSlide": "New slide",
         "duplicateSlide": "Duplicate slide",
         "deleteSlide": "Delete slide",
+        "moveSlideUp": "Move slide up",
+        "moveSlideDown": "Move slide down",
         "insertLink": "Insert link",
         "nudge": "Nudge selection 1 px",
         "nudgeBig": "Nudge selection 10 px",

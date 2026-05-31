@@ -59,6 +59,11 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   if (id === 'casual-slides.command.clear-selection') {
     return clearCanvasSelection();
   }
+  if (id === 'casual-slides.command.move-active-slide') {
+    const dir = (params as { direction?: 'up' | 'down' } | undefined)?.direction;
+    if (dir !== 'up' && dir !== 'down') return false;
+    return moveActiveSlide(dir === 'up' ? -1 : 1);
+  }
   if (id === 'slide.command.duplicate-slide') {
     // Univer v0.24.0 ships no built-in duplicate-page mutation. We clone
     // the target page on the snapshot directly — same TODO(collab) caveat
@@ -271,6 +276,36 @@ export function applyZOrder(direction: ZOrderDirection): boolean {
   model.incrementRev();
   const active = model.getActivePage();
   if (active) model.setActivePage(active);
+  return true;
+}
+
+// Move the active slide up or down in pageOrder. Same swap-and-bump-rev
+// pattern as SlideContextMenu.reorderPage (which targets a specific
+// pageId from a thumbnail right-click). Returns false if already at the
+// boundary.
+export function moveActiveSlide(delta: -1 | 1): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  const snap = model.getSnapshot();
+  const order = snap.body?.pageOrder;
+  if (!order) return false;
+  const activeId = model.getActivePage()?.id;
+  if (!activeId) return false;
+  const idx = order.indexOf(activeId);
+  const target = idx + delta;
+  if (idx < 0 || target < 0 || target >= order.length) return false;
+  [order[idx], order[target]] = [order[target]!, order[idx]!];
+  model.incrementRev();
+  // Re-anchor the active page to the SLIDE we just moved (now at the
+  // target index) so subsequent moves keep operating on the same deck
+  // entry. Without this, Univer's getActivePage() walks pageOrder by
+  // index and returns whatever's now at the old position — making the
+  // next press of the same shortcut act on the wrong slide.
+  const moved = model.getPage(activeId);
+  if (moved) model.setActivePage(moved);
   return true;
 }
 
