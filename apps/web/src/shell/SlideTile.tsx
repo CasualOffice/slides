@@ -49,7 +49,13 @@ function renderTextElement(element: IPageElement) {
         textDecoration: rt.ul ? 'underline' : 'none',
         whiteSpace: 'pre-wrap',
         lineHeight: 1.2,
-        overflow: 'hidden',
+        // `overflow: hidden` clipped the second line of wrapping titles
+        // when the authored frame height only fit one line (visible
+        // mid-letter on the default deck's slide 3). The slide-tile is a
+        // read-only renderer; let text grow vertically past the frame
+        // rather than chopping glyphs in half. The slide bounding-box
+        // stays the authored size; only the text bleeds.
+        overflow: 'visible',
       }}
     >
       {rt.text}

@@ -274,7 +274,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..5fe6b159e67308a1c607e33a1f1733f0
  	}
  	_onKeyDown(evt) {
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8df45f721663e1d979fa1200856e713187d0ad8f 100644
+index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..c82909b808a1308f3316c14c46ef9291b8e1bc2c 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -12619,6 +12619,13 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -458,7 +458,46 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8df45f721663e1d979fa1200856e7131
  		this._draw(mainCtx);
  		mainCtx.restore();
  		this.makeDirty(false);
-@@ -20728,16 +20824,52 @@ var RichText = class extends BaseObject {
+@@ -20699,11 +20795,24 @@ var RichText = class extends BaseObject {
+ 		this._documents.render(ctx);
+ 	}
+ 	_convertToDocumentData(text) {
+-		const contentLength = text.length;
++		// Casual Slides patch — translate plain `\n` into Univer's paragraph
++		// separator (`\r`) and emit a `paragraphs[]` index. The upstream
++		// conversion left `\n` in the dataStream with no paragraphs entries,
++		// which the DocumentSkeleton interpreted as page-breaks with
++		// null/0-px dimensions; multi-line plain-text RichText (the default
++		// deck's bulleted body, anything inserted via slide.command.add-text
++		// with embedded newlines) silently rendered to nothing.
++		const _csText = String(text || "").replace(/\n/g, "\r");
++		const _csContentLength = _csText.length;
++		const _csParagraphs = [];
++		for (let _i = 0; _i < _csContentLength; _i++) {
++			if (_csText[_i] === "\r") _csParagraphs.push({ startIndex: _i });
++		}
++		_csParagraphs.push({ startIndex: _csContentLength });
+ 		return {
+ 			id: "d",
+ 			body: {
+-				dataStream: `${text}${DEFAULT_EMPTY_DOCUMENT_VALUE}`,
++				dataStream: `${_csText}${DEFAULT_EMPTY_DOCUMENT_VALUE}`,
+ 				textRuns: [{
+ 					ts: {
+ 						fs: this._fs || 14,
+@@ -20718,8 +20827,9 @@ var RichText = class extends BaseObject {
+ 						cl: this._cl
+ 					},
+ 					st: 0,
+-					ed: contentLength
+-				}]
++					ed: _csContentLength
++				}],
++				paragraphs: _csParagraphs
+ 			},
+ 			documentStyle: { pageSize: {
+ 				width: Number.POSITIVE_INFINITY,
+@@ -20728,16 +20838,52 @@ var RichText = class extends BaseObject {
  		};
  	}
  	_initialProps(props) {
@@ -514,7 +553,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8df45f721663e1d979fa1200856e7131
  		this.setProps(props);
  		this.makeDirty(true);
  	}
-@@ -20747,11 +20879,17 @@ var RichText = class extends BaseObject {
+@@ -20747,11 +20893,17 @@ var RichText = class extends BaseObject {
  	refreshDocumentByDocData() {
  		const docViewModel = new DocumentViewModel(this.documentModel = new DocumentDataModel(this._documentData));
  		this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -535,7 +574,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8df45f721663e1d979fa1200856e7131
  		this._documentSkeleton.calculate();
  	}
  	/**
-@@ -21301,6 +21439,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21301,6 +21453,15 @@ var FontAndBaseLine = class extends docExtension {
  			ctx.rotate(Math.PI / 2);
  			ctx.translate(-width / 2, (aba + abd) / 2 - abd);
  			ctx.fillText(content, 0, 0);
@@ -551,7 +590,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8df45f721663e1d979fa1200856e7131
  			ctx.restore();
  		} else {
  			const CHECKED_GLYPH = "☑";
-@@ -21331,6 +21478,15 @@ var FontAndBaseLine = class extends docExtension {
+@@ -21331,6 +21492,15 @@ var FontAndBaseLine = class extends docExtension {
  					y_offset = -(glyph.width - fontHeight) / 2;
  				}
  				ctx.fillText(content, spanPointWithFont.x + x_offset, spanPointWithFont.y + y_offset);
@@ -567,7 +606,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..8df45f721663e1d979fa1200856e7131
  			}
  		}
  	}
-@@ -24615,7 +24771,8 @@ var InputManager = class InputManager extends Disposable {
+@@ -24615,7 +24785,8 @@ var InputManager = class InputManager extends Disposable {
  	_onMouseWheel(evt) {
  		const currentObject = this._getObjectAtPos(evt.offsetX, evt.offsetY);
  		const isStop = currentObject === null || currentObject === void 0 ? void 0 : currentObject.triggerMouseWheel(evt);
