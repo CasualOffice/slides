@@ -275,6 +275,17 @@ export function App() {
     return () => window.removeEventListener('cs:status', handler);
   }, []);
 
+  // Keep the browser tab title in sync with the active deck so users
+  // can tell decks apart across tabs + see at a glance whether the
+  // current deck has unsaved changes. PowerPoint / Google Slides both
+  // do this; pattern: "{name} {dot} · Casual Slides" when dirty,
+  // "{name} · Casual Slides" otherwise.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const dot = dirty ? ' •' : '';
+    document.title = `${fileName}${dot} · Casual Slides`;
+  }, [fileName, dirty]);
+
   // Auto-dismiss the status pill after 3.5 s. The pill carries transient
   // confirmations ("Saved · slide-1.png", "Created a copy", "Loaded · 3
   // slides") that the user doesn't need to manually close — Google Slides
