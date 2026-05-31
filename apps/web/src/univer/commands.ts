@@ -1,7 +1,9 @@
-import type { DocumentDataModel, Univer } from '@univerjs/core';
+import type { DocumentDataModel, IAccessor, Univer } from '@univerjs/core';
 import {
   BooleanNumber,
+  CommandType,
   ICommandService,
+  IUndoRedoService,
   IUniverInstanceService,
   NamedStyleType,
   SpacingRule,
@@ -32,6 +34,89 @@ function notify(message: string): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('cs:status', { detail: { message } }));
   }
+}
+
+// ─────────────────────────────────────────────────── undo for direct writes
+//
+// Several of our slide commands (duplicate, move, center, delete, z-order)
+// mutate the SlideDataModel snapshot directly because Univer Slides v0.24.0
+// doesn't expose a typed mutation for those fields. Direct writes are
+// invisible to Univer's command bus, which means Ctrl+Z doesn't see them.
+//
+// Workaround: register one generic `cs.mut.replace-body` mutation that
+// swaps `snapshot.body` for a snapshot passed in `params`. Wrap each
+// direct-write helper in `withUndo()` — it takes a body clone before the
+// action, runs the action, takes a body clone after, then pushes both
+// onto Univer's IUndoRedoService stack. Ctrl+Z restores the pre-write
+// body; Ctrl+Y restores the post-write body.
+//
+// Caveats:
+//   • Whole-body clone per action — fine for the 10-100 slide sizes we
+//     target; would need a finer-grained mutation for huge decks.
+//   • TODO(collab): same caveat as the underlying direct writes — the
+//     replace-body mutation isn't routed through `onMutationExecutedForCollab`
+//     so peers won't see undo replay.
+
+let replaceBodyRegistered = false;
+const REPLACE_BODY_MUTATION_ID = 'cs.mut.replace-body';
+
+function ensureReplaceBodyMutation(univer: Univer): void {
+  if (replaceBodyRegistered) return;
+  const cs = univer.__getInjector().get(ICommandService);
+  cs.registerCommand({
+    type: CommandType.MUTATION,
+    id: REPLACE_BODY_MUTATION_ID,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler(accessor: IAccessor, params?: { body?: any }) {
+      if (!params?.body) return false;
+      const instances = accessor.get(IUniverInstanceService);
+      const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+      if (!model) return false;
+      const snap = model.getSnapshot();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (snap as any).body = structuredClone(params.body);
+      model.incrementRev();
+      const active = model.getActivePage();
+      if (active) model.setActivePage(active);
+      return true;
+    },
+  });
+  replaceBodyRegistered = true;
+}
+
+// Run a direct-snapshot action and push an undo/redo entry onto Univer's
+// stack. The action must return `true` for the write to be considered
+// committed; returning `false` (no-op, validation failed, etc.) skips the
+// undo entry so the user's history stays clean.
+function withUndo(action: () => boolean): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  ensureReplaceBodyMutation(univer);
+  const unitId = model.getUnitId();
+  const before = structuredClone(model.getSnapshot().body);
+  let ok = false;
+  try {
+    ok = action();
+  } catch {
+    ok = false;
+  }
+  if (!ok) return false;
+  const after = structuredClone(model.getSnapshot().body);
+  try {
+    const undoService = univer.__getInjector().get(IUndoRedoService);
+    undoService.pushUndoRedo({
+      unitID: unitId,
+      undoMutations: [{ id: REPLACE_BODY_MUTATION_ID, params: { body: before } }],
+      redoMutations: [{ id: REPLACE_BODY_MUTATION_ID, params: { body: after } }],
+    });
+  } catch {
+    // If pushUndoRedo fails (service not ready / unit gone), the snapshot
+    // change still landed — just no undo entry. Better than crashing.
+  }
+  return true;
 }
 
 function getUniver(): Univer | null {
@@ -231,6 +316,10 @@ export async function clearFormatting(): Promise<boolean> {
 export type ZOrderDirection = 'forward' | 'backward' | 'front' | 'back';
 
 export function applyZOrder(direction: ZOrderDirection): boolean {
+  return withUndo(() => _applyZOrder(direction));
+}
+
+function _applyZOrder(direction: ZOrderDirection): boolean {
   const univer = getUniver();
   if (!univer) return false;
   const sel = getSelectedElement();
@@ -298,6 +387,10 @@ export function applyZOrder(direction: ZOrderDirection): boolean {
 // pageId from a thumbnail right-click). Returns false if already at the
 // boundary.
 export function moveActiveSlide(delta: -1 | 1): boolean {
+  return withUndo(() => _moveActiveSlide(delta));
+}
+
+function _moveActiveSlide(delta: -1 | 1): boolean {
   const univer = getUniver();
   if (!univer) return false;
   const instances = univer.__getInjector().get(IUniverInstanceService);
@@ -373,6 +466,10 @@ export function clearCanvasSelection(): boolean {
 // or Univer isn't ready. Same TODO(collab) caveat as the other direct-
 // snapshot mutations.
 export function deleteSelectedElement(): boolean {
+  return withUndo(() => _deleteSelectedElement());
+}
+
+function _deleteSelectedElement(): boolean {
   const univer = getUniver();
   if (!univer) return false;
   const sel = getSelectedElement();
@@ -403,6 +500,10 @@ export function deleteSelectedElement(): boolean {
 export type CenterAxis = 'h' | 'v' | 'both';
 
 export function centerSelectionOnSlide(axis: CenterAxis): boolean {
+  return withUndo(() => _centerSelectionOnSlide(axis));
+}
+
+function _centerSelectionOnSlide(axis: CenterAxis): boolean {
   const univer = getUniver();
   if (!univer) return false;
   const sel = getSelectedElement();
@@ -442,6 +543,10 @@ export function centerSelectionOnSlide(axis: CenterAxis): boolean {
 // move-down in SlideContextMenu. Replace with a fork-side
 // `slide.mutation.duplicate-page` once it lands.
 export function duplicateSlide(sourcePageId?: string): boolean {
+  return withUndo(() => _duplicateSlide(sourcePageId));
+}
+
+function _duplicateSlide(sourcePageId?: string): boolean {
   const univer = getUniver();
   if (!univer) return false;
   const instances = univer.__getInjector().get(IUniverInstanceService);
@@ -466,11 +571,16 @@ export function duplicateSlide(sourcePageId?: string): boolean {
   // Re-id every page element + rewrite the pageElements map so the
   // canvas renders the clone as a fresh set of BaseObjects (Univer
   // keys its transformer by oKey — leaving the source ids would make
-  // a click on the clone select the source instead).
+  // a click on the clone select the source instead). Use a fresh
+  // `el-{stamp}-{i}` prefix instead of compounding `oldKey-dup-…`,
+  // otherwise re-duplicates get pathological ids like
+  // `el-1-title-dup-X-dup-Y-dup-Z` and eventually overflow pptx export
+  // id limits.
   const reKeyed: Record<string, (typeof clone.pageElements)[string]> = {};
-  for (const [oldKey, el] of Object.entries(clone.pageElements ?? {})) {
+  let i = 0;
+  for (const [, el] of Object.entries(clone.pageElements ?? {})) {
     if (!el) continue;
-    const newKey = `${oldKey}-dup-${stamp}-${Math.random().toString(36).slice(2, 6)}`;
+    const newKey = `el-${stamp}-${rand}-${i++}`;
     el.id = newKey;
     reKeyed[newKey] = el;
   }
