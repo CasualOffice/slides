@@ -96,7 +96,8 @@ export async function printDeck(
   if (!pages.length) return;
   const dataUrls: string[] = [];
   for (let i = 0; i < pages.length; i++) {
-    dataUrls.push(await rasterizeSlide(pages[i], pageSize));
+    // i < pages.length → pages[i] is in bounds.
+    dataUrls.push(await rasterizeSlide(pages[i]!, pageSize));
     onProgress?.(i + 1, pages.length);
   }
 
@@ -137,21 +138,33 @@ export async function printDeck(
   }
   document.body.appendChild(root);
 
+  // Defensive cleanup: remove the print sheet + listener regardless of
+  // which lifecycle path fires. The `afterprint` event is the happy
+  // path on Chrome/Edge/Safari; Firefox sometimes drops it on cancel.
+  // The `beforeunload` listener handles a page navigation mid-print
+  // dialog. The 1 s setTimeout is a last-resort safety net so the
+  // user never sees the print scaffolding on screen.
+  let cleanedUp = false;
   const cleanup = () => {
-    style.remove();
-    root.remove();
+    if (cleanedUp) return;
+    cleanedUp = true;
+    try { style.remove(); } catch { /* already gone */ }
+    try { root.remove(); } catch { /* already gone */ }
     window.removeEventListener('afterprint', cleanup);
+    window.removeEventListener('beforeunload', cleanup);
   };
   window.addEventListener('afterprint', cleanup);
+  window.addEventListener('beforeunload', cleanup);
 
-  // Give the images one paint frame to flush so the print dialog sees
-  // them sized correctly.
-  await new Promise<void>((r) => requestAnimationFrame(() => r()));
-  window.print();
-  // Safety net: some browsers don't fire `afterprint` when the dialog
-  // is cancelled synchronously. Drop the sheet after a short delay so
-  // the user never sees it on screen.
-  window.setTimeout(cleanup, 1000);
+  try {
+    // One paint frame so the print dialog sees images sized correctly.
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    window.print();
+  } finally {
+    // window.print() is blocking on most browsers, but in case it throws
+    // (popup blocked, etc.), still schedule cleanup.
+    window.setTimeout(cleanup, 1000);
+  }
 }
 
 // Multi-slide PDF export. Each page is rasterized via the same offscreen
@@ -178,7 +191,8 @@ export async function downloadDeckAsPdf(
     compress: true,
   });
   for (let i = 0; i < pages.length; i++) {
-    const dataUrl = await rasterizeSlide(pages[i], pageSize);
+    // i < pages.length → pages[i] is in bounds.
+    const dataUrl = await rasterizeSlide(pages[i]!, pageSize);
     if (i > 0) pdf.addPage([pageSize.width, pageSize.height], orientation);
     pdf.addImage(dataUrl, 'PNG', 0, 0, pageSize.width, pageSize.height, undefined, 'FAST');
     onProgress?.(i + 1, pages.length);

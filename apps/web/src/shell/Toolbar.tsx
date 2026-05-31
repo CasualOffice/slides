@@ -589,7 +589,7 @@ export function Toolbar() {
         className="cs-toolbar2__btn"
         title={t('toolbar:insertLinkShortcut')}
         aria-label={t('toolbar:insertLink')}
-        onClick={() => void dispatchSlideCommand('doc.operation.show-hyper-link-edit-popup')}
+        onClick={() => void dispatchSlideCommand('casual-slides.command.insert-link')}
       >
         <Icon name="link" size={18} />
       </button>

@@ -6,6 +6,7 @@ import {
   IUndoRedoService,
   IUniverInstanceService,
   NamedStyleType,
+  PluginService,
   SpacingRule,
   UpdateDocsAttributeType,
   UniverInstanceType,
@@ -159,6 +160,28 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
     const dir = (params as { direction?: 'up' | 'down' } | undefined)?.direction;
     if (dir !== 'up' && dir !== 'down') return false;
     return moveActiveSlide(dir === 'up' ? -1 : 1);
+  }
+  if (id === 'casual-slides.command.insert-link') {
+    // Lazy-init the docs-hyper-link plugin pair on first invocation —
+    // they declare `type = UNIVER_DOC` and so otherwise stay dormant
+    // in a slides app. Once started, the operation registers globally
+    // and subsequent clicks dispatch instantly.
+    const univer = getUniver();
+    if (!univer) return false;
+    try {
+      univer
+        .__getInjector()
+        .get(PluginService)
+        .startPluginsForType(UniverInstanceType.UNIVER_DOC);
+    } catch {
+      /* already started — that's fine */
+    }
+    const cs = univer.__getInjector().get(ICommandService);
+    try {
+      return await cs.executeCommand('doc.operation.show-hyper-link-edit-popup');
+    } catch {
+      return false;
+    }
   }
   if (id === 'slide.command.duplicate-slide') {
     // Univer v0.24.0 ships no built-in duplicate-page mutation. We clone

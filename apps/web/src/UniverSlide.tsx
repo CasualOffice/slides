@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ICommandService, IUniverInstanceService, LocaleType, LogLevel, PluginService, Univer, UniverInstanceType } from '@univerjs/core';
+import { ICommandService, IUniverInstanceService, LocaleType, LogLevel, Univer, UniverInstanceType } from '@univerjs/core';
 import type { ISlideData, SlideDataModel } from '@univerjs/slides';
 import { defaultTheme } from '@univerjs/themes';
 import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
@@ -90,14 +90,15 @@ export function UniverSlide({ snapshot }: UniverSlideProps) {
       snapshot,
     );
 
-    // The hyperlink plugin pair declares `type = UNIVER_DOC`, so it only
-    // starts when a DOC unit is created. In a slides app, embedded doc
-    // units spawn lazily when the user clicks into a text frame — which
-    // means the toolbar button + Ctrl+K shortcut wouldn't fire until then.
-    // Force-start DOC-typed plugins now so `doc.operation.show-hyper-link-edit-popup`
-    // is registered globally and the inserted-link UX works the first
-    // time the user clicks into text.
-    univer.__getInjector().get(PluginService).startPluginsForType(UniverInstanceType.UNIVER_DOC);
+    // The hyperlink plugin pair (registered above) declares
+    // `type = UNIVER_DOC` — it only fully activates when a DOC unit is
+    // created. We DON'T force-start it at boot anymore: that brought
+    // up the hyperlink popup service + controllers for every slide
+    // session, including users who never insert a link. Instead the
+    // Toolbar's Insert link button dispatches `casual-slides.command.
+    // insert-link`, intercepted in dispatchSlideCommand, which lazily
+    // calls PluginService.startPluginsForType(UNIVER_DOC) on first
+    // click and then routes to the real hyperlink popup operation.
 
     if (typeof window !== 'undefined') {
       const w = window as unknown as {
