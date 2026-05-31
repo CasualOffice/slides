@@ -10,7 +10,7 @@ import {
 } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
 import { DocSelectionManagerService } from '@univerjs/docs';
-import { IRenderManagerService } from '@univerjs/engine-render';
+import { CanvasView } from '@univerjs/slides-ui';
 import { printDeck } from '../shell/download-slide';
 import { getSelectedElement, setSelectedElement } from '../shell/selection';
 
@@ -336,19 +336,31 @@ export function clearCanvasSelection(): boolean {
   if (!univer) return false;
   let cleared = false;
   try {
-    const rms = univer.__getInjector().get(IRenderManagerService);
-    rms?.getRenderAll().forEach((unit) => {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const tr = (unit as any)?.scene?.getTransformer?.();
-        if (tr) { tr.clearControls(); cleared = true; }
-      } catch { /* per-unit scene torn down — ignore */ }
-    });
-  } catch { /* render manager not ready */ }
-  // Also drop the selection bridge directly so FormatPane + Toolbar
-  // observers update even if no transformer was holding our selection
-  // (e.g. it was populated synthetically by an e2e probe, or Univer's
-  // clearControls didn't fire clearControl$ for some edge case).
+    const injector = univer.__getInjector();
+    const instances = injector.get(IUniverInstanceService);
+    const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+    const unitId = model?.getUnitId();
+    if (model && unitId) {
+      const canvasView = injector.get(CanvasView);
+      // Iterate every page (selection might live on any of them, not
+      // just the active one if the user just switched slides).
+      const order = model.getSnapshot().body?.pageOrder ?? [];
+      for (const pageId of order) {
+        try {
+          const renderUnit = canvasView.getRenderUnitByPageId(pageId, unitId);
+          const transformer = renderUnit?.scene?.getTransformer();
+          if (transformer && transformer.getSelectedObjectMap().size > 0) {
+            transformer.clearControls();
+            cleared = true;
+          }
+        } catch { /* per-page scene not mounted — ignore */ }
+      }
+    }
+  } catch { /* injector torn down */ }
+  // Fallback: also drop the bridge directly. FormatPane subscribes to
+  // transformer.clearControl$ which our clearControls() call fires, but
+  // that path can race with a stale React state; clearing the bridge
+  // gives the Toolbar's selection-aware buttons an immediate sync.
   if (getSelectedElement()) {
     setSelectedElement(null);
     cleared = true;

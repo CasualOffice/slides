@@ -298,22 +298,20 @@ export function App() {
     return () => window.clearTimeout(t);
   }, [status]);
 
-  // When the FormatPane opens, the workspace squeezes 280 px from the
-  // right and the slide can end up partially hidden behind the pane.
-  // Animate the scene zoom DOWN to fit and recenter; on close, restore
-  // the user's prior zoom. We never zoom UP — if the user already had
-  // 75 %, opening the pane keeps it at 75 %. The animation runs at
-  // ~16 ms ticks via requestAnimationFrame (≈ 220 ms total, cubic
-  // ease-out) so the pane slide-in + canvas re-fit feel like one motion.
-  const zoomRef = useRef(zoom);
-  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  // When the FormatPane opens/closes, the workspace width changes
+  // (CSS `transition: margin 200 ms`). UniverSlide.tsx already has a
+  // ResizeObserver on `.univer-mount` that calls engine.resize +
+  // scrollToCenter on every size change, so the canvas recenters
+  // automatically. We DON'T apply our own scene.scale — Univer's
+  // scrollToCenter math is `(scene.width - engine.width) / 2` and is
+  // scale-unaware; a custom zoom breaks the centring. If the slide
+  // doesn't fit at 100 %, the user can hit Ctrl+Shift+0.
+  //
+  // What we DO add: a small cascade of explicit recenter calls so we
+  // catch the final post-transition tick (some browsers debounce
+  // ResizeObserver too aggressively and miss it).
   useEffect(() => {
-    const PANE_FIT_ZOOM = 85;
-    const ANIMATION_MS = 220;
-    let rafId: number | null = null;
-    let priorZoom: number | null = null;
-
-    function recenterOnce() {
+    function recenter() {
       const w = window as unknown as { univer?: Univer };
       const univer = w.univer;
       if (!univer) return;
@@ -330,62 +328,17 @@ export function App() {
       } catch { /* ignore */ }
     }
 
-    // The CSS workspace margin transition is 200 ms (see styles.css).
-    // Firing scrollToCenter at the end of our 220 ms zoom animation alone
-    // catches a stale container width — the browser's layout engine often
-    // hasn't reflowed yet. Cascade three calls so the final one lands
-    // after both transitions + a paint pass. Same idea as UniverSlide.tsx's
-    // mount-centering (80 / 400 / 1200 ms).
-    function recenter() {
-      recenterOnce();
-      window.setTimeout(recenterOnce, 100);
-      window.setTimeout(recenterOnce, 320);
-    }
-
-    function animateZoomTo(target: number, onDone?: () => void) {
-      if (rafId != null) cancelAnimationFrame(rafId);
-      const startPct = (() => {
-        const s = getMainScene();
-        if (!s) return target;
-        const sc = s.scaleX ?? 1;
-        return sc * 100;
-      })();
-      const startTime = performance.now();
-      const tick = (now: number) => {
-        const t = Math.min(1, (now - startTime) / ANIMATION_MS);
-        const eased = 1 - Math.pow(1 - t, 3);
-        const v = startPct + (target - startPct) * eased;
-        applyZoom(v);
-        if (t < 1) rafId = requestAnimationFrame(tick);
-        else {
-          rafId = null;
-          setZoom(Math.round(target));
-          onDone?.();
-        }
-      };
-      rafId = requestAnimationFrame(tick);
-    }
-
-    const handler = (e: Event) => {
-      const open = (e as CustomEvent<{ open: boolean }>).detail?.open;
-      const live = zoomRef.current;
-      if (open) {
-        if (priorZoom == null) priorZoom = live;
-        const target = Math.min(live, PANE_FIT_ZOOM);
-        animateZoomTo(target, recenter);
-      } else {
-        const restore = priorZoom ?? live;
-        priorZoom = null;
-        animateZoomTo(restore, recenter);
-      }
+    const handler = () => {
+      // CSS transition is 200 ms. Fire recenter at 0 / 120 / 260 / 420 ms
+      // so the final call lands well after the transition completes.
+      recenter();
+      window.setTimeout(recenter, 120);
+      window.setTimeout(recenter, 260);
+      window.setTimeout(recenter, 420);
     };
 
     window.addEventListener('cs:format-pane', handler);
-    return () => {
-      window.removeEventListener('cs:format-pane', handler);
-      if (rafId != null) cancelAnimationFrame(rafId);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => window.removeEventListener('cs:format-pane', handler);
   }, [snapshot.id]);
 
   // Global keyboard shortcuts. Each guards on the active element NOT being
