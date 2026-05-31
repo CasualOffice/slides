@@ -873,6 +873,15 @@ interface ParsedBullet {
 // C19 — build a ParsedBullet from a raw glyph char + optional font /
 // size (in pt). Shared by explicit `<a:buChar>` and the master
 // bodyStyle level-bullet inheritance fallback.
+// A bullet whose glyph is just U+2022 (•) is the standard round bullet —
+// `PresetListType.BULLET_LIST` already renders that, so we don't need a
+// per-element custom list entry and listType should stay the enum value.
+// Anything else (arrows, dashes, Wingdings dingbats) gets routed through
+// our custom-list channel.
+function isDefaultRoundBullet(rawChar: string): boolean {
+  return rawChar === '•';
+}
+
 function makeCharBullet(
   rawChar: string,
   listIdSeed: string,
@@ -881,7 +890,7 @@ function makeCharBullet(
   sizePts: number | undefined,
   theme: ThemeMap | null,
 ): ParsedBullet {
-  const customGlyph = rawChar.length > 0 ? rawChar : undefined;
+  const customGlyph = rawChar.length > 0 && !isDefaultRoundBullet(rawChar) ? rawChar : undefined;
   let customFontFamily: string | undefined;
   if (typeof buFontRaw === 'string' && buFontRaw.length > 0) {
     if (buFontRaw === '+mj-lt') customFontFamily = theme?.get(FONT_MAJOR_KEY) ?? undefined;
@@ -910,7 +919,9 @@ function parseBullet(pPr: unknown, listIdSeed: string, level: number, theme: The
   const buChar = findChild(node, 'a:buChar') as XmlNode | undefined;
   if (buChar) {
     const rawChar = buChar['@char'];
-    const customGlyph = typeof rawChar === 'string' && rawChar.length > 0 ? rawChar : undefined;
+    const customGlyph = typeof rawChar === 'string' && rawChar.length > 0 && !isDefaultRoundBullet(rawChar)
+      ? rawChar
+      : undefined;
     // C17 — read companion `<a:buFont typeface="...">` and
     // `<a:buSzPts val="...">` so the bullet glyph matches the
     // authored size/typeface (an ➔ rendered in Wingdings looks
@@ -1868,7 +1879,8 @@ function resolveStyleRefFill(
                 angle: Number.isFinite(ang) ? ang / 60000 : 0,
                 stops,
               };
-              resolvedFill = stops[0].color;
+              // length > 0 was just asserted.
+              resolvedFill = stops[0]!.color;
             }
           }
         }
@@ -1924,7 +1936,8 @@ function parseShapeAppearance(spPr: unknown, theme: ThemeMap | null = null, pSty
       // expressions (`*/ adj1 1 2` etc.) would need a small evaluator.
       const m = fmla.match(/^val\s+(-?\d+)$/);
       if (!m) continue;
-      const n = parseInt(m[1], 10);
+      // Single capture group; truthy m means it's present.
+      const n = parseInt(m[1]!, 10);
       if (!Number.isFinite(n)) continue;
       prstAdjustments = prstAdjustments ?? {};
       prstAdjustments[name] = n;
@@ -2796,7 +2809,9 @@ async function processSpTree(
       if (!tag) return;
       const count = perTag.get(tag) ?? 0;
       perTag.set(tag, count + 1);
-      if (tag in domRanks) domRanks[tag][count] = position;
+      // `tag in domRanks` proves the bucket exists; the assertion just
+      // satisfies noUncheckedIndexedAccess at the access point.
+      if (tag in domRanks) domRanks[tag]![count] = position;
     });
   }
   // After each per-tag loop iteration we stamp every element pushed
@@ -4030,7 +4045,8 @@ async function processPicNode(
       }
       if (colours.length >= 2) break;
     }
-    if (colours.length >= 2) duotone = [colours[0], colours[1]];
+    // Length-checked above; both indexes are inhabited.
+    if (colours.length >= 2) duotone = [colours[0]!, colours[1]!];
   }
 
   // E2 — linked images. `<a:blip r:link="rIdN"/>` resolves to an
@@ -4164,7 +4180,8 @@ async function extractBgShapesFromXml(
   const lexCompare = (a: number[], b: number[]) => {
     const n = Math.min(a.length, b.length);
     for (let i = 0; i < n; i++) {
-      if (a[i] !== b[i]) return a[i] - b[i];
+      // i < min(a.length, b.length) — both indexes inhabited.
+      if (a[i] !== b[i]) return a[i]! - b[i]!;
     }
     return a.length - b.length;
   };
@@ -4272,7 +4289,8 @@ async function extractElementsFromSlideXml(
   const lexCompare = (a: number[], b: number[]) => {
     const n = Math.min(a.length, b.length);
     for (let i = 0; i < n; i++) {
-      if (a[i] !== b[i]) return a[i] - b[i];
+      // i < min(a.length, b.length) — both indexes inhabited.
+      if (a[i] !== b[i]) return a[i]! - b[i]!;
     }
     return a.length - b.length;
   };
