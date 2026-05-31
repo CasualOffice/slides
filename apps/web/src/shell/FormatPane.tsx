@@ -179,13 +179,35 @@ function mutateShape(
   const page = model.getPage(pageId);
   const el = page?.pageElements?.[elementId];
   if (!el?.shape) return;
-  if (!el.shape.shapeProperties) {
-    el.shape.shapeProperties = { shapeBackgroundFill: {} } as IShapeProperties;
+  // Compute the new shapeProperties on a clone, then dispatch
+  // slide.mutation.update-element. That mutation runs through the
+  // patched slides-ui scene watcher which removes + re-creates the live
+  // BaseObject from the updated snapshot, so the canvas updates
+  // immediately. A bare in-place write would update the snapshot but
+  // leave the cached Rect's fill/stroke/shadow stale.
+  const nextSp: IShapeProperties = structuredClone(el.shape.shapeProperties ?? {
+    shapeBackgroundFill: {},
+  } as IShapeProperties);
+  patch(nextSp);
+  const unitId = model.getUnitId();
+  try {
+    univer.__getInjector().get(ICommandService).executeCommand('slide.mutation.update-element', {
+      unitId,
+      pageId,
+      elementId,
+      props: { shape: { shapeProperties: nextSp } },
+    });
+  } catch {
+    // Older Univer build without the mutation — fall back to direct
+    // write. Snapshot stays correct on save even if the canvas is stale.
+    if (!el.shape.shapeProperties) {
+      el.shape.shapeProperties = { shapeBackgroundFill: {} } as IShapeProperties;
+    }
+    patch(el.shape.shapeProperties);
+    model.incrementRev();
+    const active = model.getActivePage();
+    if (active) model.setActivePage(active);
   }
-  patch(el.shape.shapeProperties);
-  model.incrementRev();
-  const active = model.getActivePage();
-  if (active) model.setActivePage(active);
 }
 
 // Build an `effectLst.outerShdw` payload from px offsets. dist is the
@@ -327,6 +349,7 @@ export function FormatPane({ selection, onApply }: FormatPaneInnerProps) {
             <FillSection selection={selection} />
             <BorderSection selection={selection} />
             <ShadowSection selection={selection} />
+            <OpacitySection />
           </>
         )}
         <ArrangeSection />
@@ -420,7 +443,7 @@ function ArrangeSection() {
 /* ============================================================ section wrapper */
 
 interface SectionProps {
-  sectionKey: 'position' | 'size' | 'fill' | 'border' | 'shadow' | 'arrange';
+  sectionKey: 'position' | 'size' | 'fill' | 'border' | 'shadow' | 'opacity' | 'arrange';
   defaultOpen?: boolean;
   children: React.ReactNode;
 }
@@ -803,6 +826,72 @@ function ShadowSection({ selection }: { selection: SelectionSnapshot }) {
           min={0}
         />
       </div>
+    </Section>
+  );
+}
+
+/* ============================================================ opacity (stub) */
+
+// Disabled-but-discoverable Opacity slider. Univer v0.24.0's IShapeProperties
+// has no alpha field and the ShapeAdaptor never sets the engine-render
+// `opacity` prop on shapes — so a wired-up slider couldn't actually change
+// anything on the canvas. We surface the affordance anyway (with the
+// tooltip explaining the limitation) so users see the slot is reserved
+// rather than missing — Audit P5. Lights up the moment the fork-patch
+// extending IShapeProperties.alpha lands; see UNIVER_SLIDES_GAPS.md.
+function OpacitySection() {
+  const { t } = useTranslation('dialogs');
+  return (
+    <Section sectionKey="opacity" defaultOpen={false}>
+      <div className="cs-format-pane__row" title={t('format.opacity.disabledTooltip')}>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            width: '100%',
+            opacity: 0.5,
+            cursor: 'not-allowed',
+          }}
+        >
+          <span style={{ width: 56, fontSize: 12, color: 'var(--cs-text-mute, #5f6368)' }}>
+            {t('format.opacity.label')}
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={100}
+            disabled
+            aria-disabled="true"
+            aria-label={t('format.opacity.label')}
+            style={{ flex: 1, cursor: 'not-allowed' }}
+            readOnly
+          />
+          <span
+            style={{
+              fontSize: 11,
+              color: 'var(--cs-text-mute, #5f6368)',
+              fontVariantNumeric: 'tabular-nums',
+              minWidth: 32,
+              textAlign: 'right',
+            }}
+          >
+            100%
+          </span>
+        </label>
+      </div>
+      <p
+        style={{
+          margin: '6px 0 0',
+          fontSize: 11,
+          color: 'var(--cs-text-dim, #6b7177)',
+          lineHeight: 1.4,
+        }}
+      >
+        {t('format.opacity.disabledHint')}
+      </p>
     </Section>
   );
 }
