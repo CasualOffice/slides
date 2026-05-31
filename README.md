@@ -7,7 +7,7 @@
 [![Deploy](https://github.com/schnsrw/slides/actions/workflows/deploy-pages.yml/badge.svg?branch=main)](https://github.com/schnsrw/slides/actions/workflows/deploy-pages.yml)
 [![Fidelity](https://img.shields.io/badge/pptx%20fidelity-93%2F99%20%E2%9C%93-brightgreen)](./docs/FIDELITY_TRACKER.md)
 [![Wave](https://img.shields.io/badge/latest-wave%2012-blue)](./docs/FIDELITY_TRACKER.md)
-[![Version](https://img.shields.io/badge/version-v0.0.0%20%C2%B7%20pre--tag-orange)](./PLAN.md)
+[![Version](https://img.shields.io/badge/version-v0.1.0-brightgreen)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
 [**Live Demo →**](https://slide.schnsrw.live/) &nbsp;·&nbsp; [Architecture →](./docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Fidelity tracker →](./docs/FIDELITY_TRACKER.md) &nbsp;·&nbsp; [Univer Slides gaps →](./docs/UNIVER_SLIDES_GAPS.md) &nbsp;·&nbsp; [Product page →](https://schnsrw.live/casual-slides/)
@@ -22,7 +22,7 @@ Casual Slides is a **self-hostable, browser-based slides editor** that looks and
 
 Built on [Univer OSS](https://github.com/dream-num/univer) (Apache-2.0) — the OSS variant, **never the Pro package** — with a fork-and-patch layer for the gaps Univer hasn't filled (collab rev tracking, element mutations as `CommandType.MUTATION`, new `IPageElement` variants for tables/charts/video). Sister projects: [Casual Sheets](https://github.com/schnsrw/sheets) (`.xlsx`, v0.2.1) and [Casual Editor](https://github.com/schnsrw/docx) (`.docx`).
 
-> 🛠 **Status: v0.0.0 — pre-tag, fidelity-mature, infra-immature.** Single-user editor works end-to-end with `.pptx` round-trip; the Office ribbon, layouts, themes, backgrounds, slide-show mode, recent files, slide-context-menu are all live. **Co-edit is a Phase-2 spike** — 104-line raw WebSocket broadcast server, single-active-editor sufficient. The Yjs + Hocuspocus migration ([Casual Sheets has it](https://github.com/schnsrw/sheets/blob/main/docs/PRODUCTION_PIPELINE.md)) lands as the v0.1.0 blocker. See [`PLAN.md`](./PLAN.md).
+> 🎉 **Status: v0.1.0 (2026-06-01) — first tagged release.** Single-user editor works end-to-end with `.pptx` round-trip; Office ribbon, layouts, themes, backgrounds, format pane, presenter view, find-and-replace, slideshow, PDF + PNG export, recent files, autosave, error boundary, Docker self-host all live. **Co-edit is gated behind `VITE_COLLAB_ENABLED`** (default off) — the existing raw-WebSocket broadcast remains a single-active-editor spike; the Yjs + Hocuspocus migration ([Casual Sheets has it](https://github.com/schnsrw/sheets/blob/main/docs/PRODUCTION_PIPELINE.md)) is the v0.2.0 target. See [`CHANGELOG.md`](./CHANGELOG.md).
 
 ---
 

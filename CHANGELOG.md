@@ -4,7 +4,9 @@ All notable changes to Casual Slides are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow
 [SemVer](https://semver.org/).
 
-## [Unreleased] — targeting v0.1.0
+## [0.1.0] — 2026-06-01
+
+First tagged release. See sections below for the full ship list.
 
 First tag-eligible cut. Single-user editor is feature-complete enough for
 day-to-day work on a PowerPoint-style deck — Office ribbon, slide-rail
