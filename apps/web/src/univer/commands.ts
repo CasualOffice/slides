@@ -10,8 +10,9 @@ import {
 } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
 import { DocSelectionManagerService } from '@univerjs/docs';
+import { IRenderManagerService } from '@univerjs/engine-render';
 import { printDeck } from '../shell/download-slide';
-import { getSelectedElement } from '../shell/selection';
+import { getSelectedElement, setSelectedElement } from '../shell/selection';
 
 // Thin façade over the live Univer instance for ribbon/status-bar dispatches.
 // Reads `window.univer` (set by UniverSlide on mount) so any React component
@@ -54,6 +55,9 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   }
   if (id === 'casual-slides.command.delete-element') {
     return deleteSelectedElement();
+  }
+  if (id === 'casual-slides.command.clear-selection') {
+    return clearCanvasSelection();
   }
   if (id === 'slide.command.duplicate-slide') {
     // Univer v0.24.0 ships no built-in duplicate-page mutation. We clone
@@ -268,6 +272,38 @@ export function applyZOrder(direction: ZOrderDirection): boolean {
   const active = model.getActivePage();
   if (active) model.setActivePage(active);
   return true;
+}
+
+// Clear the current canvas selection. Walks every render unit + scene
+// reachable through IRenderManagerService and calls transformer.clearControls
+// on each — Univer's slides plug-in nests one scene per page under the
+// slide render unit, so calling clear on just the top scene isn't enough.
+// FormatPane's createControl$/clearControl$ subscription receives the
+// clearControls notification and pushes the bridge to null, which in turn
+// fires the cs:format-pane event so App.tsx restores the canvas zoom.
+export function clearCanvasSelection(): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  let cleared = false;
+  try {
+    const rms = univer.__getInjector().get(IRenderManagerService);
+    rms?.getRenderAll().forEach((unit) => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tr = (unit as any)?.scene?.getTransformer?.();
+        if (tr) { tr.clearControls(); cleared = true; }
+      } catch { /* per-unit scene torn down — ignore */ }
+    });
+  } catch { /* render manager not ready */ }
+  // Also drop the selection bridge directly so FormatPane + Toolbar
+  // observers update even if no transformer was holding our selection
+  // (e.g. it was populated synthetically by an e2e probe, or Univer's
+  // clearControls didn't fire clearControl$ for some edge case).
+  if (getSelectedElement()) {
+    setSelectedElement(null);
+    cleared = true;
+  }
+  return cleared;
 }
 
 // Delete the currently-selected slide element from its page. Returns

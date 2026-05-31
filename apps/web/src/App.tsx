@@ -460,13 +460,39 @@ export function App() {
         setSlideshowOpen(true);
       }
     };
+    // Esc clears the canvas selection. We skip when a dialog is open
+    // (the dialog's own Esc handler closes it first) and when focus is
+    // in an editable surface (Univer's text-frame editor uses Esc to
+    // exit edit mode). Clearing selection hides the FormatPane, which
+    // fires the cs:format-pane event so App's auto-zoom restores the
+    // canvas to the user's prior zoom — one Esc, three coordinated
+    // pieces of UX.
+    const escHandler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const target = e.target as HTMLElement | null;
+      const inEditable = !!target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      );
+      if (inEditable) return;
+      // Defer to any open modal — its own Esc handler closes it. We DOM-
+      // check rather than read React state to avoid stale-closure issues
+      // (this effect's deps are empty so it only wires once).
+      if (typeof document !== 'undefined' && document.querySelector('[role="dialog"]')) return;
+      if (!getSelectedElement()) return;
+      e.preventDefault();
+      void dispatchSlideCommand('casual-slides.command.clear-selection');
+    };
     window.addEventListener('keydown', handler);
     window.addEventListener('keydown', f5Handler);
     window.addEventListener('keydown', deleteSlideHandler);
+    window.addEventListener('keydown', escHandler);
     return () => {
       window.removeEventListener('keydown', handler);
       window.removeEventListener('keydown', f5Handler);
       window.removeEventListener('keydown', deleteSlideHandler);
+      window.removeEventListener('keydown', escHandler);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
