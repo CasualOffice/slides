@@ -20,7 +20,7 @@
 // a dead button reads as broken. We never fake a dispatch.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Univer, IShapeProperties } from '@univerjs/core';
-import { BorderStyleTypes, IUndoRedoService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
+import { BorderStyleTypes, ICommandService, IUndoRedoService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
 import { useTranslation } from '../i18n';
 import { clearFormatting, dispatchSlideCommand } from '../univer/commands';
@@ -171,13 +171,13 @@ function useSelectedElement() {
   return useSyncExternalStore(subscribeSelection, getSelectedElement, getSelectedElement);
 }
 
-// Mutate the selected shape's shapeProperties on the live SlideDataModel
-// snapshot and repaint — the same direct-write + incrementRev pattern
-// ThemePicker uses (Univer v0.24.0 has no element-style mutation reachable
-// from outside docs-ui). ShapeAdaptor.convert reads shapeBackgroundFill →
-// fill and outline.{outlineFill,weight,dashStyle} → stroke on every render
-// pass, so the write visibly re-renders the shape.
-// TODO(collab): direct snapshot write, not collab-safe.
+// Mutate the selected shape's shapeProperties and repaint by dispatching
+// slide.mutation.update-element. The slides-ui patch (commit 952253f)
+// removes + re-creates the live BaseObject from the updated snapshot on
+// that mutation, so the canvas picks up the new fill / stroke / shadow
+// immediately. A bare in-place snapshot write would land the data on the
+// model but leave the cached Rect's fill stale (was the v0.0.x toolbar
+// fill / border bug).
 function mutateSelectedShape(patch: (sp: IShapeProperties) => void): boolean {
   const sel = getSelectedElement();
   if (!sel) return false;
@@ -192,6 +192,24 @@ function mutateSelectedShape(patch: (sp: IShapeProperties) => void): boolean {
     if (!model) return false;
     const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
     if (!el?.shape) return false;
+    const nextSp: IShapeProperties = structuredClone(
+      el.shape.shapeProperties ?? ({ shapeBackgroundFill: {} } as IShapeProperties),
+    );
+    patch(nextSp);
+    try {
+      void univer
+        .__getInjector()
+        .get(ICommandService)
+        .executeCommand('slide.mutation.update-element', {
+          unitId: model.getUnitId(),
+          pageId: sel.pageId,
+          elementId: sel.elementId,
+          props: { shape: { shapeProperties: nextSp } },
+        });
+      return true;
+    } catch {
+      // Fork-patch not registered — fall through to direct snapshot write.
+    }
     if (!el.shape.shapeProperties) {
       el.shape.shapeProperties = { shapeBackgroundFill: {} } as IShapeProperties;
     }
