@@ -306,13 +306,26 @@ export function TitleBar({
       // since they need anchor rects we can't synthesize from a menu
       // (handled by S2 inline toolbar buttons in a follow-up).
       if (menuId === 'slide') {
+        // Resolve the active page id from the live model — slide.command.*
+        // commands no-op without it (the SlideContextMenu path passes it
+        // explicitly; the menu strip didn't, which is why Slide → Delete
+        // appeared to do nothing — probe 2026-06-02).
+        const activePageId = (() => {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const w = window as any;
+            const inj = w.univer?.__getInjector?.();
+            const inst = inj?.get?.(w.__casualSlides__IUniverInstanceService);
+            return inst?.getCurrentUnitOfType?.(3)?.getActivePage?.()?.id as string | undefined;
+          } catch { return undefined; }
+        })();
         if (itemId === 'new')       void dispatchSlideCommand('slide.operation.append-slide');
-        if (itemId === 'duplicate') void dispatchSlideCommand('slide.command.duplicate-slide');
+        if (itemId === 'duplicate') void dispatchSlideCommand('slide.command.duplicate-slide', activePageId ? { pageId: activePageId } : undefined);
         if (itemId === 'theme') {
           (window as Window & { __casualSlides_openThemes?: () => void })
             .__casualSlides_openThemes?.();
         }
-        if (itemId === 'delete')    void dispatchSlideCommand('slide.command.delete-slide');
+        if (itemId === 'delete')    void dispatchSlideCommand('slide.command.delete-slide', activePageId ? { pageId: activePageId } : undefined);
         return;
       }
       // Arrange menu — z-order + center-on-slide. Both require an
