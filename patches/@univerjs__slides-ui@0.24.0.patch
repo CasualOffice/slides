@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..f95b690180985d4849d1b43a275c8b06ab5a7743 100644
+index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301fdd476f6 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -156,7 +156,7 @@ let SlideRenderController = class SlideRenderController extends _univerjs_core.R
@@ -580,7 +580,40 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..f95b690180985d4849d1b43a275c8b06
  
  //#endregion
  //#region src/commands/operations/set-thumb.operation.ts
-@@ -1549,6 +1766,14 @@ let SlidesUIController = class SlidesUIController extends _univerjs_core.Disposa
+@@ -1390,7 +1607,15 @@ function SlideEditorContainer() {
+ 	const editorService = (0, _univerjs_ui.useDependency)(_univerjs_docs_ui.IEditorService);
+ 	const contextService = (0, _univerjs_ui.useDependency)(_univerjs_core.IContextService);
+ 	const disableAutoFocus = (0, _univerjs_ui.useObservable)(() => contextService.subscribeContextValue$(_univerjs_ui.DISABLE_AUTO_FOCUS_KEY), false, void 0, [contextService, _univerjs_ui.DISABLE_AUTO_FOCUS_KEY]);
+-	`${_univerjs_core.DEFAULT_EMPTY_DOCUMENT_VALUE}`, _univerjs_core.DocumentFlavor.UNSPECIFIED;
++	const snapshot = {
++		id: SLIDE_EDITOR_ID,
++		body: {
++			dataStream: `${_univerjs_core.DEFAULT_EMPTY_DOCUMENT_VALUE}`,
++			textRuns: [],
++			paragraphs: [{ startIndex: 0 }]
++		},
++		documentStyle: { documentFlavor: _univerjs_core.DocumentFlavor.UNSPECIFIED }
++	};
+ 	(0, react.useEffect)(() => {
+ 		slideEditorManagerService.state$.subscribe((param) => {
+ 			if (param == null) return;
+@@ -1425,7 +1650,14 @@ function SlideEditorContainer() {
+ 			top: state.top,
+ 			width: state.width,
+ 			height: state.height
+-		}
++		},
++		children: state.width > 0 ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(_univerjs_docs_ui.RichTextEditor, {
++			editorId: SLIDE_EDITOR_ID,
++			initialValue: snapshot,
++			isSingle: false,
++			autoFocus: !disableAutoFocus,
++			style: { width: "100%", height: "100%" }
++		}) : null
+ 	});
+ }
+ 
+@@ -1549,6 +1781,14 @@ let SlidesUIController = class SlidesUIController extends _univerjs_core.Disposa
  			ToggleSlideEditSidebarOperation,
  			DeleteSlideElementOperation,
  			UpdateSlideElementOperation,
@@ -595,7 +628,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..f95b690180985d4849d1b43a275c8b06
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
-@@ -2711,6 +2936,7 @@ Object.defineProperty(exports, 'SlideCanvasPopMangerService', {
+@@ -2711,6 +2951,7 @@ Object.defineProperty(exports, 'SlideCanvasPopMangerService', {
    }
  });
  exports.SlideEditorContainer = SlideEditorContainer;
@@ -604,9 +637,18 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..f95b690180985d4849d1b43a275c8b06
  Object.defineProperty(exports, 'SlidesUIController', {
    enumerable: true,
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..e5b05823f4f2b4ef3bc7465ebba88b302f8237d7 100644
+index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3282c7dbf 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
+@@ -7,7 +7,7 @@ import { Button, ColorPicker, Dropdown, InputNumber, borderClassName, borderTopC
+ import { AutofillDoubleIcon, BottomIcon, GraphIcon, MoreDownIcon, MoveDownIcon, MoveUpIcon, PaintBucketDoubleIcon, TextIcon, TopmostIcon } from "@univerjs/icons";
+ import { jsx, jsxs } from "react/jsx-runtime";
+ import { createRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+-import { DOCS_COMPONENT_MAIN_LAYER_INDEX, DOCS_VIEW_KEY, DeleteLeftCommand, DocSelectionRenderService, IEditorService, MoveCursorOperation, MoveSelectionOperation, VIEWPORT_KEY } from "@univerjs/docs-ui";
++import { DOCS_COMPONENT_MAIN_LAYER_INDEX, DOCS_VIEW_KEY, DeleteLeftCommand, DocSelectionRenderService, IEditorService, MoveCursorOperation, MoveSelectionOperation, RichTextEditor, VIEWPORT_KEY } from "@univerjs/docs-ui";
+ import { BehaviorSubject, Subject, filter, takeUntil } from "rxjs";
+ import { DocSelectionManagerService, DocSkeletonManagerService, RichTextEditingMutation } from "@univerjs/docs";
+ 
 @@ -131,11 +131,196 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  		this._renderContext.mainComponent = slide;
  		this._createSlidePages(slideDataModel, slide);
@@ -1373,7 +1415,40 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..e5b05823f4f2b4ef3bc7465ebba88b30
  
  //#endregion
  //#region src/commands/operations/set-thumb.operation.ts
-@@ -1548,6 +1992,14 @@ let SlidesUIController = class SlidesUIController extends Disposable {
+@@ -1389,7 +1833,15 @@ function SlideEditorContainer() {
+ 	const editorService = useDependency(IEditorService);
+ 	const contextService = useDependency(IContextService);
+ 	const disableAutoFocus = useObservable(() => contextService.subscribeContextValue$(DISABLE_AUTO_FOCUS_KEY), false, void 0, [contextService, DISABLE_AUTO_FOCUS_KEY]);
+-	`${DEFAULT_EMPTY_DOCUMENT_VALUE}`, DocumentFlavor.UNSPECIFIED;
++	const snapshot = {
++		id: SLIDE_EDITOR_ID,
++		body: {
++			dataStream: `${DEFAULT_EMPTY_DOCUMENT_VALUE}`,
++			textRuns: [],
++			paragraphs: [{ startIndex: 0 }]
++		},
++		documentStyle: { documentFlavor: DocumentFlavor.UNSPECIFIED }
++	};
+ 	useEffect(() => {
+ 		slideEditorManagerService.state$.subscribe((param) => {
+ 			if (param == null) return;
+@@ -1424,7 +1876,14 @@ function SlideEditorContainer() {
+ 			top: state.top,
+ 			width: state.width,
+ 			height: state.height
+-		}
++		},
++		children: state.width > 0 ? /* @__PURE__ */ jsx(RichTextEditor, {
++			editorId: SLIDE_EDITOR_ID,
++			initialValue: snapshot,
++			isSingle: false,
++			autoFocus: !disableAutoFocus,
++			style: { width: "100%", height: "100%" }
++		}) : null
+ 	});
+ }
+ 
+@@ -1548,6 +2007,14 @@ let SlidesUIController = class SlidesUIController extends Disposable {
  			ToggleSlideEditSidebarOperation,
  			DeleteSlideElementOperation,
  			UpdateSlideElementOperation,
@@ -1388,7 +1463,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..e5b05823f4f2b4ef3bc7465ebba88b30
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
-@@ -2682,4 +3134,4 @@ UniverSlidesUIPlugin = __decorate([
+@@ -2682,4 +3149,4 @@ UniverSlidesUIPlugin = __decorate([
  ], UniverSlidesUIPlugin);
  
  //#endregion
