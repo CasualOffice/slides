@@ -19,7 +19,7 @@
 // control is left OUT entirely rather than rendered as an inert button —
 // a dead button reads as broken. We never fake a dispatch.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { Univer, IShapeProperties } from '@univerjs/core';
+import type { Univer, IShapeProperties, ITextRun, IDocumentData } from '@univerjs/core';
 import { BorderStyleTypes, ICommandService, IUndoRedoService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
 import { useTranslation } from '../i18n';
@@ -223,6 +223,91 @@ function mutateSelectedShape(patch: (sp: IShapeProperties) => void): boolean {
   }
 }
 
+// Mutate the SELECTED text element's rich text style and repaint by
+// dispatching slide.mutation.update-element. Use this when the user has
+// a text element selected (transformer handles up) but is NOT inside a
+// text-edit session — clicking toolbar Bold/Italic/Font/Size/TextColor
+// should style the entire content of the selected text element.
+//
+// We mirror style fields into BOTH (a) every textRuns[].ts entry inside
+// `richText.rich.body` (RichTextAdaptor's preferred read path) AND
+// (b) the flat ISlideRichTextProps fields (bl/it/ul/st/ff/fs/cl) for the
+// legacy code paths and pptx export. See project_pptx_rich_field_trap.
+function mutateSelectedTextStyle(
+  patch: (ts: Record<string, unknown>) => void,
+  flatPatch?: (flat: Record<string, unknown>) => void,
+): boolean {
+  const sel = getSelectedElement();
+  if (!sel) return false;
+  const w = window as unknown as { univer?: Univer };
+  const univer = w.univer;
+  if (!univer) return false;
+  try {
+    const model = univer
+      .__getInjector()
+      .get(IUniverInstanceService)
+      .getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+    if (!model) return false;
+    const page = model.getPage(sel.pageId);
+    const el = page?.pageElements?.[sel.elementId];
+    if (!el?.richText) return false;
+
+    const nextRich = structuredClone(el.richText) as typeof el.richText & {
+      rich?: IDocumentData;
+    };
+    // Apply to the rich document model's textRuns when present — that's
+    // what RichTextAdaptor renders from.
+    const body = nextRich.rich?.body;
+    if (body && Array.isArray(body.textRuns)) {
+      const text = body.dataStream ?? '';
+      const len = text.length;
+      // Make sure a covering run exists from 0..len so the style applies
+      // to every character — including content that had no prior run.
+      const runs = body.textRuns as ITextRun[];
+      if (runs.length === 0) {
+        runs.push({ st: 0, ed: Math.max(len - 1, 0), ts: {} });
+      }
+      for (const r of runs) {
+        if (!r.ts) r.ts = {};
+        patch(r.ts as unknown as Record<string, unknown>);
+      }
+    }
+    // Mirror onto the flat ISlideRichTextProps fields so the ShapeAdaptor
+    // fallback path + pptx export see the same style.
+    (flatPatch ?? patch)(nextRich as unknown as Record<string, unknown>);
+
+    void univer
+      .__getInjector()
+      .get(ICommandService)
+      .executeCommand('slide.mutation.update-element', {
+        unitId: model.getUnitId(),
+        pageId: sel.pageId,
+        elementId: sel.elementId,
+        props: { richText: nextRich },
+      });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Is the user currently inside a Univer doc-model text edit session? If
+// yes, doc.command.* will route to that doc. If no, doc.command.* silently
+// no-ops, so we should style the selected element directly instead.
+function isDocEditing(): boolean {
+  const w = window as unknown as { univer?: Univer };
+  const univer = w.univer;
+  if (!univer) return false;
+  try {
+    return !!univer
+      .__getInjector()
+      .get(IUniverInstanceService)
+      .getCurrentUnitOfType(UniverInstanceType.UNIVER_DOC);
+  } catch {
+    return false;
+  }
+}
+
 // ============================================================ format state ===
 
 // Local mirror of the inline-format toggle state. We can't subscribe to the
@@ -355,10 +440,49 @@ export function Toolbar() {
     return () => document.removeEventListener('mousedown', handler);
   }, [insertAnchor, slideAnchor, rootForDismiss]);
 
-  // Helper for "icon toggle" buttons that dispatch a single Univer command.
-  function toggleFormat<K extends keyof FormatState>(key: K, cmd: string) {
-    setFormat((prev) => ({ ...prev, [key]: !prev[key] }));
-    void dispatchSlideCommand(cmd);
+  // Helper for "icon toggle" buttons. If a text doc is being edited,
+  // the doc.command.* path runs against the editor (run-level granularity).
+  // Otherwise the user has the element selected from the slide canvas —
+  // style the whole text element directly so the click actually does
+  // something visible instead of silently no-op'ing.
+  function toggleFormat(
+    key: 'bold' | 'italic' | 'underline' | 'strikethrough',
+    cmd: string,
+  ) {
+    const nextOn = !format[key];
+    setFormat((prev) => ({ ...prev, [key]: nextOn }));
+    if (isDocEditing()) {
+      void dispatchSlideCommand(cmd);
+      return;
+    }
+    // Apply to whole-element textRuns + flat fields.
+    const flag = nextOn ? 1 : 0;
+    mutateSelectedTextStyle((ts) => {
+      if (key === 'bold') ts.bl = flag;
+      else if (key === 'italic') ts.it = flag;
+      else if (key === 'underline') ts.ul = { s: flag };
+      else if (key === 'strikethrough') ts.st = { s: flag };
+    });
+  }
+  function applyFontFamily(font: string) {
+    setFormat((p) => ({ ...p, font }));
+    if (isDocEditing()) {
+      void dispatchSlideCommand('doc.command.set-inline-format-fontfamily', {
+        value: font,
+      });
+      return;
+    }
+    mutateSelectedTextStyle((ts) => { ts.ff = font; });
+  }
+  function applyFontSize(size: number) {
+    setFormat((p) => ({ ...p, size }));
+    if (isDocEditing()) {
+      void dispatchSlideCommand('doc.command.set-inline-format-fontsize', {
+        value: size,
+      });
+      return;
+    }
+    mutateSelectedTextStyle((ts) => { ts.fs = size; });
   }
 
   // Fill / border target the SELECTED shape via the selection bridge.
@@ -388,7 +512,13 @@ export function Toolbar() {
   }
   function applyTextColor(rgb: string) {
     setFormat((p) => ({ ...p, textColor: rgb }));
-    void dispatchSlideCommand('doc.command.set-inline-format-text-color', { value: rgb });
+    if (isDocEditing()) {
+      void dispatchSlideCommand('doc.command.set-inline-format-text-color', {
+        value: rgb,
+      });
+      return;
+    }
+    mutateSelectedTextStyle((ts) => { ts.cl = { rgb }; });
   }
 
   // ──────────────────────────────────────────────────── render groups
@@ -535,11 +665,11 @@ export function Toolbar() {
     <>
       <FontFamilyPicker
         value={format.font}
-        onChange={(font) => setFormat((p) => ({ ...p, font }))}
+        onChange={applyFontFamily}
       />
       <FontSizePicker
         value={format.size}
-        onChange={(size) => setFormat((p) => ({ ...p, size }))}
+        onChange={applyFontSize}
       />
       <button
         type="button"
