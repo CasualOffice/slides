@@ -153,6 +153,10 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   if (id === 'casual-slides.command.delete-element') {
     return deleteSelectedElement();
   }
+  if (id === 'casual-slides.command.nudge-element') {
+    const p = params as { dx?: number; dy?: number } | undefined;
+    return nudgeSelectedElement(p?.dx ?? 0, p?.dy ?? 0);
+  }
   if (id === 'casual-slides.command.clear-selection') {
     return clearCanvasSelection();
   }
@@ -513,6 +517,49 @@ function _deleteSelectedElement(): boolean {
   if (active) model.setActivePage(active);
   notify('Element deleted');
   return true;
+}
+
+// Nudge the selected element by (dx, dy) pixels. Routed through
+// slide.operation.update-element so the live BaseObject's transform
+// refreshes alongside the snapshot (same path NumericFields uses for
+// position changes in the Format pane). Without that, the snapshot
+// would update but the on-canvas position would stay stale.
+export function nudgeSelectedElement(dx: number, dy: number): boolean {
+  if (!dx && !dy) return false;
+  return withUndo(() => _nudgeSelectedElement(dx, dy));
+}
+
+function _nudgeSelectedElement(dx: number, dy: number): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  const sel = getSelectedElement();
+  if (!sel) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  const page = model.getPage(sel.pageId);
+  const el = page?.pageElements?.[sel.elementId];
+  if (!el) return false;
+  const nextLeft = (el.left ?? 0) + dx;
+  const nextTop = (el.top ?? 0) + dy;
+  try {
+    void univer
+      .__getInjector()
+      .get(ICommandService)
+      .executeCommand('slide.operation.update-element', {
+        unitId: model.getUnitId(),
+        oKey: sel.elementId,
+        props: { left: nextLeft, top: nextTop },
+      });
+    return true;
+  } catch {
+    el.left = nextLeft;
+    el.top = nextTop;
+    model.incrementRev();
+    const active = model.getActivePage();
+    if (active) model.setActivePage(active);
+    return true;
+  }
 }
 
 // Center the selected element on the slide. `axis` controls which

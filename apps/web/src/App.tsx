@@ -502,6 +502,37 @@ export function App() {
         void dispatchSlideCommand('casual-slides.command.delete-element');
       }
     };
+    // Plain arrow keys (no Ctrl/Meta/Alt) nudge the selected element by
+    // 1px, 10px with Shift — standard Slides/PowerPoint UX. Runs in
+    // CAPTURE phase to win over Univer's own arrow-key shortcuts when a
+    // slide element is selected. We skip only real form fields
+    // (INPUT/TEXTAREA): Univer's canvas-input proxy is a contentEditable
+    // DIV that gets focus even on bare shape selection, so excluding
+    // contentEditable would mistakenly disable nudge in the common case.
+    // Active text-editing is gated by the selection bridge clearing when
+    // a doc edit takes focus.
+    const nudgeHandler = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const k = e.key;
+      if (k !== 'ArrowUp' && k !== 'ArrowDown' && k !== 'ArrowLeft' && k !== 'ArrowRight') return;
+      const target = e.target as HTMLElement | null;
+      const inFormField = !!target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA'
+      );
+      if (inFormField) return;
+      const sel = getSelectedElement();
+      if (!sel) return;
+      const step = e.shiftKey ? 10 : 1;
+      let dx = 0, dy = 0;
+      if (k === 'ArrowUp') dy = -step;
+      else if (k === 'ArrowDown') dy = step;
+      else if (k === 'ArrowLeft') dx = -step;
+      else if (k === 'ArrowRight') dx = step;
+      e.preventDefault();
+      e.stopPropagation();
+      void dispatchSlideCommand('casual-slides.command.nudge-element', { dx, dy });
+    };
     const f5Handler = (e: KeyboardEvent) => {
       if (e.key === 'F5') {
         e.preventDefault();
@@ -550,12 +581,14 @@ export function App() {
     window.addEventListener('keydown', f2Handler);
     window.addEventListener('keydown', deleteSlideHandler);
     window.addEventListener('keydown', escHandler);
+    window.addEventListener('keydown', nudgeHandler, true);
     return () => {
       window.removeEventListener('keydown', handler);
       window.removeEventListener('keydown', f5Handler);
       window.removeEventListener('keydown', f2Handler);
       window.removeEventListener('keydown', deleteSlideHandler);
       window.removeEventListener('keydown', escHandler);
+      window.removeEventListener('keydown', nudgeHandler, true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
