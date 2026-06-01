@@ -79,13 +79,34 @@ return {
 `slidePos` comes from `slideMainRect.left / .top` where `slideMainRect =
 mainScene.getObject(SLIDE_KEY.COMPONENT)`.
 
-## Hypothesis
+## Hypothesis — UPDATED 2026-06-02
 
-The `slideMainRect.left / .top` (the slide rect's position **inside the scene
-coordinate system**) is producing a value that doesn't match where the slide
-actually paints to the user. Specifically: the scene-anchor seems to be
-positioned far enough off the canvas origin that `canvasOffset` becomes a
-large negative number, pulling the editor overlay off-screen.
+**Original hypothesis (positioning math double-applies scene offset) was wrong.**
+A follow-up probe instrumented `getEditRectState` and `_editAreaProcessing` with
+`console.log` and ran the click→text-edit flow. Zero log output —
+**neither function is called during a text-element click.** The
+`SlideEditorBridgeService` and `SlideEditorBridgeRenderController` never
+activate.
+
+The contenteditable I observed at `(-37..418, -88..66, w=0, h=16)` is therefore
+**NOT the slide text editor** — it's some other hidden helper (Univer uses
+contenteditable divs as global clipboard/paste sinks).
+
+**Corrected hypothesis:** the bug is at the bridge **activation** point —
+something between the canvas-click handler and the bridge service's `editRect$`
+emission. Either:
+
+1. The slide canvas's `pointerdown` / `dblclick` handler that should fire
+   `setSlideTextEditor$` is not wired to the right element / page.
+2. The `_currentEditRectInfo` is never set (the `getEditRectInfo()` returns
+   null → bridge bails before computing position).
+3. A condition guard in `SlideEditorBridgeRenderController` is failing
+   (`editorObject == null` check or similar).
+
+To verify: instrument `setSlideTextEditor$.next(…)`, the canvas's
+`onPointerDown` / `onDoubleClick`, and `SlideEditorBridgeService.set/get
+EditRectInfo`. If those never log either, the bug is at the click→bridge
+handoff inside `slides-ui` plugin lifecycle wiring.
 
 Hardcoded measurements:
 - Canvas DOM rect: `(220, 108)` size `1220 × 762`
