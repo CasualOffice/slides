@@ -403,7 +403,15 @@ export function App() {
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
-      if (inEditable && k !== 'p' && k !== 's' && k !== 'o') return;
+      // Inside a text input, only swallow the "edit-text" shortcuts that
+      // the input's native handling should win — undo/redo, plain copy/
+      // cut/paste, and 'a' for select-all. App-level Ctrl combos
+      // (Ctrl+M new slide, Ctrl+D duplicate element, Ctrl+P print, etc.)
+      // should still fire — they were broken whenever the FormatPane
+      // auto-focused one of its inputs after a selection change, killing
+      // shortcut throughput across the rest of the app.
+      const textInputShortcuts = new Set(['z', 'y', 'c', 'x', 'v', 'a']);
+      if (inEditable && textInputShortcuts.has(k)) return;
 
       if (k === 'z' && !e.shiftKey) {
         e.preventDefault();
