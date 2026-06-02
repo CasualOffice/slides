@@ -534,6 +534,25 @@
         "delete": "Shift+Del"
       }
     },
+    "elementContext": {
+      "copy": "Copy",
+      "paste": "Paste",
+      "duplicate": "Duplicate",
+      "bringForward": "Bring forward",
+      "sendBackward": "Send backward",
+      "bringToFront": "Bring to front",
+      "sendToBack": "Send to back",
+      "center": "Center on slide",
+      "delete": "Delete",
+      "shortcut": {
+        "copy": "Ctrl+C",
+        "paste": "Ctrl+V",
+        "duplicate": "Ctrl+D",
+        "bringForward": "Ctrl+Shift+]",
+        "sendBackward": "Ctrl+Shift+[",
+        "delete": "Del"
+      }
+    },
     "shortcuts": {
       "title": "Keyboard shortcuts",
       "ariaLabel": "Keyboard shortcuts",

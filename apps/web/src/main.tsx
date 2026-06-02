@@ -3,6 +3,7 @@ import { App } from './App';
 import { ErrorBoundary } from './shell/ErrorBoundary';
 import { ShortcutsProvider } from './shell/ShortcutsDialog';
 import { FormatPaneProvider } from './shell/FormatPane';
+import { ElementContextMenu } from './shell/ElementContextMenu';
 import { FindReplaceProvider } from './shell/FindReplaceDialog';
 import { SlideRailProvider } from './shell/SlideRail';
 // i18n must initialise before any React component mounts so the first
@@ -42,5 +43,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <ShortcutsProvider />
     <FormatPaneProvider />
     <FindReplaceProvider />
+    <ElementContextMenu />
   </ErrorBoundary>,
 );
