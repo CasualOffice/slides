@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index fafb8476bdd10d7a5224234dc0d7494756933de3..bf576196e524e617e900e1e19b045b00ff31cff9 100644
+index fafb8476bdd10d7a5224234dc0d7494756933de3..a9f1370c260e32793a73d29a188b2bba115855ce 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -12648,6 +12648,12 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -273,7 +273,20 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..bf576196e524e617e900e1e19b045b00
  		if (!isStop && this._shouldDispatchEventToScene(currentObject)) this._scene.onMouseWheel$.emitEvent(evt);
  	}
  	_onKeyDown(evt) {
-@@ -26238,7 +26366,7 @@ var Transformer = class extends _univerjs_core.Disposable {
+@@ -25631,9 +25759,10 @@ var Transformer = class extends _univerjs_core.Disposable {
+ 			this._moveBufferSkip = false;
+ 			this._topScenePointerMoveSub = topScene.onPointerMove$.subscribeEvent((moveEvt) => {
+ 				const { offsetX: moveOffsetX, offsetY: moveOffsetY } = moveEvt;
+-				this._anchorMoving(type, moveOffsetX, moveOffsetY, scrollTimer, keepRatio, isCropper, applyObject);
++				const ratio = moveEvt.shiftKey ? true : false;
++				this._anchorMoving(type, moveOffsetX, moveOffsetY, scrollTimer, ratio, isCropper, applyObject);
+ 				scrollTimer.scrolling(moveOffsetX, moveOffsetY, () => {
+-					this._anchorMoving(type, moveOffsetX, moveOffsetY, scrollTimer, keepRatio, isCropper, applyObject);
++					this._anchorMoving(type, moveOffsetX, moveOffsetY, scrollTimer, ratio, isCropper, applyObject);
+ 				});
+ 				topScene.setCursor(cursor);
+ 			});
+@@ -26238,7 +26367,7 @@ var Transformer = class extends _univerjs_core.Disposable {
  		const { isCropper } = this._getConfig(applyObject);
  		const targetObject = this._findGroupObject(applyObject);
  		if (this._selectedObjectMap.has(targetObject.oKey)) return;
@@ -283,7 +296,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..bf576196e524e617e900e1e19b045b00
  			this._clearControlMap();
  		}
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..d52229d4e97d0e013b5175a804cfce353193e56b 100644
+index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..aa63a54c4c5ed6a728687c90a580b3cd897e01d5 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -12619,6 +12619,13 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -625,7 +638,20 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..d52229d4e97d0e013b5175a804cfce35
  		if (!isStop && this._shouldDispatchEventToScene(currentObject)) this._scene.onMouseWheel$.emitEvent(evt);
  	}
  	_onKeyDown(evt) {
-@@ -26209,7 +26380,7 @@ var Transformer = class extends Disposable {
+@@ -25602,9 +25773,10 @@ var Transformer = class extends Disposable {
+ 			this._moveBufferSkip = false;
+ 			this._topScenePointerMoveSub = topScene.onPointerMove$.subscribeEvent((moveEvt) => {
+ 				const { offsetX: moveOffsetX, offsetY: moveOffsetY } = moveEvt;
+-				this._anchorMoving(type, moveOffsetX, moveOffsetY, scrollTimer, keepRatio, isCropper, applyObject);
++				const ratio = moveEvt.shiftKey ? true : false;
++				this._anchorMoving(type, moveOffsetX, moveOffsetY, scrollTimer, ratio, isCropper, applyObject);
+ 				scrollTimer.scrolling(moveOffsetX, moveOffsetY, () => {
+-					this._anchorMoving(type, moveOffsetX, moveOffsetY, scrollTimer, keepRatio, isCropper, applyObject);
++					this._anchorMoving(type, moveOffsetX, moveOffsetY, scrollTimer, ratio, isCropper, applyObject);
+ 				});
+ 				topScene.setCursor(cursor);
+ 			});
+@@ -26209,7 +26381,7 @@ var Transformer = class extends Disposable {
  		const { isCropper } = this._getConfig(applyObject);
  		const targetObject = this._findGroupObject(applyObject);
  		if (this._selectedObjectMap.has(targetObject.oKey)) return;
