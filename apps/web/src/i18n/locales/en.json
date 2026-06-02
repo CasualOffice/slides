@@ -535,6 +535,7 @@
       }
     },
     "elementContext": {
+      "cut": "Cut",
       "copy": "Copy",
       "paste": "Paste",
       "duplicate": "Duplicate",
@@ -545,6 +546,7 @@
       "center": "Center on slide",
       "delete": "Delete",
       "shortcut": {
+        "cut": "Ctrl+X",
         "copy": "Ctrl+C",
         "paste": "Ctrl+V",
         "duplicate": "Ctrl+D",
@@ -588,6 +590,7 @@
         "cycleNext": "Select next element",
         "cyclePrev": "Select previous element",
         "copyElement": "Copy element",
+        "cutElement": "Cut element",
         "pasteElement": "Paste element",
         "duplicateElement": "Duplicate element",
         "deleteElement": "Delete element",

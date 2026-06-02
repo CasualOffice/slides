@@ -102,6 +102,21 @@ export function ElementContextMenu() {
         <button
           type="button"
           className="cs-slide-context__item"
+          onClick={async () => {
+            setMenu(null);
+            await dispatchSlideCommand('casual-slides.command.copy-element');
+            await dispatchSlideCommand('casual-slides.command.delete-element');
+          }}
+        >
+          <Icon name="content_cut" size={14} />
+          <span>{t('elementContext.cut')}</span>
+          <span className="cs-slide-context__shortcut">{t('elementContext.shortcut.cut')}</span>
+        </button>
+      </li>
+      <li>
+        <button
+          type="button"
+          className="cs-slide-context__item"
           onClick={() => void fire('casual-slides.command.copy-element')}
         >
           <Icon name="content_copy" size={14} />

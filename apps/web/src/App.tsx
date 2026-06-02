@@ -440,6 +440,16 @@ export function App() {
         // browser-default text-copy path runs unchanged in editors.
         e.preventDefault();
         void dispatchSlideCommand('casual-slides.command.copy-element');
+      } else if (k === 'x' && getSelectedElement()) {
+        // Ctrl+X — cut: copy element to clipboard, then delete it.
+        // Sequenced so the clipboard is loaded before the element
+        // disappears. Same inEditable guard upstream keeps text-edit
+        // cut behaviour untouched.
+        e.preventDefault();
+        void (async () => {
+          await dispatchSlideCommand('casual-slides.command.copy-element');
+          await dispatchSlideCommand('casual-slides.command.delete-element');
+        })();
       } else if (k === 'v') {
         // Ctrl+V — paste the last-copied element on the active slide.
         // No-op if nothing has been copied. Same inEditable guard above

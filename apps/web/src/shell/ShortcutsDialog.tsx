@@ -119,6 +119,7 @@ function buildSections(isMac: boolean): ShortcutSection[] {
         { labelKey: 'cycleNext',      binds: [{ keys: ['Tab'] }] },
         { labelKey: 'cyclePrev',      binds: [{ keys: [shift, 'Tab'] }] },
         { labelKey: 'copyElement',    binds: [{ keys: [mod, 'C'] }] },
+        { labelKey: 'cutElement',     binds: [{ keys: [mod, 'X'] }] },
         { labelKey: 'pasteElement',   binds: [{ keys: [mod, 'V'] }] },
         { labelKey: 'duplicateElement', binds: [{ keys: [mod, 'D'] }] },
         { labelKey: 'deleteElement',  binds: [{ keys: [del] }] },
