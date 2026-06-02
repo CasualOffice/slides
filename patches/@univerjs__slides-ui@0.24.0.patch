@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..de7bf62170c03d9c56a3f959b04ab40d76bdb32a 100644
+index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..dde06795057cd1b51407664d98697b4101c9eef4 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -156,7 +156,7 @@ let SlideRenderController = class SlideRenderController extends _univerjs_core.R
@@ -646,16 +646,17 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..de7bf62170c03d9c56a3f959b04ab40d
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
-@@ -1880,6 +2126,8 @@ let SlideEditingRenderController = class SlideEditingRenderController extends _u
+@@ -1880,6 +2126,9 @@ let SlideEditingRenderController = class SlideEditingRenderController extends _u
  			if (wrapStrategy === _univerjs_core.WrapStrategy.WRAP && angle === 0) documentModel.updateDocumentDataPageSize((endX - startX) / scaleX);
  			this._instanceSrv.changeDoc(editorUnitId, documentModel);
  			this._contextService.setContextValue(_univerjs_core.FOCUSING_EDITOR_BUT_HIDDEN, true);
 +			this._contextService.setContextValue("FOCUSING_DOC", true);
 +			this._contextService.setContextValue(_univerjs_core.FOCUSING_UNIVER_EDITOR, true);
++			this._contextService.setContextValue(_univerjs_core.EDITOR_ACTIVATED, true);
  			this._textSelectionManagerService.replaceTextRanges([{
  				startOffset: 0,
  				endOffset: 0
-@@ -2145,6 +2393,9 @@ let SlideEditingRenderController = class SlideEditingRenderController extends _u
+@@ -2145,6 +2394,9 @@ let SlideEditingRenderController = class SlideEditingRenderController extends _u
  	}
  	_exitInput(param) {
  		this._contextService.setContextValue(_univerjs_core.EDITOR_ACTIVATED, false);
@@ -665,7 +666,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..de7bf62170c03d9c56a3f959b04ab40d
  		this._cellEditorManagerService.setState({ show: param.visible });
  		const editorUnitId = this._editorBridgeService.getCurrentEditorId();
  		if (editorUnitId == null) return;
-@@ -2299,6 +2550,16 @@ let SlideEditorBridgeRenderController = class SlideEditorBridgeRenderController
+@@ -2299,6 +2551,16 @@ let SlideEditorBridgeRenderController = class SlideEditorBridgeRenderController
  			const pageScene = pageSceneList[i];
  			listenersForPageScene(pageScene);
  		}
@@ -682,7 +683,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..de7bf62170c03d9c56a3f959b04ab40d
  	}
  	pickOtherObjects() {
  		this.endEditing();
-@@ -2327,6 +2588,18 @@ let SlideEditorBridgeRenderController = class SlideEditorBridgeRenderController
+@@ -2327,6 +2589,18 @@ let SlideEditorBridgeRenderController = class SlideEditorBridgeRenderController
  			const ts = textRuns[0].ts;
  			richText.cl = ts === null || ts === void 0 ? void 0 : ts.cl;
  		}
@@ -701,7 +702,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..de7bf62170c03d9c56a3f959b04ab40d
  		this._commandService.executeCommand(UpdateSlideElementOperation.id, {
  			unitId: this._renderContext.unitId,
  			oKey: curRichText === null || curRichText === void 0 ? void 0 : curRichText.oKey,
-@@ -2711,6 +2984,7 @@ Object.defineProperty(exports, 'SlideCanvasPopMangerService', {
+@@ -2711,6 +2985,7 @@ Object.defineProperty(exports, 'SlideCanvasPopMangerService', {
    }
  });
  exports.SlideEditorContainer = SlideEditorContainer;
@@ -710,7 +711,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..de7bf62170c03d9c56a3f959b04ab40d
  Object.defineProperty(exports, 'SlidesUIController', {
    enumerable: true,
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..d2bd67b6f4f200cd4e8eddb95e229e02052dcc3f 100644
+index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..771b92c17e2a7314a7ca50494b07848ba4b96ad7 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -7,7 +7,7 @@ import { Button, ColorPicker, Dropdown, InputNumber, borderClassName, borderTopC
@@ -1554,16 +1555,17 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..d2bd67b6f4f200cd4e8eddb95e229e02
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
-@@ -1879,6 +2352,8 @@ let SlideEditingRenderController = class SlideEditingRenderController extends Di
+@@ -1879,6 +2352,9 @@ let SlideEditingRenderController = class SlideEditingRenderController extends Di
  			if (wrapStrategy === WrapStrategy.WRAP && angle === 0) documentModel.updateDocumentDataPageSize((endX - startX) / scaleX);
  			this._instanceSrv.changeDoc(editorUnitId, documentModel);
  			this._contextService.setContextValue(FOCUSING_EDITOR_BUT_HIDDEN, true);
 +			this._contextService.setContextValue("FOCUSING_DOC", true);
 +			this._contextService.setContextValue(FOCUSING_UNIVER_EDITOR, true);
++			this._contextService.setContextValue(EDITOR_ACTIVATED, true);
  			this._textSelectionManagerService.replaceTextRanges([{
  				startOffset: 0,
  				endOffset: 0
-@@ -2144,6 +2619,9 @@ let SlideEditingRenderController = class SlideEditingRenderController extends Di
+@@ -2144,6 +2620,9 @@ let SlideEditingRenderController = class SlideEditingRenderController extends Di
  	}
  	_exitInput(param) {
  		this._contextService.setContextValue(EDITOR_ACTIVATED, false);
@@ -1573,7 +1575,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..d2bd67b6f4f200cd4e8eddb95e229e02
  		this._cellEditorManagerService.setState({ show: param.visible });
  		const editorUnitId = this._editorBridgeService.getCurrentEditorId();
  		if (editorUnitId == null) return;
-@@ -2298,6 +2776,16 @@ let SlideEditorBridgeRenderController = class SlideEditorBridgeRenderController
+@@ -2298,6 +2777,16 @@ let SlideEditorBridgeRenderController = class SlideEditorBridgeRenderController
  			const pageScene = pageSceneList[i];
  			listenersForPageScene(pageScene);
  		}
@@ -1590,7 +1592,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..d2bd67b6f4f200cd4e8eddb95e229e02
  	}
  	pickOtherObjects() {
  		this.endEditing();
-@@ -2326,6 +2814,18 @@ let SlideEditorBridgeRenderController = class SlideEditorBridgeRenderController
+@@ -2326,6 +2815,18 @@ let SlideEditorBridgeRenderController = class SlideEditorBridgeRenderController
  			const ts = textRuns[0].ts;
  			richText.cl = ts === null || ts === void 0 ? void 0 : ts.cl;
  		}
@@ -1609,7 +1611,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..d2bd67b6f4f200cd4e8eddb95e229e02
  		this._commandService.executeCommand(UpdateSlideElementOperation.id, {
  			unitId: this._renderContext.unitId,
  			oKey: curRichText === null || curRichText === void 0 ? void 0 : curRichText.oKey,
-@@ -2682,4 +3182,4 @@ UniverSlidesUIPlugin = __decorate([
+@@ -2682,4 +3183,4 @@ UniverSlidesUIPlugin = __decorate([
  ], UniverSlidesUIPlugin);
  
  //#endregion
