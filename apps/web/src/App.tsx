@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { ISlideData, SlideDataModel } from '@univerjs/slides';
 import { ICommandService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { Univer } from '@univerjs/core';
@@ -10,19 +10,26 @@ import { DEFAULT_SLIDE_DATA } from './default-slide';
 import { TitleBar } from './shell/TitleBar';
 import { Toolbar } from './shell/Toolbar';
 import { StatusBar } from './shell/StatusBar';
-import { SlideShow } from './shell/SlideShow';
 import { NotesPanel } from './shell/NotesPanel';
-import { ThemePicker } from './shell/ThemePicker';
-import { PropertiesDialog } from './shell/PropertiesDialog';
-import { PageSetupDialog } from './shell/PageSetupDialog';
-import { downloadSlideAsPng, downloadDeckAsPdf } from './shell/download-slide';
-import { RecentFilesDialog } from './shell/RecentFilesDialog';
-import { AboutDialog } from './shell/AboutDialog';
+
+// Heavy modally-shown surfaces. Each is gated by an `open`/`slideshowOpen`
+// boolean and renders null when closed, so lazy() defers the chunk until
+// the first user-driven activation. Drops initial JS by ~500 KB.
+const SlideShow        = lazy(() => import('./shell/SlideShow').then((m) => ({ default: m.SlideShow })));
+const ThemePicker      = lazy(() => import('./shell/ThemePicker').then((m) => ({ default: m.ThemePicker })));
+const PageSetupDialog  = lazy(() => import('./shell/PageSetupDialog').then((m) => ({ default: m.PageSetupDialog })));
+const PropertiesDialog = lazy(() => import('./shell/PropertiesDialog').then((m) => ({ default: m.PropertiesDialog })));
+const RecentFilesDialog = lazy(() => import('./shell/RecentFilesDialog').then((m) => ({ default: m.RecentFilesDialog })));
+const AboutDialog      = lazy(() => import('./shell/AboutDialog').then((m) => ({ default: m.AboutDialog })));
+import { BusyOverlay } from './shell/BusyOverlay';
+import { UniverBootSplash } from './shell/UniverBootSplash';
 import { SlideContextMenu } from './shell/SlideContextMenu';
 import { dispatchSlideCommand } from './univer/commands';
 import { getSelectedElement } from './shell/selection';
 import { useCollabBridge } from './collab/CollabProvider';
 import { addRecent } from './storage/recent-files';
+import { type AutosaveRecord, clearAutosave, loadAutosave, saveAutosave } from './storage/autosave';
+import { AutosaveRestoreBanner } from './shell/AutosaveRestoreBanner';
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -144,6 +151,37 @@ export function App() {
   // matches the file-input flow that already only reads files[0]).
   const [dragActive, setDragActive] = useState(false);
 
+  // === UNIVER BOOT SPLASH ===
+  // The canvas takes a few hundred ms (occasionally up to a second) to
+  // paint after Univer's plugin lifecycle hits Steady state. Without a
+  // splash the user sees the chrome + a stark white rectangle — looks
+  // like the app is broken. Latched: once true it never resets. Per-
+  // import reloads have their own UI (BusyOverlay); re-showing this
+  // splash on UniverSlide remount during an import was overlaying the
+  // freshly-mounted canvas and Univer's render pipeline didn't recover
+  // when the splash later hid (compare-vs-ground-truth regression).
+  const [firstPaintDone, setFirstPaintDone] = useState(false);
+
+  // === AUTOSAVE / CRASH RECOVERY ===
+  // On boot, look for an autosaved deck. If present and the user is
+  // sitting on the untouched default deck, surface a non-blocking
+  // banner offering to restore. The user explicitly accepts or
+  // dismisses — we never silently swap their working deck.
+  const [autosaveOffer, setAutosaveOffer] = useState<AutosaveRecord | null>(null);
+  useEffect(() => {
+    void (async () => {
+      const record = await loadAutosave();
+      if (!record) return;
+      // Don't pester the user if they already opened a different deck
+      // before the IDB read returned (race on slow disks).
+      if (snapshot.id !== DEFAULT_SLIDE_DATA.id) return;
+      setAutosaveOffer(record);
+    })();
+    // Intentionally only on mount — re-checking after every snapshot
+    // change would re-surface the banner the user just dismissed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Expose to the Toolbar (which lives outside App's prop tree).
   useEffect(() => {
     window.__casualSlides_openSlideshow = () => setSlideshowOpen(true);
@@ -160,6 +198,32 @@ export function App() {
   const slideCount = snapshot.body?.pageOrder?.length ?? 0;
   const collab = useCollabBridge();
 
+  // Debounced autosave — kicks in 30 s after the latest mutation while
+  // dirty. Cleared on every change so a continuously-editing user
+  // doesn't pay the JSON-stringify cost on each keystroke. The save
+  // pulls the LIVE Univer snapshot (not the React state mirror) so
+  // mid-edit work is what gets persisted.
+  useEffect(() => {
+    if (!dirty) return;
+    const handle = window.setTimeout(() => {
+      void saveAutosave(getCurrentSnapshot(snapshot), fileName);
+    }, 30_000);
+    return () => window.clearTimeout(handle);
+  }, [dirty, snapshot, fileName]);
+
+  // beforeunload guard — block the tab close / refresh if the user has
+  // unsaved work. Browsers ignore the returnValue text these days and
+  // show their own dialog; the empty string is enough to trigger it.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
+
   // Subscribe to Univer's SlideDataModel.activePage$ once the editor has
   // mounted. Univer wires the unit asynchronously after UniverSlide's
   // useEffect, so we poll for the model on a short interval until we get
@@ -170,7 +234,17 @@ export function App() {
     let disposed = false;
     let unsub: (() => void) | null = null;
     let retryHandle: number | null = null;
+    let readyHandle: number | null = null;
+    let safetyHandle: number | null = null;
     let mutationDisposer: { dispose?: () => void } | null = null;
+
+    // Safety net for COLD boot only: if Univer never wires (broken
+    // plugin, race) we still mark first paint as done after 8 s so the
+    // user isn't stranded looking at the splash. We do NOT reset the
+    // latch on remount — re-showing the splash over a freshly-mounted
+    // canvas wedged Univer's render pipeline (compare-vs-ground-truth
+    // canvas-blank regression). BusyOverlay handles per-import loading.
+    safetyHandle = window.setTimeout(() => setFirstPaintDone(true), 8_000);
 
     const wire = () => {
       if (disposed) return;
@@ -196,6 +270,14 @@ export function App() {
           const idx = order.indexOf(seedActive.id);
           if (idx >= 0) setActiveSlideIndex(idx);
         }
+        // Model is reachable — canvas is one paint frame away from
+        // visible. The 120 ms buffer lets SlideRenderController finish
+        // its centering pass so the splash crossfades onto a real
+        // canvas, not a blank one. Latched: subsequent remounts skip
+        // this (the setter is idempotent on `true`).
+        readyHandle = window.setTimeout(() => {
+          if (!disposed) setFirstPaintDone(true);
+        }, 120);
         const sub = model.activePage$.subscribe((page) => {
           if (disposed || !page) return;
           const order = model.getPageOrder() ?? [];
@@ -246,6 +328,8 @@ export function App() {
     return () => {
       disposed = true;
       if (retryHandle != null) window.clearTimeout(retryHandle);
+      if (readyHandle != null) window.clearTimeout(readyHandle);
+      if (safetyHandle != null) window.clearTimeout(safetyHandle);
       unsub?.();
       mutationDisposer?.dispose?.();
     };
@@ -331,16 +415,18 @@ export function App() {
         const scene = (renderUnit as any).scene;
         if (!scene) return;
         const scale = scene.scaleX ?? 1;
-        // SLIDE_KEY.VIEW = "__mainView__" — inline the literal so we
-        // don't pull @univerjs/slides for one constant.
+        // SLIDE_KEY.VIEW = "__mainView__" — the main viewport for the
+        // slide unit. Inline the literal so we don't pull SLIDE_KEY for
+        // one constant.
         const viewMain = scene.getViewport?.('__mainView__');
         if (!viewMain) return;
         const sceneW = scene.width;
         const sceneH = scene.height;
         const canvasW = renderUnit.engine?.width ?? 0;
         const canvasH = renderUnit.engine?.height ?? 0;
-        // Scale-aware: at scale<1, the viewport shows canvasW/scale
-        // scene units. Centred scrollLeft = (sceneW - canvasW/scale)/2.
+        // Scale-aware: at scale=0.85, the viewport sees canvasW/scale
+        // scene units. For centring, the viewport's left in scene coords
+        // is (sceneWidth - canvasW/scale) / 2.
         const left = (sceneW - canvasW / scale) / 2;
         const top = (sceneH - canvasH / scale) / 2;
         const { x, y } = viewMain.transViewportScroll2ScrollValue(left, top);
@@ -363,9 +449,11 @@ export function App() {
     const handler = (e: Event) => {
       const open = (e as CustomEvent<{ open: boolean }>).detail?.open;
       if (open) {
+        // Remember the user's prior zoom so we can restore on close.
         if (zoomStateRef.current.priorZoom == null) {
           zoomStateRef.current.priorZoom = zoom;
         }
+        // Only zoom DOWN — if the user was at 75% we keep 75%.
         const target = Math.min(zoom, PANE_FIT_PCT);
         applyAutoZoom(target);
         setZoom(target);
@@ -375,9 +463,9 @@ export function App() {
         applyAutoZoom(restore);
         setZoom(restore);
       }
-      // CSS transition is 200 ms. Cascade recenter at 0 / 120 / 260 /
-      // 420 ms so the last call lands after the canvas resize + the
-      // workspace margin transition both settle.
+      // The CSS workspace transition is 200 ms. Fire recenter at
+      // 0 / 120 / 260 / 420 ms so the final call lands well after the
+      // canvas resize + transition complete.
       recenter();
       window.setTimeout(recenter, 120);
       window.setTimeout(recenter, 260);
@@ -420,6 +508,11 @@ export function App() {
         e.preventDefault();
         void dispatchSlideCommand('univer.command.redo');
       } else if (k === 'm') {
+        // Ctrl+M → append slide. The slides-ui patch fixes the
+        // engine-level double-add (AppendSlideOperation was both
+        // dispatching SlideInsertPageMutation AND running
+        // SlideRenderController.appendPage which wrote to the model
+        // again with a fresh getBlankPage()).
         e.preventDefault();
         void dispatchSlideCommand('slide.operation.append-slide');
       } else if (k === 'p') {
@@ -432,9 +525,9 @@ export function App() {
         e.preventDefault();
         handleOpenClick();
       } else if (k === 'd') {
-        // Ctrl+D — duplicate the selected element if one is selected,
-        // else duplicate the active slide. Standard Slides/PowerPoint
-        // UX. Overrides the browser bookmark shortcut either way.
+        // Ctrl+D — duplicate selected element if one is selected, else
+        // duplicate the active slide. Standard Slides/PowerPoint UX.
+        // Overrides the browser bookmark shortcut either way.
         e.preventDefault();
         if (getSelectedElement()) {
           void dispatchSlideCommand('casual-slides.command.duplicate-element');
@@ -443,9 +536,10 @@ export function App() {
         }
       } else if (k === 'c' && getSelectedElement()) {
         // Ctrl+C with an element selected — copy element to in-memory
-        // clipboard. The `inEditable` guard at the top of this handler
-        // means we don't reach here during text editing, so the
-        // browser-default text-copy path runs unchanged in editors.
+        // clipboard. When focus is in a text edit (handled by the
+        // inEditable guard above), we don't reach here. Letting Ctrl+C
+        // pass through otherwise so browser-default copy still works
+        // for any selected DOM text outside the canvas.
         e.preventDefault();
         void dispatchSlideCommand('casual-slides.command.copy-element');
       } else if (k === 'x' && getSelectedElement()) {
@@ -538,19 +632,22 @@ export function App() {
         void dispatchSlideCommand('casual-slides.command.delete-element');
       }
     };
-    // Plain arrow keys (no Ctrl/Meta/Alt) nudge the selected element by
-    // 1px, 10px with Shift — standard Slides/PowerPoint UX. Runs in
-    // CAPTURE phase to win over Univer's own arrow-key shortcuts when a
-    // slide element is selected. We skip only real form fields
-    // (INPUT/TEXTAREA): Univer's canvas-input proxy is a contentEditable
-    // DIV that gets focus even on bare shape selection, so excluding
-    // contentEditable would mistakenly disable nudge in the common case.
-    // Active text-editing is gated by the selection bridge clearing when
-    // a doc edit takes focus.
+    // Plain arrow keys (no Ctrl/Meta) nudge the selected element by 1px,
+    // 10px with Shift. Standard Slides/PowerPoint behaviour. Skip when
+    // focus is in any editable surface — text-edit uses arrows to move
+    // the caret — and when no element is selected (let the browser
+    // handle scrolling).
     const nudgeHandler = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key;
       if (k !== 'ArrowUp' && k !== 'ArrowDown' && k !== 'ArrowLeft' && k !== 'ArrowRight') return;
+      // Univer's canvas-input proxy is a contentEditable DIV that gets focus
+      // whenever the slide canvas is interacted with — even on a single
+      // shape selection. The contentEditable flag alone can't distinguish
+      // "selected, not editing" from "actively text-editing", so we skip
+      // only real form fields (INPUT/TEXTAREA) here. Active text-editing is
+      // separately gated by checking that no slide element is selected (the
+      // selection bridge clears when a doc edit takes focus).
       const target = e.target as HTMLElement | null;
       const inFormField = !!target && (
         target.tagName === 'INPUT' ||
@@ -591,10 +688,10 @@ export function App() {
     // Esc clears the canvas selection. We skip when a dialog is open
     // (the dialog's own Esc handler closes it first) and when focus is
     // in an editable surface (Univer's text-frame editor uses Esc to
-    // exit edit mode). Clearing selection hides the FormatPane, which
-    // fires the cs:format-pane event so App's auto-zoom restores the
-    // canvas to the user's prior zoom — one Esc, three coordinated
-    // pieces of UX.
+    // exit edit mode — we don't want to step on that). The chained
+    // effect is nice: clearing selection hides the FormatPane, which
+    // fires the `cs:format-pane` event so App's auto-zoom restores the
+    // canvas to the user's prior zoom.
     const escHandler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const target = e.target as HTMLElement | null;
@@ -617,6 +714,9 @@ export function App() {
     window.addEventListener('keydown', f2Handler);
     window.addEventListener('keydown', deleteSlideHandler);
     window.addEventListener('keydown', escHandler);
+    // Arrow nudge runs in CAPTURE phase so it wins over Univer's own
+    // shortcut service (which binds ArrowKey → SetTextEditArrowOperation
+    // and similar) when no doc edit is active.
     window.addEventListener('keydown', nudgeHandler, true);
     return () => {
       window.removeEventListener('keydown', handler);
@@ -641,6 +741,9 @@ export function App() {
       setStatus(`Saved · ${(blob.size / 1024).toFixed(1)} KB`);
       // Successful export → clean. Subsequent mutations re-dirty.
       setDirty(false);
+      // Authoritative bytes left the browser — the autosave snapshot
+      // is no longer the freshest copy of this deck, so retire it.
+      void clearAutosave();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -671,6 +774,11 @@ export function App() {
       setSnapshot(imported);
       // Newly-imported deck is clean by definition.
       setDirty(false);
+      // The deck the user just opened replaces whatever crash-recovery
+      // record may have been pending. If they want both, they'll save
+      // the new one explicitly.
+      void clearAutosave();
+      setAutosaveOffer(null);
       const w = window as unknown as { __pptxImportedSnapshot?: unknown };
       w.__pptxImportedSnapshot = imported;
       if (persistCopy) {
@@ -734,6 +842,10 @@ export function App() {
     setError(null);
     setStatus(null);
     try {
+      // Dynamic import — pulls html-to-image + the off-screen SlideTile
+      // path off the initial bundle. Cold-start cost on first PNG: ~150 ms
+      // network + ~50 ms parse on a warm connection.
+      const { downloadSlideAsPng } = await import('./shell/download-slide');
       await downloadSlideAsPng(page, pageSize, fileName, activeSlideIndex + 1);
       setStatus(`Saved · slide ${activeSlideIndex + 1}.png`);
     } catch (e) {
@@ -757,6 +869,10 @@ export function App() {
     setError(null);
     setStatus(`Rendering 0 / ${orderedPages.length}…`);
     try {
+      // Same dynamic-import deferral as the PNG path — pulls jsPDF +
+      // html-to-image off the initial bundle (those two combined are
+      // ~250 KB minified, the single biggest non-Univer chunk).
+      const { downloadDeckAsPdf } = await import('./shell/download-slide');
       await downloadDeckAsPdf(orderedPages, pageSize, fileName, (done, total) => {
         setStatus(`Rendering ${done} / ${total}…`);
       });
@@ -930,6 +1046,8 @@ export function App() {
             <span className="cs-workspace__drop-overlay-text">Drop .pptx to open</span>
           </div>
         )}
+        <BusyOverlay opening={opening} saving={saving} />
+        <UniverBootSplash visible={!firstPaintDone} />
       </div>
       <NotesPanel visible={notesVisible} onToggle={() => setNotesVisible((v) => !v)} />
       <StatusBar
@@ -940,33 +1058,64 @@ export function App() {
         notesVisible={notesVisible}
         onToggleNotes={() => setNotesVisible((v) => !v)}
       />
-      {slideshowOpen && (
-        <SlideShow snapshot={snapshot} onExit={() => setSlideshowOpen(false)} />
-      )}
-      <ThemePicker open={themesOpen} onClose={() => setThemesOpen(false)} />
-      <PageSetupDialog
-        open={pageSetupOpen}
-        onClose={() => setPageSetupOpen(false)}
-        current={{
-          width: snapshot.pageSize?.width ?? 960,
-          height: snapshot.pageSize?.height ?? 540,
-        }}
-        onApply={handleSetPageSize}
-      />
-      <PropertiesDialog
-        open={propertiesOpen}
-        onClose={() => setPropertiesOpen(false)}
-        fallback={snapshot}
-      />
-      <RecentFilesDialog
-        open={recentOpen}
-        onClose={() => setRecentOpen(false)}
-        onOpen={(bytes, name) => {
-          void handleOpenRecent(bytes, name);
-        }}
-      />
-      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      {/* Modally-shown surfaces are lazy chunks; gate on the open
+          boolean so the import never fires until first activation.
+          Suspense fallback is null — the user clicked a button and the
+          chunk loads in <100 ms on a warm cache; spinner UI would
+          flash distractingly. */}
+      <Suspense fallback={null}>
+        {slideshowOpen && (
+          <SlideShow snapshot={snapshot} onExit={() => setSlideshowOpen(false)} />
+        )}
+        {themesOpen && (
+          <ThemePicker open={themesOpen} onClose={() => setThemesOpen(false)} />
+        )}
+        {pageSetupOpen && (
+          <PageSetupDialog
+            open={pageSetupOpen}
+            onClose={() => setPageSetupOpen(false)}
+            current={{
+              width: snapshot.pageSize?.width ?? 960,
+              height: snapshot.pageSize?.height ?? 540,
+            }}
+            onApply={handleSetPageSize}
+          />
+        )}
+        {propertiesOpen && (
+          <PropertiesDialog
+            open={propertiesOpen}
+            onClose={() => setPropertiesOpen(false)}
+            fallback={snapshot}
+          />
+        )}
+        {recentOpen && (
+          <RecentFilesDialog
+            open={recentOpen}
+            onClose={() => setRecentOpen(false)}
+            onOpen={(bytes, name) => {
+              void handleOpenRecent(bytes, name);
+            }}
+          />
+        )}
+        {aboutOpen && (
+          <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+        )}
+      </Suspense>
       <SlideContextMenu />
+      <AutosaveRestoreBanner
+        offer={autosaveOffer}
+        onRestore={(record) => {
+          setSnapshot(record.snapshot);
+          // Restored deck is unsaved — mark dirty so the next Save
+          // promotes it to a real .pptx on disk.
+          setDirty(true);
+          setAutosaveOffer(null);
+        }}
+        onDismiss={() => {
+          void clearAutosave();
+          setAutosaveOffer(null);
+        }}
+      />
     </>
   );
 }

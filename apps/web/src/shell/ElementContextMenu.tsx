@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { dispatchSlideCommand } from '../univer/commands';
+import { dispatchSlideCommand, hasElementClipboard } from '../univer/commands';
 import { getSelectedElement } from './selection';
 import { Icon } from './icons';
 import { useTranslation } from '../i18n';
@@ -22,6 +22,9 @@ import { useTranslation } from '../i18n';
 interface MenuState {
   x: number;
   y: number;
+  // When true, no element was under the right-click — show only paste.
+  // Used to support the standard "right-click empty canvas → Paste" UX.
+  emptyCanvas: boolean;
 }
 
 function inWorkspace(el: HTMLElement | null): boolean {
@@ -49,9 +52,14 @@ export function ElementContextMenu() {
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       if (!inWorkspace(target)) return;
-      if (!getSelectedElement()) return;
+      const hasSel = !!getSelectedElement();
+      // Show the menu either way — with full options when an element is
+      // selected, or with just Paste when right-clicking empty canvas
+      // and the clipboard is populated. Skip entirely otherwise so the
+      // browser-default menu doesn't get suppressed for no UI gain.
+      if (!hasSel && !hasElementClipboard()) return;
       e.preventDefault();
-      setMenu({ x: e.clientX, y: e.clientY });
+      setMenu({ x: e.clientX, y: e.clientY, emptyCanvas: !hasSel });
     };
     document.addEventListener('contextmenu', handler);
     return () => document.removeEventListener('contextmenu', handler);
@@ -79,7 +87,7 @@ export function ElementContextMenu() {
     if (!menu || !menuRef.current) return;
     const rect = menuRef.current.getBoundingClientRect();
     const { x, y } = clampToViewport(menu.x, menu.y, rect.width, rect.height);
-    if (x !== menu.x || y !== menu.y) setMenu({ x, y });
+    if (x !== menu.x || y !== menu.y) setMenu({ ...menu, x, y });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menu?.x, menu?.y]);
 
@@ -89,6 +97,33 @@ export function ElementContextMenu() {
   }, []);
 
   if (!menu) return null;
+
+  // Empty-canvas right-click: just offer Paste. Standard PowerPoint UX
+  // when there's clipboard content and the user wants to drop it on
+  // an empty slide area.
+  if (menu.emptyCanvas) {
+    return (
+      <ul
+        ref={menuRef}
+        className="cs-slide-context"
+        data-testid="element-context-menu"
+        style={{ top: menu.y, left: menu.x }}
+        role="menu"
+      >
+        <li>
+          <button
+            type="button"
+            className="cs-slide-context__item"
+            onClick={() => void fire('casual-slides.command.paste-element')}
+          >
+            <Icon name="content_paste" size={14} />
+            <span>{t('elementContext.paste')}</span>
+            <span className="cs-slide-context__shortcut">{t('elementContext.shortcut.paste')}</span>
+          </button>
+        </li>
+      </ul>
+    );
+  }
 
   return (
     <ul

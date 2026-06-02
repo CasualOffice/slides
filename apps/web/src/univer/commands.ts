@@ -577,6 +577,13 @@ function _nudgeSelectedElement(dx: number, dy: number): boolean {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let elementClipboard: any = null;
 
+// Whether the in-memory element clipboard has content. Used by the
+// right-click context menu to decide between showing the full element
+// menu vs the empty-canvas "Paste only" menu.
+export function hasElementClipboard(): boolean {
+  return !!elementClipboard;
+}
+
 // Save a deep clone of the selected element to the in-memory clipboard.
 // Returns false when nothing is selected. The original element is left
 // alone; only paste actually creates a new element on the canvas.
