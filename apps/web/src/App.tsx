@@ -424,10 +424,28 @@ export function App() {
         e.preventDefault();
         handleOpenClick();
       } else if (k === 'd') {
-        // Ctrl+D — duplicate active slide. Overrides browser bookmark
-        // (Google Slides does the same).
+        // Ctrl+D — duplicate the selected element if one is selected,
+        // else duplicate the active slide. Standard Slides/PowerPoint
+        // UX. Overrides the browser bookmark shortcut either way.
         e.preventDefault();
-        void dispatchSlideCommand('slide.command.duplicate-slide');
+        if (getSelectedElement()) {
+          void dispatchSlideCommand('casual-slides.command.duplicate-element');
+        } else {
+          void dispatchSlideCommand('slide.command.duplicate-slide');
+        }
+      } else if (k === 'c' && getSelectedElement()) {
+        // Ctrl+C with an element selected — copy element to in-memory
+        // clipboard. The `inEditable` guard at the top of this handler
+        // means we don't reach here during text editing, so the
+        // browser-default text-copy path runs unchanged in editors.
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.copy-element');
+      } else if (k === 'v') {
+        // Ctrl+V — paste the last-copied element on the active slide.
+        // No-op if nothing has been copied. Same inEditable guard above
+        // keeps text-editing paste behaviour intact.
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.paste-element');
       } else if (k === 'k') {
         // Ctrl+K — Insert link. Routed through our wrapper so the
         // docs-hyper-link plugin lazy-inits on first invocation. The

@@ -157,6 +157,15 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
     const p = params as { dx?: number; dy?: number } | undefined;
     return nudgeSelectedElement(p?.dx ?? 0, p?.dy ?? 0);
   }
+  if (id === 'casual-slides.command.copy-element') {
+    return copySelectedElement();
+  }
+  if (id === 'casual-slides.command.paste-element') {
+    return pasteElement();
+  }
+  if (id === 'casual-slides.command.duplicate-element') {
+    return duplicateSelectedElement();
+  }
   if (id === 'casual-slides.command.clear-selection') {
     return clearCanvasSelection();
   }
@@ -560,6 +569,87 @@ function _nudgeSelectedElement(dx: number, dy: number): boolean {
     if (active) model.setActivePage(active);
     return true;
   }
+}
+
+// In-memory clipboard for slide elements. Plain object, not the OS
+// clipboard — copies between tabs/windows are out of scope for v0.1.
+// One slot, last-copy wins. Cleared only when the user copies again.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let elementClipboard: any = null;
+
+// Save a deep clone of the selected element to the in-memory clipboard.
+// Returns false when nothing is selected. The original element is left
+// alone; only paste actually creates a new element on the canvas.
+export function copySelectedElement(): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  const sel = getSelectedElement();
+  if (!sel) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
+  if (!el) return false;
+  elementClipboard = structuredClone(el);
+  notify('Element copied');
+  return true;
+}
+
+// Paste a copy of the clipboard element onto the active page, offset by
+// (16, 16) so it's visually distinct from the source. Re-ids the clone so
+// the transformer treats it as a new object. Direct-snapshot write + rev
+// bump — same path duplicateSlide uses for whole-page clones.
+// TODO(collab): bypasses the command bus; needs a real insert mutation
+// once Univer Slides exposes one.
+export function pasteElement(): boolean {
+  return withUndo(() => _pasteElement());
+}
+
+function _pasteElement(): boolean {
+  if (!elementClipboard) return false;
+  const univer = getUniver();
+  if (!univer) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  const page = model.getActivePage();
+  if (!page) return false;
+  const stamp = Date.now().toString(36);
+  const rand = Math.random().toString(36).slice(2, 6);
+  const newId = `el-${stamp}-${rand}`;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clone: any = structuredClone(elementClipboard);
+  clone.id = newId;
+  clone.left = (clone.left ?? 0) + 16;
+  clone.top = (clone.top ?? 0) + 16;
+  // Bump zIndex above the current max so the paste lands on top.
+  const existing = Object.values(page.pageElements ?? {});
+  const maxZ = existing.length ? Math.max(...existing.map((e) => e?.zIndex ?? 0)) : 0;
+  clone.zIndex = maxZ + 1;
+  page.pageElements[newId] = clone;
+  model.incrementRev();
+  model.setActivePage(page);
+  notify('Element pasted');
+  return true;
+}
+
+// Duplicate-in-place: copy + paste in one step. Doesn't touch the user's
+// existing clipboard so a separate Ctrl+C/Ctrl+V workflow stays intact.
+export function duplicateSelectedElement(): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  const sel = getSelectedElement();
+  if (!sel) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
+  if (!el) return false;
+  const saved = elementClipboard;
+  elementClipboard = structuredClone(el);
+  const ok = pasteElement();
+  elementClipboard = saved;
+  return ok;
 }
 
 // Center the selected element on the slide. `axis` controls which
