@@ -115,13 +115,16 @@ test('drive editing flows w/ precise coords + report broken steps', async ({ pag
 
   // Double-click to enter text edit
   await page.mouse.dblclick(titleCentre.x, titleCentre.y);
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(700);
   await shot(page, '02-after-dblclick');
-  await page.keyboard.type('Hello world', { delay: 30 });
-  await page.waitForTimeout(500);
+  // First clear existing placeholder, then type
+  await page.keyboard.press('Control+a');
+  await page.waitForTimeout(150);
+  await page.keyboard.type('Hello world', { delay: 50 });
+  await page.waitForTimeout(700);
   await shot(page, '03-after-typing');
-  // Commit — click outside
-  await page.mouse.click(titleCentre.x, titleCentre.y - 200);
+  // Commit via Escape (cleaner signal than click-outside)
+  await page.keyboard.press('Escape');
   await page.waitForTimeout(500);
   await shot(page, '04-after-commit');
 
@@ -222,6 +225,14 @@ test('drive editing flows w/ precise coords + report broken steps', async ({ pag
   // ─────────────────────────────────────────────────────────
   // STEP 7 — delete the active slide via Slide menu
   // ─────────────────────────────────────────────────────────
+  // First ensure ≥ 2 slides — deletion of the LAST slide is correctly
+  // disallowed (matches PowerPoint / Google Slides). Add a fresh slide
+  // to give Delete something to remove.
+  const before7Pre = await snapshot(page);
+  if ((before7Pre?.body?.pageOrder?.length ?? 0) < 2) {
+    await page.keyboard.press('Control+m');
+    await page.waitForTimeout(500);
+  }
   const before7 = await snapshot(page);
   const s7Before = before7?.body?.pageOrder?.length ?? 0;
   // Open the Slide menu in the menu strip
@@ -231,7 +242,7 @@ test('drive editing flows w/ precise coords + report broken steps', async ({ pag
   await page.waitForTimeout(500);
   const after7 = await snapshot(page);
   const s7After = after7?.body?.pageOrder?.length ?? 0;
-  log('7-delete-slide-menu', s7After === Math.max(0, s7Before - 1), `expected ${s7Before - 1} slides after Slide → Delete, got ${s7After}`);
+  log('7-delete-slide-menu', s7After === s7Before - 1, `expected ${s7Before - 1} slides after Slide → Delete, got ${s7After}`);
 
   // ─────────────────────────────────────────────────────────
   // FINAL REPORT

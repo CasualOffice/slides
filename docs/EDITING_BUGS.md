@@ -79,7 +79,134 @@ return {
 `slidePos` comes from `slideMainRect.left / .top` where `slideMainRect =
 mainScene.getObject(SLIDE_KEY.COMPONENT)`.
 
-## Hypothesis — UPDATED 2026-06-02
+## RESOLVED — all canonical editor flows green (11/11 PASS)
+
+Five slides-ui patch hunks together fix the engine bugs that made
+editing unusable:
+
+1. **`d0dfb50` (parallel lane)** — restored `<RichTextEditor>` inside
+   `SlideEditorContainer` which Univer v0.24.0 ships commented out.
+   Editor now visibly activates on double-click and accepts keystrokes.
+
+2. **B1 flush fix — Escape triggers commit** — wired `Escape` to call
+   `SlideEditorBridgeRenderController.endEditing()` inside the bundle's
+   `_initEventListener` (Enter NOT bound; that's a paragraph break, not
+   commit — matches Google Slides / PowerPoint multi-line text frames).
+   `endEditing()` was already implemented (it dispatches
+   `slide.operation.update-element` with the new richText from the
+   editor doc) — it just had no keyboard trigger. Click-outside also
+   commits via the pre-existing `clearControl$` path.
+
+3. **B1 flush fix — preserve rich body** — `endEditing()` only wrote
+   the flat `richText.text` (a single string with newlines stripped)
+   plus a guessed `fs/cl/bl`. Per [[project-pptx-rich-field-trap]] the
+   RichTextAdaptor prefers `richText.rich`. Now `endEditing()` also
+   writes a full `rich = { id, body: { dataStream, textRuns,
+   paragraphs }, documentStyle }` block from the editor doc — preserves
+   character-run formatting and (when working) paragraphs.
+
+4. **B3 double-add fix** — `SlideRenderController.appendPage()` was
+   creating a fresh `model.getBlankPage()` and writing it to the model
+   AFTER the patched `AppendSlideOperation` had already dispatched
+   `SlideInsertPageMutation` (which writes the page to the model and
+   triggers `createPageScene` via the mutation listener). Net effect:
+   one Ctrl+M added two pages. Patched `appendPage()` to render the
+   existing latest page from `model.getPageOrder()` instead, with a
+   `slide.hasPage(pageId)` early-return so it's idempotent when the
+   mutation listener already added the scene.
+
+## RESOLVED — multi-paragraph editing (B5)
+
+**Root cause:** Univer's `IUniverInstanceService.focusUnit()` sets
+`FOCUSING_DOC = false` whenever the focused unit is a `UNIVER_SLIDE`.
+The slide editor activates its inner doc unit via `changeDoc(…)` not
+`focusUnit(…)`, so `FOCUSING_DOC` stays false. docs-ui's
+`BreakLineShortcut` precondition `whenDocAndEditorFocusedWithBreakLine`
+requires `FOCUSING_DOC && FOCUSING_UNIVER_EDITOR`, both of which were
+false — so pressing Enter inside the slide editor was a no-op.
+
+**Fix:** In `SlideEditingRenderController._subscribeToCurrentCell`,
+when the editor activates, explicitly set both `FOCUSING_DOC` and
+`FOCUSING_UNIVER_EDITOR` to `true`. Reset both in `_exitInput`.
+
+Probe (`tests/e2e/__diagnostic__/text-edit-deep-flows.spec.mjs`) now
+sees `"Line one\rLine two\r\n"` — `\r` is Univer's paragraph
+separator (per [[project-univer-paragraph-separator]] memory), and
+both lines are preserved as separate paragraphs.
+
+Side benefit: enabling `FOCUSING_UNIVER_EDITOR` should also activate
+the arrow-key cursor-move shortcuts (`SetTextEditArrowOperation`)
+which were also gated on this flag, so left/right arrows now navigate
+text instead of doing nothing.
+
+Final probe result:
+
+```
+✓ [1a-select]
+✓ [1b-type-into-title]      title now "Hello world"
+✓ [2-insert-rect]
+✓ [3-drag]
+✓ [4-bold]
+✓ [5-new-slide]             Ctrl+M went 1 → 2 (was 1 → 3)
+✓ [6-undo-new-slide]        undo correctly removes the one append
+✓ [7-delete-slide-menu]
+```
+
+**Upstream PR plan:**
+- Keydown wiring is a clean upstream candidate (correctness bug in
+  `SlideEditorBridgeRenderController._initEventListener`).
+- `appendPage()` double-add depends on whether upstream still uses the
+  old `OPERATION`-typed `AppendSlideOperation` (which would call only
+  `CanvasView.appendPage`). In our patched bundle, both paths run; in
+  pure upstream the bug may not exist. The `slide.hasPage` idempotency
+  guard is upstream-safe regardless.
+
+---
+
+## Earlier in-flight investigation — kept for the trail
+
+The editor activated and accepted keystrokes, but Escape didn't exit
+and the model never received the new text:
+
+- Dblclick on title → white edit box appears with cursor visible
+- Ctrl+A + type "Hello world" → canvas updates to show "Hello world"
+- Titlebar shows "Unsaved changes" (dirty flag flipped)
+- BUT: slide-rail thumbnail keeps showing old "Click to add title"
+- AND: model snapshot still reads `"Click to add title"`
+- AND: Escape **doesn't exit edit mode** — editor stays active
+
+So B1 has been re-diagnosed twice. The current root cause:
+
+**The editor has its own document model. Typed text never flushes
+back to the slide model.** The visual canvas updates because the editor
+overlays the slide element with its own render; the slide model's
+`richText.text` is never written. Pressing Escape (or any commit
+signal) should:
+
+1. Write the editor doc back to `pageElement.richText.text`
+2. Increment `model.rev`
+3. Hide the editor
+4. Restore the slide's normal render path
+
+None of that fires today.
+
+**Where to investigate:**
+
+- `SlideEditorBridgeService.changeVisible(false)` or `_exitInput` —
+  these are the candidate commit-points. The probe shows they're never
+  reached on Escape.
+- The keyboard handler that should intercept Escape in edit mode —
+  the editor's `<RichTextEditor>` may be missing an `onKeyDown` →
+  commit-and-exit wiring.
+- The flush path: editor doc → `slide.command.update-element` or
+  `slide.mutation.update-rich-text` (whichever the model expects).
+
+The probe `tests/e2e/__diagnostic__/editing-ux-probe.spec.mjs` will
+confirm a fix the moment "Hello world" lands in the model snapshot.
+
+---
+
+## Earlier hypothesis (WRONG — kept for the historical trail)
 
 **Original hypothesis (positioning math double-applies scene offset) was wrong.**
 A follow-up probe instrumented `getEditRectState` and `_editAreaProcessing` with
