@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index fafb8476bdd10d7a5224234dc0d7494756933de3..5fe6b159e67308a1c607e33a1f1733f03bd5b80e 100644
+index fafb8476bdd10d7a5224234dc0d7494756933de3..bf576196e524e617e900e1e19b045b00ff31cff9 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -12648,6 +12648,12 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -273,8 +273,17 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..5fe6b159e67308a1c607e33a1f1733f0
  		if (!isStop && this._shouldDispatchEventToScene(currentObject)) this._scene.onMouseWheel$.emitEvent(evt);
  	}
  	_onKeyDown(evt) {
+@@ -26238,7 +26366,7 @@ var Transformer = class extends _univerjs_core.Disposable {
+ 		const { isCropper } = this._getConfig(applyObject);
+ 		const targetObject = this._findGroupObject(applyObject);
+ 		if (this._selectedObjectMap.has(targetObject.oKey)) return;
+-		if (!evt.ctrlKey || SINGLE_ACTIVE_OBJECT_TYPE_MAP.has(targetObject.objectType)) {
++		if ((!evt.ctrlKey && !evt.shiftKey && !evt.metaKey) || SINGLE_ACTIVE_OBJECT_TYPE_MAP.has(targetObject.objectType)) {
+ 			this._selectedObjectMap.clear();
+ 			this._clearControlMap();
+ 		}
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..c82909b808a1308f3316c14c46ef9291b8e1bc2c 100644
+index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..d52229d4e97d0e013b5175a804cfce353193e56b 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -12619,6 +12619,13 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -616,3 +625,12 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..c82909b808a1308f3316c14c46ef9291
  		if (!isStop && this._shouldDispatchEventToScene(currentObject)) this._scene.onMouseWheel$.emitEvent(evt);
  	}
  	_onKeyDown(evt) {
+@@ -26209,7 +26380,7 @@ var Transformer = class extends Disposable {
+ 		const { isCropper } = this._getConfig(applyObject);
+ 		const targetObject = this._findGroupObject(applyObject);
+ 		if (this._selectedObjectMap.has(targetObject.oKey)) return;
+-		if (!evt.ctrlKey || SINGLE_ACTIVE_OBJECT_TYPE_MAP.has(targetObject.objectType)) {
++		if ((!evt.ctrlKey && !evt.shiftKey && !evt.metaKey) || SINGLE_ACTIVE_OBJECT_TYPE_MAP.has(targetObject.objectType)) {
+ 			this._selectedObjectMap.clear();
+ 			this._clearControlMap();
+ 		}

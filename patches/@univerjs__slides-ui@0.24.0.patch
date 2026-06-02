@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301fdd476f6 100644
+index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..de7bf62170c03d9c56a3f959b04ab40d76bdb32a 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -156,7 +156,7 @@ let SlideRenderController = class SlideRenderController extends _univerjs_core.R
@@ -45,15 +45,33 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301
  		const render = this._currentRender();
  		if (!pageOrder || !render) return;
  		if (pageOrder.length === 0) return;
-@@ -350,6 +353,7 @@ let SlideRenderController = class SlideRenderController extends _univerjs_core.R
+@@ -350,14 +353,21 @@ let SlideRenderController = class SlideRenderController extends _univerjs_core.R
  	}
  	appendPage() {
  		const model = this._getCurrUnitModel();
+-		const page = model.getBlankPage();
 +		if (!model) return;
- 		const page = model.getBlankPage();
  		const render = this._currentRender();
- 		if (page == null || render == null || render.mainComponent == null) return;
-@@ -429,11 +433,24 @@ const ActivateSlidePageOperation = {
+-		if (page == null || render == null || render.mainComponent == null) return;
+-		const { id: pageId } = page;
++		if (render == null || render.mainComponent == null) return;
++		const order = model.getPageOrder();
++		if (!order || order.length === 0) return;
++		const pageId = order[order.length - 1];
++		const page = model.getPage(pageId);
++		if (page == null) return;
+ 		const slide = render.mainComponent;
++		if (slide && typeof slide.hasPage === "function" && slide.hasPage(pageId)) {
++			model.setActivePage(page);
++			return;
++		}
+ 		const scene = this.createPageScene(pageId, page);
+ 		if (slide && scene) slide.addPageScene(scene);
+-		model.appendPage(page);
+ 		model.setActivePage(page);
+ 	}
+ };
+@@ -429,11 +439,24 @@ const ActivateSlidePageOperation = {
  //#region src/commands/operations/append-slide.operation.ts
  const AppendSlideOperation = {
  	id: "slide.operation.append-slide",
@@ -82,7 +100,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301
  		return true;
  	}
  };
-@@ -442,16 +459,27 @@ const AppendSlideOperation = {
+@@ -442,16 +465,27 @@ const AppendSlideOperation = {
  //#region src/commands/operations/delete-element.operation.ts
  const DeleteSlideElementOperation = {
  	id: "slide.operation.delete-element",
@@ -119,7 +137,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301
  		return true;
  	}
  };
-@@ -497,11 +525,20 @@ const InsertSlideFloatImageCommand = {
+@@ -497,11 +531,20 @@ const InsertSlideFloatImageCommand = {
  				image
  			} }
  		};
@@ -142,7 +160,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301
  		return true;
  	}
  };
-@@ -510,16 +547,97 @@ const InsertSlideFloatImageCommand = {
+@@ -510,16 +553,97 @@ const InsertSlideFloatImageCommand = {
  //#region src/commands/operations/update-element.operation.ts
  const UpdateSlideElementOperation = {
  	id: "slide.operation.update-element",
@@ -249,7 +267,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301
  		return true;
  	}
  };
-@@ -882,40 +1000,51 @@ const InsertSlideShapeRectangleCommand = {
+@@ -882,40 +1006,51 @@ const InsertSlideShapeRectangleCommand = {
  		return commandService.executeCommand(InsertSlideShapeRectangleOperation.id, { unitId });
  	}
  };
@@ -333,7 +351,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301
  };
  const ToggleSlideEditSidebarOperation = {
  	id: "sidebar.operation.slide-shape",
-@@ -958,95 +1087,183 @@ const InsertSlideShapeEllipseCommand = {
+@@ -958,95 +1093,183 @@ const InsertSlideShapeEllipseCommand = {
  };
  const InsertSlideShapeEllipseOperation = {
  	id: "slide.operation.insert-float-shape.ellipse",
@@ -580,7 +598,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301
  
  //#endregion
  //#region src/commands/operations/set-thumb.operation.ts
-@@ -1390,7 +1607,15 @@ function SlideEditorContainer() {
+@@ -1390,7 +1613,15 @@ function SlideEditorContainer() {
  	const editorService = (0, _univerjs_ui.useDependency)(_univerjs_docs_ui.IEditorService);
  	const contextService = (0, _univerjs_ui.useDependency)(_univerjs_core.IContextService);
  	const disableAutoFocus = (0, _univerjs_ui.useObservable)(() => contextService.subscribeContextValue$(_univerjs_ui.DISABLE_AUTO_FOCUS_KEY), false, void 0, [contextService, _univerjs_ui.DISABLE_AUTO_FOCUS_KEY]);
@@ -597,7 +615,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301
  	(0, react.useEffect)(() => {
  		slideEditorManagerService.state$.subscribe((param) => {
  			if (param == null) return;
-@@ -1425,7 +1650,14 @@ function SlideEditorContainer() {
+@@ -1425,7 +1656,14 @@ function SlideEditorContainer() {
  			top: state.top,
  			width: state.width,
  			height: state.height
@@ -613,7 +631,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301
  	});
  }
  
-@@ -1549,6 +1781,14 @@ let SlidesUIController = class SlidesUIController extends _univerjs_core.Disposa
+@@ -1549,6 +1787,14 @@ let SlidesUIController = class SlidesUIController extends _univerjs_core.Disposa
  			ToggleSlideEditSidebarOperation,
  			DeleteSlideElementOperation,
  			UpdateSlideElementOperation,
@@ -628,7 +646,62 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
-@@ -2711,6 +2951,7 @@ Object.defineProperty(exports, 'SlideCanvasPopMangerService', {
+@@ -1880,6 +2126,8 @@ let SlideEditingRenderController = class SlideEditingRenderController extends _u
+ 			if (wrapStrategy === _univerjs_core.WrapStrategy.WRAP && angle === 0) documentModel.updateDocumentDataPageSize((endX - startX) / scaleX);
+ 			this._instanceSrv.changeDoc(editorUnitId, documentModel);
+ 			this._contextService.setContextValue(_univerjs_core.FOCUSING_EDITOR_BUT_HIDDEN, true);
++			this._contextService.setContextValue("FOCUSING_DOC", true);
++			this._contextService.setContextValue(_univerjs_core.FOCUSING_UNIVER_EDITOR, true);
+ 			this._textSelectionManagerService.replaceTextRanges([{
+ 				startOffset: 0,
+ 				endOffset: 0
+@@ -2145,6 +2393,9 @@ let SlideEditingRenderController = class SlideEditingRenderController extends _u
+ 	}
+ 	_exitInput(param) {
+ 		this._contextService.setContextValue(_univerjs_core.EDITOR_ACTIVATED, false);
++		this._contextService.setContextValue("FOCUSING_DOC", false);
++		this._contextService.setContextValue(_univerjs_core.FOCUSING_UNIVER_EDITOR, false);
++		this._contextService.setContextValue(_univerjs_core.FOCUSING_EDITOR_BUT_HIDDEN, false);
+ 		this._cellEditorManagerService.setState({ show: param.visible });
+ 		const editorUnitId = this._editorBridgeService.getCurrentEditorId();
+ 		if (editorUnitId == null) return;
+@@ -2299,6 +2550,16 @@ let SlideEditorBridgeRenderController = class SlideEditorBridgeRenderController
+ 			const pageScene = pageSceneList[i];
+ 			listenersForPageScene(pageScene);
+ 		}
++		const keydownHandler = (e) => {
++			if (!this._curRichText) return;
++			if (e.key === "Escape") {
++				e.preventDefault();
++				e.stopPropagation();
++				this.endEditing();
++			}
++		};
++		document.addEventListener("keydown", keydownHandler, true);
++		d.add((0, _univerjs_core.toDisposable)(() => document.removeEventListener("keydown", keydownHandler, true)));
+ 	}
+ 	pickOtherObjects() {
+ 		this.endEditing();
+@@ -2327,6 +2588,18 @@ let SlideEditorBridgeRenderController = class SlideEditorBridgeRenderController
+ 			const ts = textRuns[0].ts;
+ 			richText.cl = ts === null || ts === void 0 ? void 0 : ts.cl;
+ 		}
++		const _docData = curRichText.documentData;
++		if (_docData && _docData.body) {
++			richText.rich = {
++				id: _docData.id || (curRichText && curRichText.oKey),
++				body: {
++					dataStream: _docData.body.dataStream || "",
++					textRuns: _docData.body.textRuns ? _docData.body.textRuns.map((r) => ({ ...r })) : [],
++					paragraphs: _docData.body.paragraphs ? _docData.body.paragraphs.map((p) => ({ ...p })) : [{ startIndex: 0 }]
++				},
++				documentStyle: _docData.documentStyle ? { ..._docData.documentStyle } : {}
++			};
++		}
+ 		this._commandService.executeCommand(UpdateSlideElementOperation.id, {
+ 			unitId: this._renderContext.unitId,
+ 			oKey: curRichText === null || curRichText === void 0 ? void 0 : curRichText.oKey,
+@@ -2711,6 +2984,7 @@ Object.defineProperty(exports, 'SlideCanvasPopMangerService', {
    }
  });
  exports.SlideEditorContainer = SlideEditorContainer;
@@ -637,7 +710,7 @@ index 25ef6029b2c244ef442a28288cd69ea20b0dc6f0..02f2d4a99618ab99759e03238a93a301
  Object.defineProperty(exports, 'SlidesUIController', {
    enumerable: true,
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3282c7dbf 100644
+index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..d2bd67b6f4f200cd4e8eddb95e229e02052dcc3f 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -7,7 +7,7 @@ import { Button, ColorPicker, Dropdown, InputNumber, borderClassName, borderTopC
@@ -900,15 +973,33 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3
  		const render = this._currentRender();
  		if (!pageOrder || !render) return;
  		if (pageOrder.length === 0) return;
-@@ -349,6 +540,7 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
+@@ -349,14 +540,21 @@ let SlideRenderController = class SlideRenderController extends RxDisposable {
  	}
  	appendPage() {
  		const model = this._getCurrUnitModel();
+-		const page = model.getBlankPage();
 +		if (!model) return;
- 		const page = model.getBlankPage();
  		const render = this._currentRender();
- 		if (page == null || render == null || render.mainComponent == null) return;
-@@ -428,11 +620,24 @@ const ActivateSlidePageOperation = {
+-		if (page == null || render == null || render.mainComponent == null) return;
+-		const { id: pageId } = page;
++		if (render == null || render.mainComponent == null) return;
++		const order = model.getPageOrder();
++		if (!order || order.length === 0) return;
++		const pageId = order[order.length - 1];
++		const page = model.getPage(pageId);
++		if (page == null) return;
+ 		const slide = render.mainComponent;
++		if (slide && typeof slide.hasPage === "function" && slide.hasPage(pageId)) {
++			model.setActivePage(page);
++			return;
++		}
+ 		const scene = this.createPageScene(pageId, page);
+ 		if (slide && scene) slide.addPageScene(scene);
+-		model.appendPage(page);
+ 		model.setActivePage(page);
+ 	}
+ };
+@@ -428,11 +626,24 @@ const ActivateSlidePageOperation = {
  //#region src/commands/operations/append-slide.operation.ts
  const AppendSlideOperation = {
  	id: "slide.operation.append-slide",
@@ -937,7 +1028,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3
  		return true;
  	}
  };
-@@ -441,16 +646,27 @@ const AppendSlideOperation = {
+@@ -441,16 +652,27 @@ const AppendSlideOperation = {
  //#region src/commands/operations/delete-element.operation.ts
  const DeleteSlideElementOperation = {
  	id: "slide.operation.delete-element",
@@ -974,7 +1065,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3
  		return true;
  	}
  };
-@@ -496,11 +712,20 @@ const InsertSlideFloatImageCommand = {
+@@ -496,11 +718,20 @@ const InsertSlideFloatImageCommand = {
  				image
  			} }
  		};
@@ -997,7 +1088,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3
  		return true;
  	}
  };
-@@ -509,16 +734,97 @@ const InsertSlideFloatImageCommand = {
+@@ -509,16 +740,97 @@ const InsertSlideFloatImageCommand = {
  //#region src/commands/operations/update-element.operation.ts
  const UpdateSlideElementOperation = {
  	id: "slide.operation.update-element",
@@ -1104,7 +1195,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3
  		return true;
  	}
  };
-@@ -881,40 +1187,51 @@ const InsertSlideShapeRectangleCommand = {
+@@ -881,40 +1193,51 @@ const InsertSlideShapeRectangleCommand = {
  		return commandService.executeCommand(InsertSlideShapeRectangleOperation.id, { unitId });
  	}
  };
@@ -1188,7 +1279,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3
  };
  const ToggleSlideEditSidebarOperation = {
  	id: "sidebar.operation.slide-shape",
-@@ -957,8 +1274,32 @@ const InsertSlideShapeEllipseCommand = {
+@@ -957,8 +1280,32 @@ const InsertSlideShapeEllipseCommand = {
  };
  const InsertSlideShapeEllipseOperation = {
  	id: "slide.operation.insert-float-shape.ellipse",
@@ -1223,7 +1314,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3
  		const id = generateRandomId(6);
  		const univerInstanceService = accessor.get(IUniverInstanceService);
  		const unitId = params.unitId;
-@@ -994,58 +1335,161 @@ const InsertSlideShapeEllipseOperation = {
+@@ -994,58 +1341,161 @@ const InsertSlideShapeEllipseOperation = {
  	}
  };
  
@@ -1415,7 +1506,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3
  
  //#endregion
  //#region src/commands/operations/set-thumb.operation.ts
-@@ -1389,7 +1833,15 @@ function SlideEditorContainer() {
+@@ -1389,7 +1839,15 @@ function SlideEditorContainer() {
  	const editorService = useDependency(IEditorService);
  	const contextService = useDependency(IContextService);
  	const disableAutoFocus = useObservable(() => contextService.subscribeContextValue$(DISABLE_AUTO_FOCUS_KEY), false, void 0, [contextService, DISABLE_AUTO_FOCUS_KEY]);
@@ -1432,7 +1523,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3
  	useEffect(() => {
  		slideEditorManagerService.state$.subscribe((param) => {
  			if (param == null) return;
-@@ -1424,7 +1876,14 @@ function SlideEditorContainer() {
+@@ -1424,7 +1882,14 @@ function SlideEditorContainer() {
  			top: state.top,
  			width: state.width,
  			height: state.height
@@ -1448,7 +1539,7 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3
  	});
  }
  
-@@ -1548,6 +2007,14 @@ let SlidesUIController = class SlidesUIController extends Disposable {
+@@ -1548,6 +2013,14 @@ let SlidesUIController = class SlidesUIController extends Disposable {
  			ToggleSlideEditSidebarOperation,
  			DeleteSlideElementOperation,
  			UpdateSlideElementOperation,
@@ -1463,7 +1554,62 @@ index 69a01e5371c6a0dbba493fcdfb9a441cb2de019c..5059156b6d1600054c6e2aa381f4d1e3
  			SetTextEditArrowOperation
  		].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
  	}
-@@ -2682,4 +3149,4 @@ UniverSlidesUIPlugin = __decorate([
+@@ -1879,6 +2352,8 @@ let SlideEditingRenderController = class SlideEditingRenderController extends Di
+ 			if (wrapStrategy === WrapStrategy.WRAP && angle === 0) documentModel.updateDocumentDataPageSize((endX - startX) / scaleX);
+ 			this._instanceSrv.changeDoc(editorUnitId, documentModel);
+ 			this._contextService.setContextValue(FOCUSING_EDITOR_BUT_HIDDEN, true);
++			this._contextService.setContextValue("FOCUSING_DOC", true);
++			this._contextService.setContextValue(FOCUSING_UNIVER_EDITOR, true);
+ 			this._textSelectionManagerService.replaceTextRanges([{
+ 				startOffset: 0,
+ 				endOffset: 0
+@@ -2144,6 +2619,9 @@ let SlideEditingRenderController = class SlideEditingRenderController extends Di
+ 	}
+ 	_exitInput(param) {
+ 		this._contextService.setContextValue(EDITOR_ACTIVATED, false);
++		this._contextService.setContextValue("FOCUSING_DOC", false);
++		this._contextService.setContextValue(FOCUSING_UNIVER_EDITOR, false);
++		this._contextService.setContextValue(FOCUSING_EDITOR_BUT_HIDDEN, false);
+ 		this._cellEditorManagerService.setState({ show: param.visible });
+ 		const editorUnitId = this._editorBridgeService.getCurrentEditorId();
+ 		if (editorUnitId == null) return;
+@@ -2298,6 +2776,16 @@ let SlideEditorBridgeRenderController = class SlideEditorBridgeRenderController
+ 			const pageScene = pageSceneList[i];
+ 			listenersForPageScene(pageScene);
+ 		}
++		const keydownHandler = (e) => {
++			if (!this._curRichText) return;
++			if (e.key === "Escape") {
++				e.preventDefault();
++				e.stopPropagation();
++				this.endEditing();
++			}
++		};
++		document.addEventListener("keydown", keydownHandler, true);
++		d.add(toDisposable(() => document.removeEventListener("keydown", keydownHandler, true)));
+ 	}
+ 	pickOtherObjects() {
+ 		this.endEditing();
+@@ -2326,6 +2814,18 @@ let SlideEditorBridgeRenderController = class SlideEditorBridgeRenderController
+ 			const ts = textRuns[0].ts;
+ 			richText.cl = ts === null || ts === void 0 ? void 0 : ts.cl;
+ 		}
++		const _docData = curRichText.documentData;
++		if (_docData && _docData.body) {
++			richText.rich = {
++				id: _docData.id || (curRichText && curRichText.oKey),
++				body: {
++					dataStream: _docData.body.dataStream || "",
++					textRuns: _docData.body.textRuns ? _docData.body.textRuns.map((r) => ({ ...r })) : [],
++					paragraphs: _docData.body.paragraphs ? _docData.body.paragraphs.map((p) => ({ ...p })) : [{ startIndex: 0 }]
++				},
++				documentStyle: _docData.documentStyle ? { ..._docData.documentStyle } : {}
++			};
++		}
+ 		this._commandService.executeCommand(UpdateSlideElementOperation.id, {
+ 			unitId: this._renderContext.unitId,
+ 			oKey: curRichText === null || curRichText === void 0 ? void 0 : curRichText.oKey,
+@@ -2682,4 +3182,4 @@ UniverSlidesUIPlugin = __decorate([
  ], UniverSlidesUIPlugin);
  
  //#endregion
