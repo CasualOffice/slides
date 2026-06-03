@@ -4,7 +4,7 @@ import type { Univer } from '@univerjs/core';
 import { IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
 import { Icon } from './icons';
-import { getSelectedElement, subscribeSelection } from './selection';
+import { getSelectedElement, getSelectedElementCount, subscribeSelection } from './selection';
 
 // Read the live transform (x, y, w, h) for whatever element is currently
 // selected. Returns null when nothing is selected or the snapshot can't
@@ -88,6 +88,7 @@ export function StatusBar({
     return () => cancelAnimationFrame(frame);
   }, []);
   const xform = readSelectedTransform();
+  const selCount = getSelectedElementCount();
 
   return (
     <footer className="cs-statusbar">
@@ -95,7 +96,17 @@ export function StatusBar({
         <span className="cs-statusbar__slide-count">
           {t('slideCount', { count: slideCount, current: safeSlideIndex, total: slideCount })}
         </span>
-        {xform && (
+        {selCount > 1 ? (
+          // Multi-select: show the count rather than the (single-element)
+          // X/Y/W/H, which can't represent a group selection meaningfully.
+          <span
+            className="cs-statusbar__selection"
+            title={t('selectionCountTooltip', 'Number of selected elements')}
+          >
+            <Icon name="select_all" size={14} />
+            <span>{t('selectionCount', '{{count}} elements selected', { count: selCount })}</span>
+          </span>
+        ) : xform ? (
           <span
             className="cs-statusbar__selection"
             title={t('selectionTooltip', 'Position and size of the selected element')}
@@ -105,7 +116,7 @@ export function StatusBar({
             <span className="cs-statusbar__sep" aria-hidden="true" />
             <span>{xform.w} × {xform.h}</span>
           </span>
-        )}
+        ) : null}
       </div>
       <div className="cs-statusbar__right">
         <button type="button" className="cs-statusbar__view-btn is-active" title={t('viewNormal')}>

@@ -113,6 +113,41 @@ export function getSelectedElement(): SelectedElement | null {
   return fresh;
 }
 
+// Count of currently selected elements across the active page's
+// transformer. Single-select returns 1, multi-select via Shift/Ctrl+click
+// or Ctrl+A returns N. Returns 0 when nothing is selected.
+//
+// Reads the live transformer's selectedObjectMap rather than the cached
+// `current` because the bridge only stores a single tuple — multi-select
+// would always look like single-select otherwise.
+export function getSelectedElementCount(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const univer = w.univer;
+    if (!univer || typeof univer.__getInjector !== 'function') return 0;
+    const inj = univer.__getInjector();
+    const instSrv = inj.get(w.__casualSlides__IUniverInstanceService);
+    const renderManager = inj.get(w.__casualSlides__IRenderManagerService);
+    if (!instSrv || !renderManager) return 0;
+    const unit = instSrv.getCurrentUnitOfType?.(3);
+    if (!unit) return 0;
+    const unitId = unit.getUnitId?.();
+    const render = renderManager.getRenderById?.(unitId);
+    const slide = render?.mainComponent;
+    if (!slide || typeof slide.getSubScenes !== 'function') return 0;
+    const subScenes = slide.getSubScenes();
+    const activeId = unit.getActivePage?.()?.id;
+    if (!activeId) return 0;
+    const scene = subScenes.get(activeId);
+    const transformer = scene?.getTransformer?.();
+    return transformer?.getSelectedObjectMap?.()?.size ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 // Probe hook for Playwright diagnostics. Returns the resolved selection
 // (cache OR transformer fallback) so __diagnostic__ specs see exactly
 // what handlers see.

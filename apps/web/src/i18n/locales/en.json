@@ -340,7 +340,10 @@
     "zoomReset": "Reset zoom to 100%",
     "present": "Slideshow",
     "presentTooltip": "Start slideshow (F5)",
-    "selectionTooltip": "Position and size of the selected element"
+    "selectionTooltip": "Position and size of the selected element",
+    "selectionCount_one": "{{count}} element selected",
+    "selectionCount_other": "{{count}} elements selected",
+    "selectionCountTooltip": "Number of selected elements"
   },
   "notes": {
     "title": "Speaker notes",
