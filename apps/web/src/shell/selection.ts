@@ -113,6 +113,63 @@ export function getSelectedElement(): SelectedElement | null {
   return fresh;
 }
 
+// Every currently selected element id on the active page. Used by the
+// toolbar / format pane to apply formatting (bold, fill, border, etc.)
+// to ALL selected elements rather than just the bridge's last-added
+// single. Reads the live transformer map; falls back to whatever
+// getSelectedElement returns when no transformer is reachable.
+export function getAllSelectedElementIds(): Array<{ pageId: string; elementId: string }> {
+  if (typeof window === 'undefined') {
+    const sel = getSelectedElement();
+    return sel ? [sel] : [];
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const univer = w.univer;
+    if (!univer || typeof univer.__getInjector !== 'function') {
+      const sel = getSelectedElement();
+      return sel ? [sel] : [];
+    }
+    const inj = univer.__getInjector();
+    const instSrv = inj.get(w.__casualSlides__IUniverInstanceService);
+    const renderManager = inj.get(w.__casualSlides__IRenderManagerService);
+    if (!instSrv || !renderManager) {
+      const sel = getSelectedElement();
+      return sel ? [sel] : [];
+    }
+    const unit = instSrv.getCurrentUnitOfType?.(3);
+    if (!unit) return [];
+    const unitId = unit.getUnitId?.();
+    const render = renderManager.getRenderById?.(unitId);
+    const slide = render?.mainComponent;
+    if (!slide || typeof slide.getSubScenes !== 'function') {
+      const sel = getSelectedElement();
+      return sel ? [sel] : [];
+    }
+    const subScenes = slide.getSubScenes();
+    const activeId = unit.getActivePage?.()?.id;
+    if (!activeId) return [];
+    const scene = subScenes.get(activeId);
+    const transformer = scene?.getTransformer?.();
+    const map = transformer?.getSelectedObjectMap?.();
+    if (!map || map.size === 0) {
+      const sel = getSelectedElement();
+      return sel ? [sel] : [];
+    }
+    const out: Array<{ pageId: string; elementId: string }> = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const obj of map.values() as IterableIterator<any>) {
+      if (!obj?.oKey) continue;
+      out.push({ pageId: activeId, elementId: obj.oKey });
+    }
+    return out;
+  } catch {
+    const sel = getSelectedElement();
+    return sel ? [sel] : [];
+  }
+}
+
 // Count of currently selected elements across the active page's
 // transformer. Single-select returns 1, multi-select via Shift/Ctrl+click
 // or Ctrl+A returns N. Returns 0 when nothing is selected.

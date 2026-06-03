@@ -24,7 +24,7 @@ import { BorderStyleTypes, ICommandService, IUndoRedoService, IUniverInstanceSer
 import type { SlideDataModel } from '@univerjs/slides';
 import { useTranslation } from '../i18n';
 import { clearFormatting, dispatchSlideCommand } from '../univer/commands';
-import { getSelectedElement, subscribeSelection } from './selection';
+import { getAllSelectedElementIds, getSelectedElement, subscribeSelection } from './selection';
 import { BackgroundPicker } from './BackgroundPicker';
 import { LayoutPicker } from './LayoutPicker';
 import { Icon } from './icons';
@@ -179,8 +179,8 @@ function useSelectedElement() {
 // model but leave the cached Rect's fill stale (was the v0.0.x toolbar
 // fill / border bug).
 function mutateSelectedShape(patch: (sp: IShapeProperties) => void): boolean {
-  const sel = getSelectedElement();
-  if (!sel) return false;
+  const targets = getAllSelectedElementIds();
+  if (targets.length === 0) return false;
   const w = window as unknown as { univer?: Univer };
   const univer = w.univer;
   if (!univer) return false;
@@ -190,30 +190,34 @@ function mutateSelectedShape(patch: (sp: IShapeProperties) => void): boolean {
       .get(IUniverInstanceService)
       .getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
     if (!model) return false;
-    const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
-    if (!el?.shape) return false;
-    const nextSp: IShapeProperties = structuredClone(
-      el.shape.shapeProperties ?? ({ shapeBackgroundFill: {} } as IShapeProperties),
-    );
-    patch(nextSp);
-    try {
-      void univer
-        .__getInjector()
-        .get(ICommandService)
-        .executeCommand('slide.mutation.update-element', {
-          unitId: model.getUnitId(),
+    const unitId = model.getUnitId();
+    const cs = univer.__getInjector().get(ICommandService);
+    let touched = 0;
+    for (const sel of targets) {
+      const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
+      if (!el?.shape) continue;
+      const nextSp: IShapeProperties = structuredClone(
+        el.shape.shapeProperties ?? ({ shapeBackgroundFill: {} } as IShapeProperties),
+      );
+      patch(nextSp);
+      try {
+        void cs.executeCommand('slide.mutation.update-element', {
+          unitId,
           pageId: sel.pageId,
           elementId: sel.elementId,
           props: { shape: { shapeProperties: nextSp } },
         });
-      return true;
-    } catch {
-      // Fork-patch not registered — fall through to direct snapshot write.
+        touched += 1;
+      } catch {
+        // Fork-patch not registered — direct snapshot write fallback.
+        if (!el.shape.shapeProperties) {
+          el.shape.shapeProperties = { shapeBackgroundFill: {} } as IShapeProperties;
+        }
+        patch(el.shape.shapeProperties);
+        touched += 1;
+      }
     }
-    if (!el.shape.shapeProperties) {
-      el.shape.shapeProperties = { shapeBackgroundFill: {} } as IShapeProperties;
-    }
-    patch(el.shape.shapeProperties);
+    if (touched === 0) return false;
     model.incrementRev();
     const active = model.getActivePage();
     if (active) model.setActivePage(active);
@@ -237,8 +241,8 @@ function mutateSelectedTextStyle(
   patch: (ts: Record<string, unknown>) => void,
   flatPatch?: (flat: Record<string, unknown>) => void,
 ): boolean {
-  const sel = getSelectedElement();
-  if (!sel) return false;
+  const targets = getAllSelectedElementIds();
+  if (targets.length === 0) return false;
   const w = window as unknown as { univer?: Univer };
   const univer = w.univer;
   if (!univer) return false;
@@ -248,44 +252,38 @@ function mutateSelectedTextStyle(
       .get(IUniverInstanceService)
       .getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
     if (!model) return false;
-    const page = model.getPage(sel.pageId);
-    const el = page?.pageElements?.[sel.elementId];
-    if (!el?.richText) return false;
-
-    const nextRich = structuredClone(el.richText) as typeof el.richText & {
-      rich?: IDocumentData;
-    };
-    // Apply to the rich document model's textRuns when present — that's
-    // what RichTextAdaptor renders from.
-    const body = nextRich.rich?.body;
-    if (body && Array.isArray(body.textRuns)) {
-      const text = body.dataStream ?? '';
-      const len = text.length;
-      // Make sure a covering run exists from 0..len so the style applies
-      // to every character — including content that had no prior run.
-      const runs = body.textRuns as ITextRun[];
-      if (runs.length === 0) {
-        runs.push({ st: 0, ed: Math.max(len - 1, 0), ts: {} });
+    const unitId = model.getUnitId();
+    const cs = univer.__getInjector().get(ICommandService);
+    let touched = 0;
+    for (const sel of targets) {
+      const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
+      if (!el?.richText) continue;
+      const nextRich = structuredClone(el.richText) as typeof el.richText & {
+        rich?: IDocumentData;
+      };
+      const body = nextRich.rich?.body;
+      if (body && Array.isArray(body.textRuns)) {
+        const text = body.dataStream ?? '';
+        const len = text.length;
+        const runs = body.textRuns as ITextRun[];
+        if (runs.length === 0) {
+          runs.push({ st: 0, ed: Math.max(len - 1, 0), ts: {} });
+        }
+        for (const r of runs) {
+          if (!r.ts) r.ts = {};
+          patch(r.ts as unknown as Record<string, unknown>);
+        }
       }
-      for (const r of runs) {
-        if (!r.ts) r.ts = {};
-        patch(r.ts as unknown as Record<string, unknown>);
-      }
-    }
-    // Mirror onto the flat ISlideRichTextProps fields so the ShapeAdaptor
-    // fallback path + pptx export see the same style.
-    (flatPatch ?? patch)(nextRich as unknown as Record<string, unknown>);
-
-    void univer
-      .__getInjector()
-      .get(ICommandService)
-      .executeCommand('slide.mutation.update-element', {
-        unitId: model.getUnitId(),
+      (flatPatch ?? patch)(nextRich as unknown as Record<string, unknown>);
+      void cs.executeCommand('slide.mutation.update-element', {
+        unitId,
         pageId: sel.pageId,
         elementId: sel.elementId,
         props: { richText: nextRich },
       });
-    return true;
+      touched += 1;
+    }
+    return touched > 0;
   } catch {
     return false;
   }
