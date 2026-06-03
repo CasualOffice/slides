@@ -600,6 +600,19 @@ button:disabled { cursor: not-allowed; }
 
 .cs-statusbar__slide-count { font-weight: 500; color: var(--cs-text); }
 
+/* Position / size readout for the currently selected element. Lights
+   up to the right of the slide count when something's selected. */
+.cs-statusbar__selection {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--cs-border-2);
+  color: var(--cs-text-muted, var(--cs-text));
+  font-variant-numeric: tabular-nums;
+}
+
 .cs-statusbar__view-btn,
 .cs-statusbar__zoom-btn {
   width: 24px;

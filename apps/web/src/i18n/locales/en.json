@@ -339,7 +339,8 @@
     "zoomValue": "{{percent}}%",
     "zoomReset": "Reset zoom to 100%",
     "present": "Slideshow",
-    "presentTooltip": "Start slideshow (F5)"
+    "presentTooltip": "Start slideshow (F5)",
+    "selectionTooltip": "Position and size of the selected element"
   },
   "notes": {
     "title": "Speaker notes",
