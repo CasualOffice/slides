@@ -558,6 +558,13 @@ export function App() {
         // keeps text-editing paste behaviour intact.
         e.preventDefault();
         void dispatchSlideCommand('casual-slides.command.paste-element');
+      } else if (k === 'a') {
+        // Ctrl+A — select every element on the active slide via the
+        // canvas transformer. The textInputShortcuts gate above lets
+        // 'a' through to the input's native select-all when focus is in
+        // a real form field, so we only reach here on canvas focus.
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.select-all-on-page');
       } else if (k === 'k') {
         // Ctrl+K — Insert link. Routed through our wrapper so the
         // docs-hyper-link plugin lazy-inits on first invocation. The

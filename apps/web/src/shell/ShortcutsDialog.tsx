@@ -118,6 +118,7 @@ function buildSections(isMac: boolean): ShortcutSection[] {
         { labelKey: 'nudgeBig',       binds: [{ keys: [shift, '←'] }, { keys: [shift, '→'] }, { keys: [shift, '↑'] }, { keys: [shift, '↓'] }] },
         { labelKey: 'cycleNext',      binds: [{ keys: ['Tab'] }] },
         { labelKey: 'cyclePrev',      binds: [{ keys: [shift, 'Tab'] }] },
+        { labelKey: 'selectAllOnPage', binds: [{ keys: [mod, 'A'] }] },
         { labelKey: 'copyElement',    binds: [{ keys: [mod, 'C'] }] },
         { labelKey: 'cutElement',     binds: [{ keys: [mod, 'X'] }] },
         { labelKey: 'pasteElement',   binds: [{ keys: [mod, 'V'] }] },

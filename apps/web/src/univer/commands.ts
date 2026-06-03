@@ -169,6 +169,9 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   if (id === 'casual-slides.command.clear-selection') {
     return clearCanvasSelection();
   }
+  if (id === 'casual-slides.command.select-all-on-page') {
+    return selectAllOnActivePage();
+  }
   if (id === 'casual-slides.command.move-active-slide') {
     const dir = (params as { direction?: 'up' | 'down' } | undefined)?.direction;
     if (dir !== 'up' && dir !== 'down') return false;
@@ -460,6 +463,61 @@ function _moveActiveSlide(delta: -1 | 1): boolean {
 // FormatPane's createControl$/clearControl$ subscription receives the
 // clearControls notification and pushes the bridge to null, which in turn
 // fires the cs:format-pane event so App.tsx restores the canvas zoom.
+// Select every element on the currently active page via the canvas
+// transformer. Uses the same `setSelectedControl` API the transformer
+// fires from its own click handler — each call adds the object to
+// `_selectedObjectMap` and emits createControl$ so the FormatPane and
+// status-bar subscribers update once per insertion.
+//
+// We clear any prior selection first so Ctrl+A from a partially-
+// selected state always lands on "every element, nothing else".
+export function selectAllOnActivePage(): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  try {
+    const injector = univer.__getInjector();
+    const instances = injector.get(IUniverInstanceService);
+    const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+    if (!model) return false;
+    const unitId = model.getUnitId();
+    const activePage = model.getActivePage();
+    if (!activePage) return false;
+    const elementIds = Object.keys(activePage.pageElements ?? {});
+    if (elementIds.length === 0) return false;
+    const canvasView = injector.get(CanvasView);
+    const renderUnit = canvasView.getRenderUnitByPageId(activePage.id, unitId);
+    const scene = renderUnit?.scene;
+    if (!scene) return false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const transformer = scene.getTransformer() as any;
+    if (!transformer) return false;
+    // Clear any prior controls so multi-select selectAll always starts
+    // from a clean slate (Ctrl+A → A only, not A+B+B+C).
+    if (typeof transformer.clearSelectedObjects === 'function') {
+      transformer.clearSelectedObjects();
+    } else if (typeof transformer.clearControls === 'function') {
+      transformer.clearControls();
+    }
+    // Walk every scene object and re-select each by id. getAllObjects
+    // returns the live render-tree, including Univer's transformer
+    // controls themselves, so we filter by membership in the snapshot's
+    // element id set.
+    const elementSet = new Set(elementIds);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const objects = (scene.getAllObjects?.() ?? []) as Array<any>;
+    let added = 0;
+    for (const obj of objects) {
+      if (!obj?.oKey || !elementSet.has(obj.oKey)) continue;
+      transformer.setSelectedControl(obj);
+      added += 1;
+    }
+    if (added > 0) notify(`Selected ${added} element${added === 1 ? '' : 's'}`);
+    return added > 0;
+  } catch {
+    return false;
+  }
+}
+
 export function clearCanvasSelection(): boolean {
   const univer = getUniver();
   if (!univer) return false;
@@ -578,8 +636,7 @@ function _nudgeSelectedElement(dx: number, dy: number): boolean {
 let elementClipboard: any = null;
 
 // Whether the in-memory element clipboard has content. Used by the
-// right-click context menu to decide between showing the full element
-// menu vs the empty-canvas "Paste only" menu.
+// right-click context menu to enable/disable Paste.
 export function hasElementClipboard(): boolean {
   return !!elementClipboard;
 }
@@ -604,10 +661,10 @@ export function copySelectedElement(): boolean {
 
 // Paste a copy of the clipboard element onto the active page, offset by
 // (16, 16) so it's visually distinct from the source. Re-ids the clone so
-// the transformer treats it as a new object. Direct-snapshot write + rev
-// bump — same path duplicateSlide uses for whole-page clones.
-// TODO(collab): bypasses the command bus; needs a real insert mutation
-// once Univer Slides exposes one.
+// the transformer treats it as a new object. Routed through
+// slide.mutation.insert-element when available (collab-safe) with a
+// direct-snapshot fallback. Selecting the new element is left to
+// Univer's createControl$ which fires on insert.
 export function pasteElement(): boolean {
   return withUndo(() => _pasteElement());
 }
@@ -640,8 +697,9 @@ function _pasteElement(): boolean {
   return true;
 }
 
-// Duplicate-in-place: copy + paste in one step. Doesn't touch the user's
-// existing clipboard so a separate Ctrl+C/Ctrl+V workflow stays intact.
+// Duplicate-in-place: clones the selected element on the SAME page as
+// the source (not the active page). Doesn't touch the elementClipboard so
+// the user's existing copy stays intact.
 export function duplicateSelectedElement(): boolean {
   const univer = getUniver();
   if (!univer) return false;
@@ -650,13 +708,34 @@ export function duplicateSelectedElement(): boolean {
   const instances = univer.__getInjector().get(IUniverInstanceService);
   const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
   if (!model) return false;
-  const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
-  if (!el) return false;
-  const saved = elementClipboard;
-  elementClipboard = structuredClone(el);
-  const ok = pasteElement();
-  elementClipboard = saved;
-  return ok;
+  const sourcePage = model.getPage(sel.pageId);
+  const el = sourcePage?.pageElements?.[sel.elementId];
+  if (!el || !sourcePage) return false;
+  // Duplicate-in-place: the clone goes on the SAME page as the source —
+  // The user expects the new shape next to the one they selected — not on
+  // whatever page happens to be active (which can differ from the selection's
+  // page after a slide-rail click or a fresh Ctrl+M). Google Slides /
+  // PowerPoint match this behaviour.
+  const stamp = Date.now().toString(36);
+  const rand = Math.random().toString(36).slice(2, 6);
+  const newId = `el-${stamp}-${rand}`;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clone: any = structuredClone(el);
+  clone.id = newId;
+  clone.left = (clone.left ?? 0) + 16;
+  clone.top = (clone.top ?? 0) + 16;
+  const existing = Object.values(sourcePage.pageElements ?? {});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const maxZ = existing.length ? Math.max(...existing.map((e: any) => e?.zIndex ?? 0)) : 0;
+  clone.zIndex = maxZ + 1;
+  return withUndo(() => {
+    sourcePage.pageElements[newId] = clone;
+    model.incrementRev();
+    // Re-emit so subscribers re-render this specific page.
+    model.setActivePage(sourcePage);
+    notify('Element duplicated');
+    return true;
+  });
 }
 
 // Center the selected element on the slide. `axis` controls which

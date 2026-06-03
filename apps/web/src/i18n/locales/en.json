@@ -590,6 +590,7 @@
         "nudgeBig": "Nudge selection 10 px",
         "cycleNext": "Select next element",
         "cyclePrev": "Select previous element",
+        "selectAllOnPage": "Select all on slide",
         "copyElement": "Copy element",
         "cutElement": "Cut element",
         "pasteElement": "Paste element",
