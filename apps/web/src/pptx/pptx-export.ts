@@ -175,7 +175,15 @@ function emitTextElement(slide: pptxgen.Slide, element: IPageElement, richText: 
     ? Math.round(baseFs * fontScale * 10) / 10
     : baseFs;
 
-  slide.addText(richText.text ?? '', {
+  // Univer's dataStream / `text` uses `\r` as the paragraph separator
+  // (per project-univer-paragraph-separator memory). PptxGenJS treats
+  // `\n` as the paragraph break and ignores / leaks `\r` as a literal
+  // CR character — round-trip becomes "Line A\rLine B" inside one
+  // pptx paragraph, and re-import drops the second line invisibly.
+  // Normalise both \r\n and bare \r to \n so PptxGenJS emits a proper
+  // multi-paragraph <a:p> stack.
+  const textForPptx = (richText.text ?? '').replace(/\r\n?/g, '\n');
+  slide.addText(textForPptx, {
     x: px2in(element.left),
     y: px2in(element.top),
     w: px2in(element.width),
@@ -189,8 +197,8 @@ function emitTextElement(slide: pptxgen.Slide, element: IPageElement, richText: 
     rotate: element.angle ?? 0,
     // Default valign — PowerPoint's placeholder default is top-aligned.
     valign: 'top',
-    // The model stores newlines as literal '\n' in `text`. PptxGenJS honors
-    // these as paragraph breaks when passed as a plain string.
+    // PptxGenJS reads each `\n` in the string as a paragraph break when
+    // breakLine is false (default behaviour).
     breakLine: false,
   });
 }
