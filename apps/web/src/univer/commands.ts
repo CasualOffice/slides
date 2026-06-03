@@ -15,7 +15,7 @@ import type { SlideDataModel } from '@univerjs/slides';
 import { DocSelectionManagerService } from '@univerjs/docs';
 import { CanvasView } from '@univerjs/slides-ui';
 import { printDeck } from '../shell/download-slide';
-import { getSelectedElement, setSelectedElement } from '../shell/selection';
+import { getAllSelectedElementIds, getSelectedElement, setSelectedElement } from '../shell/selection';
 
 // Thin façade over the live Univer instance for ribbon/status-bar dispatches.
 // Reads `window.univer` (set by UniverSlide on mount) so any React component
@@ -171,6 +171,11 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   }
   if (id === 'casual-slides.command.select-all-on-page') {
     return selectAllOnActivePage();
+  }
+  if (id === 'casual-slides.command.align-selection') {
+    const axis = (params as { axis?: AlignAxis } | undefined)?.axis;
+    if (!axis) return false;
+    return alignSelectedElements(axis);
   }
   if (id === 'casual-slides.command.move-active-slide') {
     const dir = (params as { direction?: 'up' | 'down' } | undefined)?.direction;
@@ -476,6 +481,93 @@ function _moveActiveSlide(delta: -1 | 1): boolean {
 //
 // We clear any prior selection first so Ctrl+A from a partially-
 // selected state always lands on "every element, nothing else".
+// Bulk-align every selected element to the SELECTION bounding box
+// (not the slide). Targets:
+//   left   — every element shares the leftmost left
+//   center — every element shares the horizontal centre of the bbox
+//   right  — every element's (left + width) shares the rightmost right
+//   top    — every element shares the topmost top
+//   middle — every element shares the vertical centre of the bbox
+//   bottom — every element's (top + height) shares the bottommost bottom
+//
+// Aligning to the selection bbox is the PowerPoint default when 2+ are
+// selected. With only 1 element selected the align operation is a no-op
+// (there's nothing else to align to).
+export type AlignAxis = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
+
+export function alignSelectedElements(axis: AlignAxis): boolean {
+  return withUndo(() => _alignSelectedElements(axis));
+}
+
+function _alignSelectedElements(axis: AlignAxis): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  const targets = getAllSelectedElementIds();
+  if (targets.length < 2) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  const unitId = model.getUnitId();
+  const cs = univer.__getInjector().get(ICommandService);
+  // Collect current rects for every target.
+  const rects: Array<{ pageId: string; id: string; left: number; top: number; width: number; height: number }> = [];
+  for (const sel of targets) {
+    const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
+    if (!el) continue;
+    rects.push({
+      pageId: sel.pageId,
+      id: sel.elementId,
+      left: el.left ?? 0,
+      top: el.top ?? 0,
+      width: el.width ?? 0,
+      height: el.height ?? 0,
+    });
+  }
+  if (rects.length < 2) return false;
+  // Selection bounding box.
+  const minLeft = Math.min(...rects.map((r) => r.left));
+  const maxRight = Math.max(...rects.map((r) => r.left + r.width));
+  const minTop = Math.min(...rects.map((r) => r.top));
+  const maxBottom = Math.max(...rects.map((r) => r.top + r.height));
+  const bboxCenterX = (minLeft + maxRight) / 2;
+  const bboxCenterY = (minTop + maxBottom) / 2;
+  let touched = 0;
+  for (const r of rects) {
+    const nextProps: Record<string, number> = {};
+    if (axis === 'left') nextProps.left = minLeft;
+    else if (axis === 'right') nextProps.left = maxRight - r.width;
+    else if (axis === 'center') nextProps.left = bboxCenterX - r.width / 2;
+    else if (axis === 'top') nextProps.top = minTop;
+    else if (axis === 'bottom') nextProps.top = maxBottom - r.height;
+    else if (axis === 'middle') nextProps.top = bboxCenterY - r.height / 2;
+    // Skip if the move is sub-pixel (avoid spurious updates).
+    const dx = nextProps.left !== undefined ? Math.abs(nextProps.left - r.left) : 0;
+    const dy = nextProps.top !== undefined ? Math.abs(nextProps.top - r.top) : 0;
+    if (dx < 0.5 && dy < 0.5) continue;
+    try {
+      void cs.executeCommand('slide.operation.update-element', {
+        unitId,
+        oKey: r.id,
+        props: nextProps,
+      });
+      touched += 1;
+    } catch {
+      const el = model.getPage(r.pageId)?.pageElements?.[r.id];
+      if (el) {
+        if (nextProps.left !== undefined) el.left = nextProps.left;
+        if (nextProps.top !== undefined) el.top = nextProps.top;
+        touched += 1;
+      }
+    }
+  }
+  if (touched === 0) return false;
+  model.incrementRev();
+  const active = model.getActivePage();
+  if (active) model.setActivePage(active);
+  notify(`Aligned ${touched} element${touched === 1 ? '' : 's'}`);
+  return true;
+}
+
 export function selectAllOnActivePage(): boolean {
   const univer = getUniver();
   if (!univer) return false;

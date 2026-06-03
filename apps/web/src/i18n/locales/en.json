@@ -548,6 +548,12 @@
       "bringToFront": "Bring to front",
       "sendToBack": "Send to back",
       "center": "Center on slide",
+      "alignLeft": "Align left",
+      "alignCenter": "Align center",
+      "alignRight": "Align right",
+      "alignTop": "Align top",
+      "alignMiddle": "Align middle",
+      "alignBottom": "Align bottom",
       "delete": "Delete",
       "shortcut": {
         "cut": "Ctrl+X",

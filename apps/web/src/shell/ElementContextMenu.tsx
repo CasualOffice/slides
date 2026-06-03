@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { dispatchSlideCommand, hasElementClipboard } from '../univer/commands';
-import { getSelectedElement } from './selection';
+import { getSelectedElement, getSelectedElementCount } from './selection';
 import { Icon } from './icons';
 import { useTranslation } from '../i18n';
 
@@ -25,6 +25,11 @@ interface MenuState {
   // When true, no element was under the right-click — show only paste.
   // Used to support the standard "right-click empty canvas → Paste" UX.
   emptyCanvas: boolean;
+  // Number of selected elements at the time of right-click. When > 1
+  // the menu exposes the Align Selection submenu (and could later show
+  // a Group action). One snapshot at open time so the submenu doesn't
+  // appear/disappear if the user opens it during a selection change.
+  multiCount: number;
 }
 
 function inWorkspace(el: HTMLElement | null): boolean {
@@ -59,7 +64,7 @@ export function ElementContextMenu() {
       // browser-default menu doesn't get suppressed for no UI gain.
       if (!hasSel && !hasElementClipboard()) return;
       e.preventDefault();
-      setMenu({ x: e.clientX, y: e.clientY, emptyCanvas: !hasSel });
+      setMenu({ x: e.clientX, y: e.clientY, emptyCanvas: !hasSel, multiCount: getSelectedElementCount() });
     };
     document.addEventListener('contextmenu', handler);
     return () => document.removeEventListener('contextmenu', handler);
@@ -235,6 +240,71 @@ export function ElementContextMenu() {
           <span>{t('elementContext.center')}</span>
         </button>
       </li>
+      {menu.multiCount > 1 && (
+        <>
+          <li className="cs-slide-context__sep" role="separator" />
+          <li>
+            <button
+              type="button"
+              className="cs-slide-context__item"
+              onClick={() => void fire('casual-slides.command.align-selection', { axis: 'left' })}
+            >
+              <Icon name="format_align_left" size={14} />
+              <span>{t('elementContext.alignLeft')}</span>
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              className="cs-slide-context__item"
+              onClick={() => void fire('casual-slides.command.align-selection', { axis: 'center' })}
+            >
+              <Icon name="format_align_center" size={14} />
+              <span>{t('elementContext.alignCenter')}</span>
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              className="cs-slide-context__item"
+              onClick={() => void fire('casual-slides.command.align-selection', { axis: 'right' })}
+            >
+              <Icon name="format_align_right" size={14} />
+              <span>{t('elementContext.alignRight')}</span>
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              className="cs-slide-context__item"
+              onClick={() => void fire('casual-slides.command.align-selection', { axis: 'top' })}
+            >
+              <Icon name="vertical_align_top" size={14} />
+              <span>{t('elementContext.alignTop')}</span>
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              className="cs-slide-context__item"
+              onClick={() => void fire('casual-slides.command.align-selection', { axis: 'middle' })}
+            >
+              <Icon name="vertical_align_center" size={14} />
+              <span>{t('elementContext.alignMiddle')}</span>
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              className="cs-slide-context__item"
+              onClick={() => void fire('casual-slides.command.align-selection', { axis: 'bottom' })}
+            >
+              <Icon name="vertical_align_bottom" size={14} />
+              <span>{t('elementContext.alignBottom')}</span>
+            </button>
+          </li>
+        </>
+      )}
       <li className="cs-slide-context__sep" role="separator" />
       <li>
         <button
