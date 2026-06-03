@@ -693,6 +693,35 @@ export function App() {
         setSlideshowOpen(true);
       }
     };
+    // PageUp / PageDown navigate slides in editing mode. The slideshow
+    // overlay has its own handler — skip when a dialog is open or focus
+    // is in an editable surface so paging inside text edit doesn't jump
+    // slides under the user.
+    const pageNavHandler = (e: KeyboardEvent) => {
+      if (e.key !== 'PageUp' && e.key !== 'PageDown') return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      if (typeof document !== 'undefined' && document.querySelector('[role="dialog"]')) return;
+      const w = window as unknown as { univer?: Univer };
+      const univer = w.univer;
+      if (!univer) return;
+      try {
+        const instances = univer.__getInjector().get(IUniverInstanceService);
+        const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+        if (!model) return;
+        const order = model.getPageOrder?.();
+        if (!order || order.length === 0) return;
+        const activeId = model.getActivePage()?.id;
+        const idx = activeId ? order.indexOf(activeId) : 0;
+        const nextIdx = e.key === 'PageDown' ? idx + 1 : idx - 1;
+        if (nextIdx < 0 || nextIdx >= order.length) return;
+        const nextPage = model.getPage(order[nextIdx]!);
+        if (!nextPage) return;
+        e.preventDefault();
+        model.setActivePage(nextPage);
+      } catch { /* model torn down */ }
+    };
     // F2 enters filename rename mode (standard Windows / Mac convention).
     // TitleBar listens for the event and flips its filenameEditing flag.
     const f2Handler = (e: KeyboardEvent) => {
@@ -739,6 +768,7 @@ export function App() {
     // shortcut service (which binds ArrowKey → SetTextEditArrowOperation
     // and similar) when no doc edit is active.
     window.addEventListener('keydown', nudgeHandler, true);
+    window.addEventListener('keydown', pageNavHandler);
     return () => {
       window.removeEventListener('keydown', handler);
       window.removeEventListener('keydown', f5Handler);
@@ -746,6 +776,7 @@ export function App() {
       window.removeEventListener('keydown', deleteSlideHandler);
       window.removeEventListener('keydown', escHandler);
       window.removeEventListener('keydown', nudgeHandler, true);
+      window.removeEventListener('keydown', pageNavHandler);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

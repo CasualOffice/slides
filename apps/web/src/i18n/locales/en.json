@@ -596,6 +596,8 @@
         "deleteSlide": "Delete slide",
         "moveSlideUp": "Move slide up",
         "moveSlideDown": "Move slide down",
+        "prevSlide": "Previous slide",
+        "nextSlide": "Next slide",
         "insertLink": "Insert link",
         "nudge": "Nudge selection 1 px",
         "nudgeBig": "Nudge selection 10 px",
