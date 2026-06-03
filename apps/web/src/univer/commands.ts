@@ -177,6 +177,11 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
     if (!axis) return false;
     return alignSelectedElements(axis);
   }
+  if (id === 'casual-slides.command.distribute-selection') {
+    const axis = (params as { axis?: 'horizontal' | 'vertical' } | undefined)?.axis;
+    if (axis !== 'horizontal' && axis !== 'vertical') return false;
+    return distributeSelectedElements(axis);
+  }
   if (id === 'casual-slides.command.move-active-slide') {
     const dir = (params as { direction?: 'up' | 'down' } | undefined)?.direction;
     if (dir !== 'up' && dir !== 'down') return false;
@@ -494,6 +499,91 @@ function _moveActiveSlide(delta: -1 | 1): boolean {
 // selected. With only 1 element selected the align operation is a no-op
 // (there's nothing else to align to).
 export type AlignAxis = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
+
+// Distribute 3+ selected elements evenly along an axis. Preserves the
+// outermost two (leftmost + rightmost for horizontal, topmost + bottommost
+// for vertical) and re-spaces every interior element so the gaps between
+// CENTRES (not edges) are equal. Equal-centre distribution matches
+// PowerPoint and reads as visually uniform even when widths differ.
+//
+// No-op when fewer than 3 are selected — needs an "outside two" to space
+// between. Each element's repositioning runs through
+// slide.operation.update-element so the live BaseObject refreshes
+// alongside the snapshot and the action is undoable.
+export function distributeSelectedElements(axis: 'horizontal' | 'vertical'): boolean {
+  return withUndo(() => _distributeSelectedElements(axis));
+}
+
+function _distributeSelectedElements(axis: 'horizontal' | 'vertical'): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  const targets = getAllSelectedElementIds();
+  if (targets.length < 3) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  const unitId = model.getUnitId();
+  const cs = univer.__getInjector().get(ICommandService);
+  const rects: Array<{ pageId: string; id: string; left: number; top: number; width: number; height: number; cx: number; cy: number }> = [];
+  for (const sel of targets) {
+    const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
+    if (!el) continue;
+    const left = el.left ?? 0;
+    const top = el.top ?? 0;
+    const width = el.width ?? 0;
+    const height = el.height ?? 0;
+    rects.push({
+      pageId: sel.pageId,
+      id: sel.elementId,
+      left, top, width, height,
+      cx: left + width / 2,
+      cy: top + height / 2,
+    });
+  }
+  if (rects.length < 3) return false;
+  rects.sort((a, b) => (axis === 'horizontal' ? a.cx - b.cx : a.cy - b.cy));
+  const first = rects[0]!;
+  const last = rects[rects.length - 1]!;
+  const startCentre = axis === 'horizontal' ? first.cx : first.cy;
+  const endCentre = axis === 'horizontal' ? last.cx : last.cy;
+  const step = (endCentre - startCentre) / (rects.length - 1);
+  let touched = 0;
+  for (let i = 1; i < rects.length - 1; i += 1) {
+    const r = rects[i]!;
+    const targetCentre = startCentre + step * i;
+    const nextProps: Record<string, number> = {};
+    if (axis === 'horizontal') {
+      const nextLeft = targetCentre - r.width / 2;
+      if (Math.abs(nextLeft - r.left) < 0.5) continue;
+      nextProps.left = nextLeft;
+    } else {
+      const nextTop = targetCentre - r.height / 2;
+      if (Math.abs(nextTop - r.top) < 0.5) continue;
+      nextProps.top = nextTop;
+    }
+    try {
+      void cs.executeCommand('slide.operation.update-element', {
+        unitId,
+        oKey: r.id,
+        props: nextProps,
+      });
+      touched += 1;
+    } catch {
+      const el = model.getPage(r.pageId)?.pageElements?.[r.id];
+      if (el) {
+        if (nextProps.left !== undefined) el.left = nextProps.left;
+        if (nextProps.top !== undefined) el.top = nextProps.top;
+        touched += 1;
+      }
+    }
+  }
+  if (touched === 0) return false;
+  model.incrementRev();
+  const active = model.getActivePage();
+  if (active) model.setActivePage(active);
+  notify(`Distributed ${rects.length} elements ${axis === 'horizontal' ? 'horizontally' : 'vertically'}`);
+  return true;
+}
 
 export function alignSelectedElements(axis: AlignAxis): boolean {
   return withUndo(() => _alignSelectedElements(axis));

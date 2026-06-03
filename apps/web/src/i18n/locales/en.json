@@ -554,6 +554,8 @@
       "alignTop": "Align top",
       "alignMiddle": "Align middle",
       "alignBottom": "Align bottom",
+      "distributeH": "Distribute horizontally",
+      "distributeV": "Distribute vertically",
       "delete": "Delete",
       "shortcut": {
         "cut": "Ctrl+X",

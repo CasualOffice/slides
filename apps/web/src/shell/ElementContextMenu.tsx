@@ -303,6 +303,31 @@ export function ElementContextMenu() {
               <span>{t('elementContext.alignBottom')}</span>
             </button>
           </li>
+          {menu.multiCount > 2 && (
+            <>
+              <li className="cs-slide-context__sep" role="separator" />
+              <li>
+                <button
+                  type="button"
+                  className="cs-slide-context__item"
+                  onClick={() => void fire('casual-slides.command.distribute-selection', { axis: 'horizontal' })}
+                >
+                  <Icon name="space_bar" size={14} />
+                  <span>{t('elementContext.distributeH')}</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  className="cs-slide-context__item"
+                  onClick={() => void fire('casual-slides.command.distribute-selection', { axis: 'vertical' })}
+                >
+                  <Icon name="density_medium" size={14} />
+                  <span>{t('elementContext.distributeV')}</span>
+                </button>
+              </li>
+            </>
+          )}
         </>
       )}
       <li className="cs-slide-context__sep" role="separator" />
