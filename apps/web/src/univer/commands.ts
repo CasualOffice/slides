@@ -177,6 +177,11 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
     if (dir !== 'up' && dir !== 'down') return false;
     return moveActiveSlide(dir === 'up' ? -1 : 1);
   }
+  if (id === 'casual-slides.command.insert-image-from-file') {
+    const p = params as { file?: File } | undefined;
+    if (!p?.file) return false;
+    return insertImageFromFile(p.file);
+  }
   if (id === 'casual-slides.command.insert-link') {
     // Lazy-init the docs-hyper-link plugin pair on first invocation —
     // they declare `type = UNIVER_DOC` and so otherwise stay dormant
@@ -694,33 +699,80 @@ function _pasteElement(): boolean {
   model.incrementRev();
   model.setActivePage(page);
   notify('Element pasted');
-  // Auto-select the newly pasted element so the user can immediately
-  // drag/resize/style it without an extra click. The scene re-renders
-  // from the snapshot on the next animation frame, so we defer the
-  // transformer.setSelectedControl call until the BaseObject exists.
-  const pageId = page.id;
-  if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(() => {
-      try {
-        const canvasView = univer.__getInjector().get(CanvasView);
-        const unitId = model.getUnitId();
-        const renderUnit = canvasView.getRenderUnitByPageId(pageId, unitId);
-        const scene = renderUnit?.scene;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const transformer = scene?.getTransformer?.() as any;
-        if (!transformer) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const objects = (scene.getAllObjects?.() ?? []) as Array<any>;
-        const target = objects.find((o) => o?.oKey === newId);
-        if (!target) return;
-        if (typeof transformer.clearSelectedObjects === 'function') {
-          transformer.clearSelectedObjects();
-        }
-        transformer.setSelectedControl(target);
-      } catch { /* scene torn down — selection just stays empty */ }
-    });
-  }
   return true;
+}
+
+// Drag-drop / paste an image File into the active slide. Bypasses
+// Univer's built-in `slide.command.insert-float-image` because that
+// opens its OWN file picker via ILocalFileService — we already have
+// the File from a DataTransfer / clipboard event. Loads the file as a
+// data URL, measures its intrinsic size, builds a Univer-shaped image
+// page element (matches what the pptx import emits) and routes through
+// `slide.mutation.insert-element` so undo/redo and canvas reactivity
+// work the same as any other engine-level insert.
+export async function insertImageFromFile(file: File): Promise<boolean> {
+  if (!file.type?.startsWith('image/')) return false;
+  const univer = getUniver();
+  if (!univer) return false;
+  const instances = univer.__getInjector().get(IUniverInstanceService);
+  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+  if (!model) return false;
+  const activePage = model.getActivePage();
+  if (!activePage) return false;
+
+  // Read as data URL + measure dimensions
+  const dataUrl: string = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result ?? ''));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+  const { width, height } = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error('image decode failed'));
+    img.src = dataUrl;
+  });
+  // Constrain initial size to half the slide so big images don't blow
+  // out the canvas. Preserve aspect ratio.
+  const pageSize = model.getPageSize?.() ?? { width: 960, height: 540 };
+  const maxW = pageSize.width * 0.5;
+  const maxH = pageSize.height * 0.5;
+  const scale = Math.min(1, maxW / width, maxH / height);
+  const renderW = Math.round(width * scale);
+  const renderH = Math.round(height * scale);
+  // Centre on the slide.
+  const left = Math.round((pageSize.width - renderW) / 2);
+  const top = Math.round((pageSize.height - renderH) / 2);
+
+  const stamp = Date.now().toString(36);
+  const rand = Math.random().toString(36).slice(2, 6);
+  const elementId = `img-${stamp}-${rand}`;
+  const existing = Object.values(activePage.pageElements ?? {});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const maxZ = existing.length ? Math.max(...existing.map((e: any) => e?.zIndex ?? 0)) : 0;
+
+  const element = {
+    id: elementId,
+    zIndex: maxZ + 1,
+    left, top, width: renderW, height: renderH,
+    title: '', description: '',
+    // PageElementType.IMAGE = 'IMAGE' in @univerjs/slides v0.24.0
+    type: 'IMAGE',
+    image: { contentUrl: dataUrl },
+  };
+
+  const cs = univer.__getInjector().get(ICommandService);
+  // SlideInsertElementMutation expects `{ unitId, pageId, element }` —
+  // wraps the snapshot write + triggers the slide-render-controller
+  // mutation listener that materialises the canvas scene.
+  const unitId = model.getUnitId();
+  return cs.syncExecuteCommand('slide.mutation.insert-element', {
+    unitId,
+    pageId: activePage.id,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    element: element as any,
+  });
 }
 
 // Duplicate-in-place: clones the selected element on the SAME page as

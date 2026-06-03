@@ -483,6 +483,20 @@ export function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
+      // Slide text editor — Univer renders the editor as a canvas inside
+      // a positioned div with classes "univer-absolute univer-z-10", and
+      // mounts the RichTextEditor child only when state.width > 0. The
+      // RichTextEditor renders a Univer doc-engine canvas, so neither
+      // the container div nor its inner canvas is a contenteditable —
+      // our default inEditable check misses it. Detect by walking the
+      // SlideEditorContainer and checking it has a RichTextEditor child.
+      // (`state.width > 0` translates to inline width > 0 on the div.)
+      const editorOpen = typeof document !== 'undefined' && (() => {
+        const div = document.querySelector('div.univer-absolute.univer-z-10') as HTMLElement | null;
+        if (!div) return false;
+        const w = parseFloat(div.style?.width ?? '0');
+        return w > 0 && div.children.length > 0;
+      })();
       const inEditable = !!target && (
         target.tagName === 'INPUT' ||
         target.tagName === 'TEXTAREA' ||
@@ -499,7 +513,7 @@ export function App() {
       // auto-focused one of its inputs after a selection change, killing
       // shortcut throughput across the rest of the app.
       const textInputShortcuts = new Set(['z', 'y', 'c', 'x', 'v', 'a']);
-      if (inEditable && textInputShortcuts.has(k)) return;
+      if ((inEditable || editorOpen) && textInputShortcuts.has(k)) return;
 
       if (k === 'z' && !e.shiftKey) {
         e.preventDefault();
@@ -992,12 +1006,20 @@ export function App() {
       file.name.toLowerCase().endsWith('.pptx') ||
       file.type ===
         'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-    if (!isPptx) {
-      setError('Only .pptx files are supported');
+    if (isPptx) {
+      const buffer = await file.arrayBuffer();
+      await importBuffer(buffer, file.name, /* persist */ true);
       return;
     }
-    const buffer = await file.arrayBuffer();
-    await importBuffer(buffer, file.name, /* persist */ true);
+    // Drag-drop images insert directly onto the active slide. PowerPoint
+    // and Google Slides both accept this — the alternative ("only .pptx
+    // files supported") felt actively user-hostile.
+    if (file.type?.startsWith('image/')) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await dispatchSlideCommand('casual-slides.command.insert-image-from-file', { file } as any);
+      return;
+    }
+    setError('Drop a .pptx file or an image');
   }
 
   return (
