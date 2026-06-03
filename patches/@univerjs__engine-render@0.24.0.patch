@@ -1,5 +1,5 @@
 diff --git a/lib/cjs/index.js b/lib/cjs/index.js
-index fafb8476bdd10d7a5224234dc0d7494756933de3..a9f1370c260e32793a73d29a188b2bba115855ce 100644
+index fafb8476bdd10d7a5224234dc0d7494756933de3..8e4e926bbe74e26b51667f8192ce4c3c18141f79 100644
 --- a/lib/cjs/index.js
 +++ b/lib/cjs/index.js
 @@ -12648,6 +12648,12 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -273,7 +273,30 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..a9f1370c260e32793a73d29a188b2bba
  		if (!isStop && this._shouldDispatchEventToScene(currentObject)) this._scene.onMouseWheel$.emitEvent(evt);
  	}
  	_onKeyDown(evt) {
-@@ -25631,9 +25759,10 @@ var Transformer = class extends _univerjs_core.Disposable {
+@@ -25216,8 +25344,21 @@ var Transformer = class extends _univerjs_core.Disposable {
+ 				});
+ 			}
+ 			this._moveBufferSkip = false;
++			const dragStartX = evtOffsetX;
++			const dragStartY = evtOffsetY;
+ 			const scenePointerMoveSub = scene.onPointerMove$.subscribeEvent((moveEvt) => {
+-				const { offsetX: moveOffsetX, offsetY: moveOffsetY } = moveEvt;
++				let { offsetX: moveOffsetX, offsetY: moveOffsetY } = moveEvt;
++				// Shift+drag locks the move to whichever axis the pointer
++				// has moved farther along (PowerPoint / Figma convention).
++				if (moveEvt.shiftKey && !isCropper) {
++					const dx = moveOffsetX - dragStartX;
++					const dy = moveOffsetY - dragStartY;
++					if (Math.abs(dx) > Math.abs(dy)) {
++						moveOffsetY = dragStartY;
++					} else {
++						moveOffsetX = dragStartX;
++					}
++				}
+ 				this._moving(moveOffsetX, moveOffsetY, scrollTimer, isCropper);
+ 				!isCropper && this._clearControlMap();
+ 				scrollTimer.scrolling(moveOffsetX, moveOffsetY, () => {
+@@ -25631,9 +25772,10 @@ var Transformer = class extends _univerjs_core.Disposable {
  			this._moveBufferSkip = false;
  			this._topScenePointerMoveSub = topScene.onPointerMove$.subscribeEvent((moveEvt) => {
  				const { offsetX: moveOffsetX, offsetY: moveOffsetY } = moveEvt;
@@ -286,7 +309,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..a9f1370c260e32793a73d29a188b2bba
  				});
  				topScene.setCursor(cursor);
  			});
-@@ -26238,7 +26367,7 @@ var Transformer = class extends _univerjs_core.Disposable {
+@@ -26238,7 +26380,7 @@ var Transformer = class extends _univerjs_core.Disposable {
  		const { isCropper } = this._getConfig(applyObject);
  		const targetObject = this._findGroupObject(applyObject);
  		if (this._selectedObjectMap.has(targetObject.oKey)) return;
@@ -296,7 +319,7 @@ index fafb8476bdd10d7a5224234dc0d7494756933de3..a9f1370c260e32793a73d29a188b2bba
  			this._clearControlMap();
  		}
 diff --git a/lib/es/index.js b/lib/es/index.js
-index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..aa63a54c4c5ed6a728687c90a580b3cd897e01d5 100644
+index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..fa8cd72577c0a27eda30c6db66cad5caac905bb1 100644
 --- a/lib/es/index.js
 +++ b/lib/es/index.js
 @@ -12619,6 +12619,13 @@ function _createSkeletonWordOrLetter(glyphType, content, config, glyphWidth, gly
@@ -638,7 +661,30 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..aa63a54c4c5ed6a728687c90a580b3cd
  		if (!isStop && this._shouldDispatchEventToScene(currentObject)) this._scene.onMouseWheel$.emitEvent(evt);
  	}
  	_onKeyDown(evt) {
-@@ -25602,9 +25773,10 @@ var Transformer = class extends Disposable {
+@@ -25187,8 +25358,21 @@ var Transformer = class extends Disposable {
+ 				});
+ 			}
+ 			this._moveBufferSkip = false;
++			const dragStartX = evtOffsetX;
++			const dragStartY = evtOffsetY;
+ 			const scenePointerMoveSub = scene.onPointerMove$.subscribeEvent((moveEvt) => {
+-				const { offsetX: moveOffsetX, offsetY: moveOffsetY } = moveEvt;
++				let { offsetX: moveOffsetX, offsetY: moveOffsetY } = moveEvt;
++				// Shift+drag locks the move to whichever axis the pointer
++				// has moved farther along (PowerPoint / Figma convention).
++				if (moveEvt.shiftKey && !isCropper) {
++					const dx = moveOffsetX - dragStartX;
++					const dy = moveOffsetY - dragStartY;
++					if (Math.abs(dx) > Math.abs(dy)) {
++						moveOffsetY = dragStartY;
++					} else {
++						moveOffsetX = dragStartX;
++					}
++				}
+ 				this._moving(moveOffsetX, moveOffsetY, scrollTimer, isCropper);
+ 				!isCropper && this._clearControlMap();
+ 				scrollTimer.scrolling(moveOffsetX, moveOffsetY, () => {
+@@ -25602,9 +25786,10 @@ var Transformer = class extends Disposable {
  			this._moveBufferSkip = false;
  			this._topScenePointerMoveSub = topScene.onPointerMove$.subscribeEvent((moveEvt) => {
  				const { offsetX: moveOffsetX, offsetY: moveOffsetY } = moveEvt;
@@ -651,7 +697,7 @@ index 9262f4632f717ab30dda35b7f68b0f65d7e32ea7..aa63a54c4c5ed6a728687c90a580b3cd
  				});
  				topScene.setCursor(cursor);
  			});
-@@ -26209,7 +26381,7 @@ var Transformer = class extends Disposable {
+@@ -26209,7 +26394,7 @@ var Transformer = class extends Disposable {
  		const { isCropper } = this._getConfig(applyObject);
  		const targetObject = this._findGroupObject(applyObject);
  		if (this._selectedObjectMap.has(targetObject.oKey)) return;
