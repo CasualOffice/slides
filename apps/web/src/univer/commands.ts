@@ -694,6 +694,32 @@ function _pasteElement(): boolean {
   model.incrementRev();
   model.setActivePage(page);
   notify('Element pasted');
+  // Auto-select the newly pasted element so the user can immediately
+  // drag/resize/style it without an extra click. The scene re-renders
+  // from the snapshot on the next animation frame, so we defer the
+  // transformer.setSelectedControl call until the BaseObject exists.
+  const pageId = page.id;
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => {
+      try {
+        const canvasView = univer.__getInjector().get(CanvasView);
+        const unitId = model.getUnitId();
+        const renderUnit = canvasView.getRenderUnitByPageId(pageId, unitId);
+        const scene = renderUnit?.scene;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const transformer = scene?.getTransformer?.() as any;
+        if (!transformer) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const objects = (scene.getAllObjects?.() ?? []) as Array<any>;
+        const target = objects.find((o) => o?.oKey === newId);
+        if (!target) return;
+        if (typeof transformer.clearSelectedObjects === 'function') {
+          transformer.clearSelectedObjects();
+        }
+        transformer.setSelectedControl(target);
+      } catch { /* scene torn down — selection just stays empty */ }
+    });
+  }
   return true;
 }
 
