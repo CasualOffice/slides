@@ -245,6 +245,9 @@ function applyReplaceDirect(
     // Defensive: if the text has drifted since we scanned, fall back to
     // a global find-of-original-substring inside this field to avoid
     // splicing into an unintended position. If even that fails, skip.
+    let spliceStart = rec.start;
+    let spliceEnd = rec.start + rec.length;
+    let next: string;
     if (
       current.length < rec.start + rec.length ||
       current.slice(rec.start, rec.start + rec.length) !==
@@ -253,10 +256,66 @@ function applyReplaceDirect(
       const original = rec.text.slice(rec.start, rec.start + rec.length);
       const idx = current.indexOf(original);
       if (idx < 0) return false;
-      el.richText.text = current.slice(0, idx) + replacement + current.slice(idx + original.length);
+      spliceStart = idx;
+      spliceEnd = idx + original.length;
+      next = current.slice(0, idx) + replacement + current.slice(idx + original.length);
     } else {
-      el.richText.text =
-        current.slice(0, rec.start) + replacement + current.slice(rec.start + rec.length);
+      next = current.slice(0, rec.start) + replacement + current.slice(rec.start + rec.length);
+    }
+    el.richText.text = next;
+    // Mirror into the rich body so the canvas + downstream readers (which
+    // prefer `richText.rich` over the flat `text`, per the
+    // project-pptx-rich-field-trap memory) see the new text too. Splice
+    // the dataStream, then adjust every textRun's [st, ed] that the splice
+    // crosses so character formatting stays mapped to the right glyphs.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rich = (el.richText as any).rich;
+    if (rich?.body) {
+      const ds = (rich.body.dataStream as string | undefined) ?? '';
+      // dataStream uses \r as paragraph break, ends with \n. The find
+      // index is computed against `text` which uses the same separators.
+      // Splice using the same offsets.
+      if (ds.length >= spliceEnd) {
+        const before = ds.slice(0, spliceStart);
+        const after = ds.slice(spliceEnd);
+        rich.body.dataStream = before + replacement + after;
+        const delta = replacement.length - (spliceEnd - spliceStart);
+        if (delta !== 0 && Array.isArray(rich.body.textRuns)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const run of rich.body.textRuns as any[]) {
+            // Run wholly before the splice → untouched.
+            if (run.ed <= spliceStart) continue;
+            // Run wholly after the splice → shift both ends by delta.
+            if (run.st >= spliceEnd) {
+              run.st += delta;
+              run.ed += delta;
+              continue;
+            }
+            // Run overlaps the splice: extend ed by delta. Leave st alone
+            // if it sits before the splice; otherwise it must equal
+            // spliceStart (since runs don't overlap each other).
+            if (run.st < spliceStart) {
+              run.ed += delta;
+            } else {
+              run.st = spliceStart;
+              run.ed = spliceStart + (run.ed - spliceEnd) + replacement.length;
+            }
+          }
+        }
+        // Paragraph offsets bookkeeping — if the splice deleted or added
+        // \r breaks, recompute startIndex entries. Re-derive from the new
+        // dataStream by scanning for \r positions. The trailing \n is the
+        // doc-end marker, NOT a paragraph break — don't index it.
+        if (Array.isArray(rich.body.paragraphs)) {
+          const breaks: number[] = [];
+          for (let i = 0; i < rich.body.dataStream.length; i++) {
+            if (rich.body.dataStream[i] === '\r') breaks.push(i);
+          }
+          rich.body.paragraphs = breaks.length > 0
+            ? breaks.map((b) => ({ startIndex: b }))
+            : [{ startIndex: 0 }];
+        }
+      }
     }
     return true;
   }
@@ -472,7 +531,8 @@ export function FindReplaceDialog({ open, onClose }: FindReplaceDialogProps) {
       list.sort((a, b) => a.start - b.start);
       for (let i = list.length - 1; i >= 0; i -= 1) {
         if (consumed >= HARD_CAP) break;
-        const rec = list[i];
+        // i is in [0, list.length-1] — inhabited.
+        const rec = list[i]!;
         if (applyReplaceDirect(rec, replacement)) replaced += 1;
         consumed += 1;
       }
