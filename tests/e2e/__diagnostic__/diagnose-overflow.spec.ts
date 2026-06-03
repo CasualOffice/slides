@@ -29,7 +29,7 @@ test('diagnose: open "Your big idea.pptx" and dump text-frame state', async ({ p
   await page.waitForTimeout(800);
 
   // Upload the sample deck.
-  const buf = readFileSync(path.resolve(__dirname, 'fixtures/your-big-idea.pptx'));
+  const buf = readFileSync(path.resolve(__dirname, '..', 'fixtures', 'your-big-idea.pptx'));
   await page.locator('input[type="file"]').setInputFiles({
     name: 'your-big-idea.pptx',
     mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',

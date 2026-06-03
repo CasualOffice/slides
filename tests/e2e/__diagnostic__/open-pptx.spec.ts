@@ -40,7 +40,9 @@ test('open-pptx round-trip — capture canvas state', async ({ page }, testInfo)
 
   // Save the default deck.
   const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
-  await page.getByRole('button', { name: /save \.pptx/i }).click();
+  // The save button is now labeled just "Save" (downloads as .pptx
+  // by default). Earlier alpha shipped "Save .pptx".
+  await page.keyboard.press('Control+s');
   const download = await downloadPromise;
   const downloadedPath = await download.path();
   expect(downloadedPath).toBeTruthy();

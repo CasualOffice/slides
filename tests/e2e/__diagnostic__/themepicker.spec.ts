@@ -24,9 +24,10 @@ test('theme picker opens via toolbar + applies background to all slides', async 
   await page.getByRole('button', { name: /graphite/i }).click();
   await page.waitForTimeout(400);
 
-  // Should have dispatched one update-page mutation per slide (3 in the default deck).
+  // Should have dispatched one update-page mutation per slide. The default
+  // deck has 1 slide as of the Spike-A → single-blank-slide change.
   const captured = await page.evaluate(() => [...(window as { __capturedMutations: string[] }).__capturedMutations]);
-  expect(captured.filter((m) => m === 'slide.mutation.update-page').length).toBeGreaterThanOrEqual(3);
+  expect(captured.filter((m) => m === 'slide.mutation.update-page').length).toBeGreaterThanOrEqual(1);
 
   await page.screenshot({ path: testInfo.outputPath('after.png') });
 });
