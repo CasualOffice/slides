@@ -112,6 +112,48 @@ function resolveRelTarget(target: string, baseDir: string): string {
   return out.join('/');
 }
 
+// Walk the slide's rels to find the notesSlide part, load it, and harvest
+// the user-authored text from every body placeholder's <a:t> runs. Joined
+// across paragraphs with '\n' (NotesPanel reads/writes a plain textarea —
+// no rich-text round-trip yet). Skips the slidenum placeholder which
+// PowerPoint puts inside notesSlide too, since it isn't user content.
+async function extractNotesText(slideRelsXml: string | null, zip: JSZip): Promise<string> {
+  if (!slideRelsXml) return '';
+  try {
+    const notesTarget = findRelTargetByType(slideRelsXml, '/notesSlide');
+    if (!notesTarget) return '';
+    const notesPath = resolveRelTarget(notesTarget, 'ppt/slides/');
+    const file = zip.file(notesPath);
+    if (!file) return '';
+    const xml = await file.async('string');
+    // Drop slidenum placeholder if present so its '<#>' / page number
+    // doesn't leak into the user notes view.
+    // Find every <p:sp> block, check the <p:ph type="sldNum"> sentinel,
+    // skip those; on the rest, collect <a:t> text grouped by <a:p>.
+    const out: string[] = [];
+    const SP_RX = /<p:sp\b[\s\S]*?<\/p:sp>/g;
+    const matches = xml.match(SP_RX) ?? [];
+    for (const sp of matches) {
+      if (/<p:ph\b[^>]*type="sldNum"/.test(sp)) continue;
+      // Per-paragraph text harvesting.
+      const PARA_RX = /<a:p\b[\s\S]*?<\/a:p>/g;
+      const paras = sp.match(PARA_RX) ?? [];
+      for (const para of paras) {
+        const RUN_RX = /<a:t[^>]*>([\s\S]*?)<\/a:t>/g;
+        let line = '';
+        let m: RegExpExecArray | null;
+        while ((m = RUN_RX.exec(para)) !== null) {
+          line += (m[1] ?? '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+        }
+        if (line.length > 0) out.push(line);
+      }
+    }
+    return out.join('\n');
+  } catch {
+    return '';
+  }
+}
+
 // Theme color map (J2). PowerPoint's `<a:schemeClr val="…">` references
 // resolve against `ppt/theme/themeN.xml`'s `<a:clrScheme>`. Map keys
 // are the OOXML scheme color names plus PowerPoint's tx/bg aliases:
@@ -4995,12 +5037,19 @@ export async function importPptxToSlides(file: ArrayBuffer, fileName: string): P
     // back); set empty strings until the placeholder map exposes them.
     const isHidden = extractSlideHidden(slideXml);
 
+    // Speaker notes — the slide's rels reference a notesSlide part
+    // (ppt/notesSlides/notesSlideN.xml). Each placeholder inside that
+    // part holds the user-authored text. We aggregate the body
+    // placeholder text (skipping the slidenum) into description for
+    // round-trip with the NotesPanel which reads/writes the same field.
+    const notesText = await extractNotesText(slideRelsXml, zip);
+
     pages[pageId] = {
       id: pageId,
       pageType: PageType.SLIDE,
       zIndex: pageOrdinal,
       title: `Slide ${pageOrdinal}`,
-      description: '',
+      description: notesText,
       pageBackgroundFill: {
         rgb: slideBg ?? 'rgb(255, 255, 255)',
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -259,7 +259,10 @@ function emitTableElement(slide: pptxgen.Slide, element: IPageElement): void {
 
 function emitPage(deck: pptxgen, page: ISlidePage) {
   // Only SLIDE-type pages are emitted as real pptx slides for now. Masters /
-  // layouts / notes round-trip via the resources passthrough in P1+.
+  // layouts round-trip via the resources passthrough in P1+; speaker notes
+  // live in ISlidePage.description (per NotesPanel.tsx) and we route them
+  // through PptxGenJS.addNotes() so they materialise as a real notesSlide
+  // in the output deck.
   if (page.pageType !== PageType.SLIDE) return;
 
   const slide = deck.addSlide();
@@ -267,6 +270,13 @@ function emitPage(deck: pptxgen, page: ISlidePage) {
   // Background fill — pptxgenjs `background: { color }` expects hex w/o `#`.
   if (page.pageBackgroundFill?.rgb) {
     slide.background = { color: normalizeColor(page.pageBackgroundFill.rgb, 'FFFFFF') };
+  }
+
+  // Speaker notes — PptxGenJS produces a notesSlide referenced by the slide
+  // when `addNotes` is called with a non-empty string. Skip empty so we don't
+  // pollute the output with blank notes parts.
+  if (page.description && page.description.trim().length > 0) {
+    slide.addNotes(page.description);
   }
 
   // Render elements in z-index order so the top-most paint last.
