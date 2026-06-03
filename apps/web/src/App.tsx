@@ -1134,7 +1134,18 @@ export function App() {
       <AutosaveRestoreBanner
         offer={autosaveOffer}
         onRestore={(record) => {
-          setSnapshot(record.snapshot);
+          // UniverSlide is keyed on snapshot.id; the autosaved snapshot
+          // typically still carries the default-deck id ('untitled-deck'),
+          // identical to the current React state's id. Without a fresh id
+          // React skips the remount and the Univer model never receives the
+          // restored body — visible as "Restore" click + no change. Mint a
+          // session-unique id so the key flips and UniverSlide remounts
+          // against the restored snapshot.
+          const restored = {
+            ...record.snapshot,
+            id: `${record.snapshot.id || 'restored'}-restored-${Date.now().toString(36)}`,
+          };
+          setSnapshot(restored);
           // Restored deck is unsaved — mark dirty so the next Save
           // promotes it to a real .pptx on disk.
           setDirty(true);
