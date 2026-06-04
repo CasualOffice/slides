@@ -586,22 +586,24 @@ export function App() {
         // a no-op duplicate after the first dispatch, harmless.
         e.preventDefault();
         void dispatchSlideCommand('casual-slides.command.insert-link');
-      } else if (k === ']' && e.shiftKey && !e.altKey) {
-        // Ctrl+Shift+] — bring selected element forward by one layer.
-        e.preventDefault();
-        void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'forward' });
-      } else if (k === '[' && e.shiftKey && !e.altKey) {
-        // Ctrl+Shift+[ — send selected element back by one layer.
-        e.preventDefault();
-        void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'backward' });
       } else if (k === ']' && e.altKey) {
-        // Ctrl+Alt+] — bring to front.
+        // Ctrl+Alt+] — bring to front (alt overrides shift if both).
         e.preventDefault();
         void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'front' });
       } else if (k === '[' && e.altKey) {
         // Ctrl+Alt+[ — send to back.
         e.preventDefault();
         void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'back' });
+      } else if (k === ']') {
+        // Ctrl+] (PowerPoint convention) and Ctrl+Shift+] both bring
+        // the selected element forward by one layer. Shift is accepted
+        // for muscle memory of older Office users.
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'forward' });
+      } else if (k === '[') {
+        // Ctrl+[ (PowerPoint) / Ctrl+Shift+[ — send backward one layer.
+        e.preventDefault();
+        void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'backward' });
       } else if (k === '=' || k === '+') {
         e.preventDefault();
         setZoom((z) => Math.min(400, z + 10));
