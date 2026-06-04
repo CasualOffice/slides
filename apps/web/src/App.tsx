@@ -698,7 +698,7 @@ export function App() {
     // is in an editable surface so paging inside text edit doesn't jump
     // slides under the user.
     const pageNavHandler = (e: KeyboardEvent) => {
-      if (e.key !== 'PageUp' && e.key !== 'PageDown') return;
+      if (e.key !== 'PageUp' && e.key !== 'PageDown' && e.key !== 'Home' && e.key !== 'End') return;
       if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
@@ -714,8 +714,12 @@ export function App() {
         if (!order || order.length === 0) return;
         const activeId = model.getActivePage()?.id;
         const idx = activeId ? order.indexOf(activeId) : 0;
-        const nextIdx = e.key === 'PageDown' ? idx + 1 : idx - 1;
-        if (nextIdx < 0 || nextIdx >= order.length) return;
+        let nextIdx: number;
+        if (e.key === 'Home') nextIdx = 0;
+        else if (e.key === 'End') nextIdx = order.length - 1;
+        else if (e.key === 'PageDown') nextIdx = idx + 1;
+        else nextIdx = idx - 1;
+        if (nextIdx < 0 || nextIdx >= order.length || nextIdx === idx) return;
         const nextPage = model.getPage(order[nextIdx]!);
         if (!nextPage) return;
         e.preventDefault();

@@ -109,6 +109,8 @@ function buildSections(isMac: boolean): ShortcutSection[] {
         { labelKey: 'moveSlideDown',  binds: [{ keys: [mod, shift, '↓'] }] },
         { labelKey: 'prevSlide',      binds: [{ keys: ['PageUp'] }] },
         { labelKey: 'nextSlide',      binds: [{ keys: ['PageDown'] }] },
+        { labelKey: 'firstSlide',     binds: [{ keys: ['Home'] }] },
+        { labelKey: 'lastSlide',      binds: [{ keys: ['End'] }] },
       ],
     },
     {
