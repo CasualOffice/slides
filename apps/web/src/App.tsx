@@ -689,6 +689,29 @@ export function App() {
       e.stopPropagation();
       void dispatchSlideCommand('casual-slides.command.nudge-element', { dx, dy });
     };
+    // Tab / Shift+Tab cycle through elements on the active slide. Runs
+    // in CAPTURE phase so it wins over the browser's default focus-ring
+    // traversal whenever the click target is the canvas surface — we
+    // bail out for real form fields / focusable controls and dialogs
+    // so normal Tab navigation in chrome controls keeps working.
+    const tabCycleHandler = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'BUTTON' ||
+        target.tagName === 'A' ||
+        target.tagName === 'SELECT'
+      )) return;
+      if (typeof document !== 'undefined' && document.querySelector('[role="dialog"]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void dispatchSlideCommand('casual-slides.command.cycle-selection', {
+        direction: e.shiftKey ? 'prev' : 'next',
+      });
+    };
     const f5Handler = (e: KeyboardEvent) => {
       if (e.key === 'F5') {
         e.preventDefault();
@@ -774,6 +797,7 @@ export function App() {
     // shortcut service (which binds ArrowKey → SetTextEditArrowOperation
     // and similar) when no doc edit is active.
     window.addEventListener('keydown', nudgeHandler, true);
+    window.addEventListener('keydown', tabCycleHandler, true);
     window.addEventListener('keydown', pageNavHandler);
     return () => {
       window.removeEventListener('keydown', handler);
@@ -782,6 +806,7 @@ export function App() {
       window.removeEventListener('keydown', deleteSlideHandler);
       window.removeEventListener('keydown', escHandler);
       window.removeEventListener('keydown', nudgeHandler, true);
+      window.removeEventListener('keydown', tabCycleHandler, true);
       window.removeEventListener('keydown', pageNavHandler);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

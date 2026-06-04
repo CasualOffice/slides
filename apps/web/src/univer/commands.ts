@@ -172,6 +172,11 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   if (id === 'casual-slides.command.select-all-on-page') {
     return selectAllOnActivePage();
   }
+  if (id === 'casual-slides.command.cycle-selection') {
+    const dir = (params as { direction?: 'next' | 'prev' } | undefined)?.direction;
+    if (dir !== 'next' && dir !== 'prev') return false;
+    return cycleSelectionOnActivePage(dir);
+  }
   if (id === 'casual-slides.command.align-selection') {
     const axis = (params as { axis?: AlignAxis } | undefined)?.axis;
     if (!axis) return false;
@@ -656,6 +661,68 @@ function _alignSelectedElements(axis: AlignAxis): boolean {
   if (active) model.setActivePage(active);
   notify(`Aligned ${touched} element${touched === 1 ? '' : 's'}`);
   return true;
+}
+
+// Tab / Shift+Tab cycling: select the next (or previous) element on the
+// active page after whichever element is currently the bridge's
+// "selected" tuple. Wraps at the ends.
+//
+// When nothing is selected we land on the first element (or last for
+// 'prev'), so a fresh slide + Tab brings up the first object without
+// the user having to click first.
+export function cycleSelectionOnActivePage(direction: 'next' | 'prev'): boolean {
+  const univer = getUniver();
+  if (!univer) return false;
+  try {
+    const injector = univer.__getInjector();
+    const instances = injector.get(IUniverInstanceService);
+    const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+    if (!model) return false;
+    const unitId = model.getUnitId();
+    const activePage = model.getActivePage();
+    if (!activePage) return false;
+    // Stable order driven by the element insertion sequence, mirroring
+    // PowerPoint's Tab order. We sort by zIndex first (bottom-up) so
+    // Tab cycles roughly back-to-front, matching what users expect
+    // when laying out stacked shapes.
+    const elementIds = Object.values(activePage.pageElements ?? {})
+      .filter((e) => !!e?.id)
+      .sort((a, b) => (a!.zIndex ?? 0) - (b!.zIndex ?? 0))
+      .map((e) => e!.id);
+    if (elementIds.length === 0) return false;
+    const cur = getSelectedElement();
+    const curIdx = cur ? elementIds.indexOf(cur.elementId) : -1;
+    let nextIdx: number;
+    if (curIdx < 0) {
+      nextIdx = direction === 'next' ? 0 : elementIds.length - 1;
+    } else if (direction === 'next') {
+      nextIdx = (curIdx + 1) % elementIds.length;
+    } else {
+      nextIdx = (curIdx - 1 + elementIds.length) % elementIds.length;
+    }
+    const targetId = elementIds[nextIdx];
+    if (!targetId) return false;
+    const canvasView = injector.get(CanvasView);
+    const renderUnit = canvasView.getRenderUnitByPageId(activePage.id, unitId);
+    const scene = renderUnit?.scene;
+    if (!scene) return false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const transformer = scene.getTransformer() as any;
+    if (!transformer) return false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const objects = (scene.getAllObjects?.() ?? []) as Array<any>;
+    const target = objects.find((o) => o?.oKey === targetId);
+    if (!target) return false;
+    if (typeof transformer.clearSelectedObjects === 'function') {
+      transformer.clearSelectedObjects();
+    } else if (typeof transformer.clearControls === 'function') {
+      transformer.clearControls();
+    }
+    transformer.setSelectedControl(target);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function selectAllOnActivePage(): boolean {
