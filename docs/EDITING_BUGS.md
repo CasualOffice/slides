@@ -305,3 +305,58 @@ patch hunk; the probes above will tell you immediately whether the fix works.
 Cosmetic polish remaining items (P7 theme side-panel, P10 recent-files
 thumbnails) should defer until this is fixed — the shell isn't shippable
 until users can actually type into it.
+
+## Open — partial-text formatting via Shift+Arrow
+
+Inside the slide editor, pressing `Shift+ArrowLeft` to extend the
+selection by one character and then `Ctrl+B` should bold only the
+selected range — producing two textRuns, one plain and one with `bl=1`.
+Observed (`tests/e2e/__diagnostic__/inline-format-probe.spec.mjs` and
+follow-ups): the resulting model has a SINGLE textRun covering the
+whole content. Either Shift+Arrow doesn't actually extend the
+DocSelectionManagerService range, or Ctrl+B is applying to the whole
+content because the bold command can't read a partial-range selection.
+
+Full-content Ctrl+A → Ctrl+B works fine (probed) — so the bold command
+itself is wired correctly. The gap is in the Shift+Arrow → selection
+extension path.
+
+Probably another flag / context-value the editor needs that we haven't
+set in the slides-ui patch. Worth a focused trace through the
+DocSelectionManagerService when this becomes blocking.
+
+## Open — Ctrl+K hyperlink popup never opens
+
+Ctrl+K dispatches `casual-slides.command.insert-link` which lazy-starts
+the docs-hyper-link plugin pair and calls
+`doc.operation.show-hyper-link-edit-popup`. The popup never appears.
+
+Univer's `shouldDisableAddLink` precondition
+(`docs-hyper-link-ui/lib/es/index.js:242`) requires BOTH:
+
+  1. A non-collapsed text range in the active DocSelectionManagerService
+  2. `getCurrentUnitOfType(UniverInstanceType.UNIVER_DOC)` returns a unit
+
+We satisfy (1) when the editor has Ctrl+A'd content, but (2) fails:
+the slide editor's inner doc unit (`__INTERNAL_EDITOR__SLIDE_EDITOR`)
+exists but isn't the "current" unit of type DOC — Univer's instance
+service treats the slide unit as the focused one (which it is, at the
+React/canvas level).
+
+Three repair paths:
+
+  a) Call `focusUnit(editorUnitId)` in the slides-ui patch when the
+     editor activates. Risky — changes which unit drives the rest of
+     the slide UI (toolbar state, status bar, etc.).
+  b) Patch docs-hyper-link-ui's `shouldDisableAddLink` to fall back
+     to checking the `FOCUSING_DOC` context flag when no doc unit is
+     "current". Two-package patch chain to maintain.
+  c) Build our own thin URL dialog (small React popup) that bypasses
+     Univer's hyperlink plugin entirely. Bigger surface area but it
+     means the link UI matches the rest of our chrome and we don't
+     ride changes in `@univerjs/docs-hyper-link-ui`.
+
+(c) is the right long-term answer; (a) is the cheapest stop-gap.
+Marker for future investigator: same root cause as the partial-text
+selection bug above — both are downstream of the editor's doc unit
+not being instance-level focused.
