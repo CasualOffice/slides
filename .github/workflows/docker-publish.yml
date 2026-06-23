@@ -37,6 +37,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.tag.outputs.raw }}
+          # Engine + UI kit are git submodules built from source in the image.
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN || github.token }}
 
       - name: Resolve build metadata
         id: meta

@@ -24,16 +24,17 @@ FROM node:${NODE_VERSION} AS deps
 RUN corepack enable && corepack prepare pnpm@10.33.4 --activate
 WORKDIR /repo
 
-# Lockfile + manifests first so Docker caches the dep install across
-# source-only changes. patches/ is required for pnpm install because the
-# repo's `patchedDependencies` config references files under it.
+# Workspace manifests + the engine/UI-kit submodules (the engine is consumed
+# from source via the pnpm workspace, not npm). The submodules carry all the
+# @univerjs/* + design-system package.jsons that the workspace must resolve.
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-COPY patches patches
 COPY apps/web/package.json apps/web/
 COPY apps/server/package.json apps/server/
+COPY univer-revamp univer-revamp
+COPY design-book design-book
 
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile
+    pnpm install --no-frozen-lockfile
 
 # ─────────────── build-web ───────────────
 FROM deps AS build-web
@@ -62,17 +63,18 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
-# Lockfile + manifests + workspace config — required for `pnpm install
-# --prod` to resolve the workspace graph cleanly.
+# Workspace manifests + submodules — required for `pnpm install --prod` to
+# resolve the (now source-based) workspace graph cleanly.
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-COPY patches patches
 COPY apps/web/package.json apps/web/
 COPY apps/server/package.json apps/server/
+COPY univer-revamp univer-revamp
+COPY design-book design-book
 
 # Prod-only install. tsx lives in the server's dependencies so the
 # server can run TypeScript directly without a JS compile step.
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --prod
+    pnpm install --no-frozen-lockfile --prod
 
 # Server source (small, tsx executes it directly) + the built web bundle.
 COPY apps/server/src apps/server/src

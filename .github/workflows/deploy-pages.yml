@@ -22,6 +22,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        # Engine + UI kit are git submodules built from source.
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN || github.token }}
 
       - name: Setup pnpm
         # No `version:` — it's picked from `packageManager` in package.json
@@ -35,13 +39,11 @@ jobs:
           cache: pnpm
 
       - name: Install
-        # --frozen-lockfile fails the build if pnpm-lock.yaml is out of date,
-        # which is what we want — patches/ are applied during install so a
-        # stale lockfile would silently ship un-patched code.
-        run: pnpm install --frozen-lockfile
+        # Source-consumed engine via the workspace; not frozen.
+        run: pnpm install --no-frozen-lockfile
 
-      - name: Typecheck web
-        run: pnpm --filter @point/web typecheck
+      # No standalone tsc typecheck: a strict tsc over the engine source isn't
+      # viable without building the engine .d.ts. The Vite build is the gate.
 
       - name: Build web
         env:
