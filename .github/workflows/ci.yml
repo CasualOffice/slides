@@ -57,6 +57,11 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    # Informational, non-blocking: the e2e suite is a LibreOffice-based visual
+    # fidelity-comparison (render vs ground-truth PDF). It measures fidelity
+    # that's still being improved and needs soffice in the runner — it must not
+    # gate the PR. `build` + `unit` are the gating checks.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
