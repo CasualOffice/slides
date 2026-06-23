@@ -57,11 +57,11 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    # Informational, non-blocking: the e2e suite is a LibreOffice-based visual
-    # fidelity-comparison (render vs ground-truth PDF). It measures fidelity
-    # that's still being improved and needs soffice in the runner — it must not
-    # gate the PR. `build` + `unit` are the gating checks.
-    continue-on-error: true
+    # Informational only: the e2e suite is a LibreOffice-based visual
+    # fidelity-comparison (render vs ground-truth PDF) that measures fidelity
+    # still being improved and needs soffice in the runner. The test step is
+    # continue-on-error so the JOB reports green (results live in the uploaded
+    # Playwright report); `build` + `unit` are the gating checks.
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,7 +88,9 @@ jobs:
       - name: Install Playwright system deps
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
-      - run: pnpm test:e2e
+      - name: Run e2e (informational — never fails the job)
+        continue-on-error: true
+        run: pnpm test:e2e
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
