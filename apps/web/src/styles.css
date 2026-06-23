@@ -1,9 +1,9 @@
 /* Casual Slides — chrome stylesheet.
    Aesthetic: Google Slides / Google Docs. Compact two-row title bar,
-   single-row icon toolbar, gray canvas stage. Brand accent is cyan
-   (#0891B2) — deliberately distinct from PowerPoint orange-red,
-   Impress orange, and Google Slides yellow. Inter for UI text. Icons
-   are inline SVG (see src/shell/icons.tsx) — no webfont. */
+   single-row icon toolbar, gray canvas stage. Brand accent is teal
+   (#0D9488 / Tailwind teal-600) — refreshed 2026-05-30 to share a
+   teal/emerald family with the sister-product marks. Inter for UI
+   text. Icons are inline SVG (see src/shell/icons.tsx) — no webfont. */
 
 :root {
   --cs-bg:        #f8f9fa;
@@ -12,17 +12,33 @@
   --cs-surface-2: #fafafa;
   --cs-text:      #1f2328;
   --cs-text-mute: #5f6368;
-  --cs-text-dim:  #80868b;
+  --cs-text-dim:  #6b7177; /* 4.94:1 on white — WCAG AA body text */
   --cs-border:    #dadce0;
   --cs-border-2:  #e8eaed;
   --cs-hover:     #f1f3f4;
   --cs-active:    #e8eaed;
-  /* Brand: cyan-600 family. Deliberately distinct from PowerPoint
-     orange-red, Impress orange, Google Slides yellow. */
-  --cs-accent:    #0891b2;
-  --cs-accent-dk: #0e7490;
-  --cs-accent-bg: #ecfeff;
-  --cs-focus:     #0891b2;
+  /* Brand: teal-600 / teal-400 family (refreshed 2026-05-30). Distinct
+     from PowerPoint red, Impress orange, Google Slides yellow. */
+  --cs-accent:       #0d9488;
+  --cs-accent-dk:    #0f766e;
+  --cs-accent-bg:    #f0fdfa;
+  --cs-accent-bg-hv: #ccfbf1;
+  --cs-focus:        #0d9488;
+  /* Semantic surface tokens — used by status pills, error banners,
+     live-collab badges. Anything user-facing should pull from here
+     instead of literal hex so a theme swap is one-line. */
+  --cs-error:        #b3261e;
+  --cs-error-bg:     #fdecea;
+  --cs-error-border: #fecaca;
+  --cs-warn:         #92400e;
+  --cs-warn-bg:      #fff7ed;
+  --cs-warn-border:  #fed7aa;
+  --cs-success:      #047857;
+  --cs-success-bg:   #ecfdf5;
+  --cs-success-border:#a7f3d0;
+  /* Material spec: disabled controls land at 38% opacity. Same number
+     everywhere so the "is this clickable?" affordance is one signal. */
+  --cs-disabled-opacity: 0.38;
   --cs-shadow-1:  0 1px 2px rgba(60, 64, 67, 0.1), 0 1px 3px rgba(60, 64, 67, 0.05);
   --cs-shadow-2:  0 2px 6px rgba(60, 64, 67, 0.12), 0 1px 2px rgba(60, 64, 67, 0.06);
   --cs-radius:    4px;
@@ -202,9 +218,9 @@ button:disabled { cursor: not-allowed; }
 }
 
 .cs-titlebar__pill--error {
-  color: #b54708;
-  background: #fff7ed;
-  border-color: #fed7aa;
+  color: var(--cs-warn);
+  background: var(--cs-warn-bg);
+  border-color: var(--cs-warn-border);
 }
 
 .cs-titlebar__actions {
@@ -242,32 +258,32 @@ button:disabled { cursor: not-allowed; }
 }
 
 .cs-titlebar__live--live {
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #047857;
+  background: var(--cs-success-bg);
+  border-color: var(--cs-success-border);
+  color: var(--cs-success);
 }
 .cs-titlebar__live--live .cs-titlebar__live-dot {
-  background: #10b981;
+  background: var(--cs-success);
   animation: cs-pulse 1.6s ease-in-out infinite;
 }
 
 .cs-titlebar__live--connecting,
 .cs-titlebar__live--reconnecting {
-  background: #fef3c7;
-  border-color: #fde68a;
-  color: #92400e;
+  background: var(--cs-warn-bg);
+  border-color: var(--cs-warn-border);
+  color: var(--cs-warn);
 }
 .cs-titlebar__live--connecting .cs-titlebar__live-dot,
 .cs-titlebar__live--reconnecting .cs-titlebar__live-dot {
-  background: #f59e0b;
+  background: var(--cs-warn);
 }
 
 .cs-titlebar__live--error {
-  background: #fee2e2;
-  border-color: #fecaca;
-  color: #b91c1c;
+  background: var(--cs-error-bg);
+  border-color: var(--cs-error-border);
+  color: var(--cs-error);
 }
-.cs-titlebar__live--error .cs-titlebar__live-dot { background: #dc2626; }
+.cs-titlebar__live--error .cs-titlebar__live-dot { background: var(--cs-error); }
 
 @keyframes cs-pulse {
   0%, 100% { opacity: 1; }
@@ -308,7 +324,7 @@ button:disabled { cursor: not-allowed; }
   transition: background 80ms ease, box-shadow 80ms ease;
 }
 .cs-btn:hover:not(:disabled) { background: var(--cs-hover); }
-.cs-btn:disabled { opacity: 0.45; }
+.cs-btn:disabled { opacity: var(--cs-disabled-opacity); }
 
 .cs-btn--ghost { color: var(--cs-text); }
 
@@ -316,14 +332,14 @@ button:disabled { cursor: not-allowed; }
   background: var(--cs-accent-bg);
   color: var(--cs-accent);
 }
-.cs-btn--primary:hover:not(:disabled) { background: #fde2d4; }
+.cs-btn--primary:hover:not(:disabled) { background: var(--cs-accent-bg-hv); }
 
 .cs-btn--accent {
   background: var(--cs-accent);
   color: #fff;
 }
 .cs-btn--accent:hover:not(:disabled) { background: var(--cs-accent-dk); }
-.cs-btn--accent:disabled { background: var(--cs-accent); opacity: 0.45; }
+.cs-btn--accent:disabled { background: var(--cs-accent); opacity: var(--cs-disabled-opacity); }
 
 /* ============================================================= Menus */
 
@@ -416,7 +432,7 @@ button:disabled { cursor: not-allowed; }
 }
 .cs-toolbar__btn:hover:not(:disabled) { background: var(--cs-hover); }
 .cs-toolbar__btn:active:not(:disabled) { background: var(--cs-active); }
-.cs-toolbar__btn:disabled { color: var(--cs-text-dim); opacity: 0.55; }
+.cs-toolbar__btn:disabled { color: var(--cs-text-dim); opacity: var(--cs-disabled-opacity); }
 
 .cs-toolbar__btn--split { width: auto; padding: 0 4px 0 6px; }
 
@@ -627,7 +643,7 @@ button:disabled { cursor: not-allowed; }
 .cs-statusbar__zoom-btn:hover:not(:disabled) { background: var(--cs-hover); color: var(--cs-text); }
 .cs-statusbar__view-btn.is-active { background: var(--cs-accent-bg); color: var(--cs-accent); }
 .cs-statusbar__view-btn:disabled,
-.cs-statusbar__zoom-btn:disabled { opacity: 0.45; }
+.cs-statusbar__zoom-btn:disabled { opacity: var(--cs-disabled-opacity); }
 
 .cs-statusbar__zoom-slider {
   width: 120px;
@@ -814,7 +830,7 @@ button:disabled { cursor: not-allowed; }
 }
 .cs-layout-picker__tile:hover {
   background: var(--cs-hover);
-  border-color: var(--cs-accent, #2563eb);
+  border-color: var(--cs-accent, #0d9488);
   transform: translateY(-1px);
 }
 
@@ -1188,8 +1204,8 @@ button:disabled { cursor: not-allowed; }
   margin: 0;
   padding: 8px 16px;
   font-size: 12px;
-  color: #b3261e;
-  background: #fdecea;
+  color: var(--cs-error);
+  background: var(--cs-error-bg);
   border-top: 1px solid var(--cs-border-2);
 }
 
@@ -1302,7 +1318,7 @@ button:disabled { cursor: not-allowed; }
 }
 
 .cs-about__row dd a {
-  color: var(--cs-accent, #2563eb);
+  color: var(--cs-accent, #0d9488);
   text-decoration: none;
 }
 .cs-about__row dd a:hover { text-decoration: underline; }
@@ -1344,7 +1360,7 @@ button:disabled { cursor: not-allowed; }
 }
 
 .cs-about__attrib-row a {
-  color: var(--cs-accent, #2563eb);
+  color: var(--cs-accent, #0d9488);
   text-decoration: none;
   font-size: 13px;
   font-weight: 500;
@@ -1440,7 +1456,7 @@ button:disabled { cursor: not-allowed; }
   color: #fff;
 }
 .cs-slideshow__btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
-.cs-slideshow__btn:disabled { opacity: 0.35; }
+.cs-slideshow__btn:disabled { opacity: var(--cs-disabled-opacity); }
 
 .cs-slideshow__counter {
   font-size: 13px;
@@ -1520,6 +1536,113 @@ button:disabled { cursor: not-allowed; }
 @keyframes cs-drop-overlay-in {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* === Busy overlay — gated on App.tsx opening || saving. Sits over the
+   canvas so the user can't click into a half-loaded deck. Status pill
+   in the titlebar carries the authoritative copy; this is the perceived-
+   progress affordance the otherwise blank pause was missing. */
+
+.cs-workspace__busy-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 75;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(2px);
+  /* Block pointer events — user can't reach into the canvas while busy. */
+  pointer-events: auto;
+  animation: cs-busy-overlay-in 120ms ease-out;
+}
+
+.cs-workspace__busy-overlay-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--cs-text);
+  letter-spacing: 0.01em;
+}
+
+@keyframes cs-busy-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Indeterminate spinner — single brand-tinted ring rotating. Used by
+   the busy overlay; reusable from any dialog/button via .cs-spinner. */
+.cs-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid var(--cs-accent-bg);
+  border-top-color: var(--cs-accent);
+  animation: cs-spin 0.8s linear infinite;
+}
+.cs-spinner--sm {
+  width: 18px;
+  height: 18px;
+  border-width: 2.5px;
+}
+
+@keyframes cs-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-spinner { animation-duration: 2s; }
+  .cs-workspace__busy-overlay { animation: none; }
+  .cs-workspace__boot-splash { animation: none; }
+}
+
+/* === Univer-boot splash — covers the white canvas window while
+   Univer's render engine warms up. Distinct from BusyOverlay (which
+   communicates "Open/Save in flight"); this is the first-paint
+   welcoming state. Flipped off ~120 ms after the SlideDataModel is
+   reachable; safety-net 8 s timeout in App.tsx. */
+.cs-workspace__boot-splash {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--cs-stage);
+  /* Don't block pointer events — the canvas under us is initialising
+     and clicks would no-op anyway, but we'd rather not eat scroll
+     gestures or interfere with drag-overlay detection. */
+  pointer-events: none;
+  animation: cs-boot-splash-fade 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cs-workspace__boot-splash-logo {
+  display: block;
+  /* Subtle bob to read as "alive" while the canvas warms up. */
+  animation: cs-boot-splash-bob 1.6s ease-in-out infinite;
+}
+
+.cs-workspace__boot-splash-text {
+  font-size: 12.5px;
+  color: var(--cs-text-mute);
+  letter-spacing: 0.01em;
+}
+
+@keyframes cs-boot-splash-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cs-boot-splash-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-workspace__boot-splash-logo { animation: none; }
 }
 
 /* =============================================================
@@ -1901,7 +2024,7 @@ button.cs-statusbar__zoom-value:focus-visible {
 }
 .cs-toolbar2__btn:hover:not(:disabled) { background: var(--cs-hover); }
 .cs-toolbar2__btn:active:not(:disabled) { background: var(--cs-active); }
-.cs-toolbar2__btn:disabled { color: var(--cs-text-dim); opacity: 0.55; }
+.cs-toolbar2__btn:disabled { color: var(--cs-text-dim); opacity: var(--cs-disabled-opacity); }
 .cs-toolbar2__btn:focus-visible {
   outline: 2px solid var(--cs-focus);
   outline-offset: -2px;
@@ -2666,7 +2789,7 @@ body.cs-format-pane-open .cs-notes {
 }
 
 .cs-format-pane__field.is-disabled {
-  opacity: 0.55;
+  opacity: var(--cs-disabled-opacity);
   cursor: not-allowed;
 }
 
@@ -2746,7 +2869,7 @@ body.cs-format-pane-open .cs-notes {
 }
 
 .cs-format-pane__color-row.is-disabled {
-  opacity: 0.55;
+  opacity: var(--cs-disabled-opacity);
   cursor: not-allowed;
 }
 
@@ -2825,7 +2948,7 @@ body.cs-format-pane-open .cs-notes {
 
 .cs-format-pane__seg:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: var(--cs-disabled-opacity);
 }
 
 /* "No fill" / "No border" clear button on a color row. */
@@ -2857,7 +2980,7 @@ body.cs-format-pane-open .cs-notes {
    language, MD3 elevation tokens, brand cyan accent. */
 
 .cs-slideshow__btn--active {
-  background: rgba(8, 145, 178, 0.25);
+  background: rgba(13, 148, 136, 0.25);
   color: #fff;
 }
 .cs-slideshow__btn--ghost {
@@ -2945,9 +3068,9 @@ body.cs-format-pane-open .cs-notes {
 }
 
 @keyframes cs-findreplace-flash {
-  0%   { opacity: 0;   box-shadow: 0 0 0 2px var(--cs-accent), 0 0 0 6px rgba(8, 145, 178, 0.25); }
+  0%   { opacity: 0;   box-shadow: 0 0 0 2px var(--cs-accent), 0 0 0 6px rgba(13, 148, 136, 0.25); }
   20%  { opacity: 1; }
-  100% { opacity: 0;   box-shadow: 0 0 0 2px var(--cs-accent), 0 0 0 6px rgba(8, 145, 178, 0); }
+  100% { opacity: 0;   box-shadow: 0 0 0 2px var(--cs-accent), 0 0 0 6px rgba(13, 148, 136, 0); }
 }
 
 .cs-findreplace {
@@ -3056,7 +3179,7 @@ body.cs-format-pane-open .cs-notes {
 .cs-findreplace__input::placeholder { color: var(--cs-text-dim); }
 .cs-findreplace__input:focus {
   border-color: var(--cs-accent);
-  box-shadow: 0 0 0 2px rgba(8, 145, 178, 0.18);
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.18);
 }
 .cs-findreplace__input.is-error {
   border-color: #dc2626;
@@ -3099,7 +3222,7 @@ body.cs-format-pane-open .cs-notes {
 .cs-findreplace__toggle.is-active {
   background: var(--cs-accent-bg);
   color: var(--cs-accent);
-  border-color: rgba(8, 145, 178, 0.32);
+  border-color: rgba(13, 148, 136, 0.32);
 }
 .cs-findreplace__toggle:focus-visible {
   outline: 2px solid var(--cs-focus);
@@ -3150,7 +3273,7 @@ body.cs-format-pane-open .cs-notes {
   border: 1px solid var(--cs-border-2);
   cursor: pointer;
 }
-.cs-findreplace__action:disabled { opacity: 0.45; cursor: default; }
+.cs-findreplace__action:disabled { opacity: var(--cs-disabled-opacity); cursor: default; }
 
 .cs-findreplace__status,
 .cs-findreplace__error {
@@ -3532,4 +3655,148 @@ body.cs-slide-rail-open .cs-notes {
 .cs-pagesetup__footer {
   display: flex; justify-content: flex-end; gap: 8px;
   padding: 12px 16px; border-top: 1px solid var(--cs-border-2);
+}
+
+/* === Root error boundary — fills the viewport when a React subtree
+   throws. Branded recovery card with reload + collapsible stack. */
+.cs-error-boundary {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--cs-bg);
+  font-family: var(--cs-font);
+  color: var(--cs-text);
+  overflow: auto;
+}
+
+.cs-error-boundary__card {
+  width: 100%;
+  max-width: 520px;
+  padding: 28px 28px 24px;
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-2);
+  text-align: left;
+}
+
+.cs-error-boundary__logo {
+  display: block;
+  margin: 0 0 12px;
+}
+
+.cs-error-boundary__title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cs-text);
+}
+
+.cs-error-boundary__lede {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--cs-text-mute);
+}
+
+.cs-error-boundary__actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.cs-error-boundary__details {
+  margin-top: 14px;
+  border-top: 1px solid var(--cs-border-2);
+  padding-top: 12px;
+  font-size: 12px;
+}
+.cs-error-boundary__details summary {
+  cursor: pointer;
+  color: var(--cs-text-mute);
+  user-select: none;
+}
+.cs-error-boundary__details summary:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: 2px;
+  border-radius: var(--cs-radius);
+}
+
+/* === Autosave-restore banner — bottom-anchored snackbar. Appears on
+   boot when an IDB autosave record is present and the user hasn't
+   opened anything yet. */
+.cs-autosave-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--cs-statusbar-h) + 12px);
+  transform: translateX(-50%);
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px 12px 18px;
+  min-width: 360px;
+  max-width: min(560px, calc(100vw - 32px));
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border-2);
+  border-left: 3px solid var(--cs-accent);
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-shadow-2);
+  font-size: 13px;
+  animation: cs-autosave-in 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.cs-autosave-banner__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.cs-autosave-banner__text strong {
+  font-weight: 600;
+  color: var(--cs-text);
+}
+.cs-autosave-banner__text span {
+  font-size: 12px;
+  color: var(--cs-text-mute);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-autosave-banner__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+@keyframes cs-autosave-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-autosave-banner { animation: none; }
+}
+
+.cs-error-boundary__stack {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--cs-text-mute);
+  background: var(--cs-surface-2);
+  border: 1px solid var(--cs-border-2);
+  border-radius: var(--cs-radius);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
 }

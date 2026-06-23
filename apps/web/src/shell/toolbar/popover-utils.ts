@@ -77,5 +77,7 @@ export function rgbToHex(rgb: string | null | undefined): string {
   }
   const toHex = (n: string) =>
     Math.max(0, Math.min(255, parseInt(n, 10))).toString(16).padStart(2, '0');
-  return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`.toUpperCase();
+  // The regex above has 3 numeric capture groups; if `m` is truthy, all
+  // three groups are present.
+  return `#${toHex(m[1]!)}${toHex(m[2]!)}${toHex(m[3]!)}`.toUpperCase();
 }

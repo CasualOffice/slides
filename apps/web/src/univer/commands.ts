@@ -15,7 +15,7 @@ import type { SlideDataModel } from '@univerjs/slides';
 import { DocSelectionManagerService } from '@univerjs/docs';
 import { CanvasView } from '@univerjs/slides-ui';
 import { printDeck } from '../shell/download-slide';
-import { getAllSelectedElementIds, getSelectedElement, setSelectedElement } from '../shell/selection';
+import { getSelectedElement, setSelectedElement } from '../shell/selection';
 
 // Thin façade over the live Univer instance for ribbon/status-bar dispatches.
 // Reads `window.univer` (set by UniverSlide on mount) so any React component
@@ -172,21 +172,6 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   if (id === 'casual-slides.command.select-all-on-page') {
     return selectAllOnActivePage();
   }
-  if (id === 'casual-slides.command.cycle-selection') {
-    const dir = (params as { direction?: 'next' | 'prev' } | undefined)?.direction;
-    if (dir !== 'next' && dir !== 'prev') return false;
-    return cycleSelectionOnActivePage(dir);
-  }
-  if (id === 'casual-slides.command.align-selection') {
-    const axis = (params as { axis?: AlignAxis } | undefined)?.axis;
-    if (!axis) return false;
-    return alignSelectedElements(axis);
-  }
-  if (id === 'casual-slides.command.distribute-selection') {
-    const axis = (params as { axis?: 'horizontal' | 'vertical' } | undefined)?.axis;
-    if (axis !== 'horizontal' && axis !== 'vertical') return false;
-    return distributeSelectedElements(axis);
-  }
   if (id === 'casual-slides.command.move-active-slide') {
     const dir = (params as { direction?: 'up' | 'down' } | undefined)?.direction;
     if (dir !== 'up' && dir !== 'down') return false;
@@ -212,10 +197,44 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
     } catch {
       /* already started — that's fine */
     }
+    // Univer's ShowDocHyperLinkEditPopupOperation calls
+    // getCurrentUnitOfType(UNIVER_DOC) to resolve the target unit; in a
+    // slides app the slide unit is what the instance service considers
+    // "current", and the editor's inner doc unit
+    // (`__INTERNAL_EDITOR__SLIDE_EDITOR`) is NOT — so the resolution
+    // returns undefined and the popup never opens. Focus the editor
+    // unit ourselves before dispatching: focusUnit() on a
+    // DocumentDataModel flips FOCUSING_DOC + sets the focused unit so
+    // getCurrentUnitOfType(UNIVER_DOC) returns it. After the dispatch
+    // we restore the slide unit as focused so the rest of the chrome
+    // (toolbar selection, slide rail, etc.) keeps reading the right
+    // active page. Without this, Ctrl+K was a silent no-op in the
+    // editor — see EDITING_BUGS.md.
+    const instances = univer.__getInjector().get(IUniverInstanceService);
+    const slideUnitId = instances
+      .getCurrentUnitOfType(UniverInstanceType.UNIVER_SLIDE)
+      ?.getUnitId();
+    const EDITOR_UNIT_ID = '__INTERNAL_EDITOR__SLIDE_EDITOR';
+    const editorUnit = instances.getUnit(EDITOR_UNIT_ID);
+    const restoreSlideFocus = () => {
+      if (slideUnitId) {
+        try { instances.focusUnit(slideUnitId); } catch { /* unit gone */ }
+      }
+    };
+    if (editorUnit) {
+      try { instances.focusUnit(EDITOR_UNIT_ID); } catch { /* not focusable */ }
+    }
     const cs = univer.__getInjector().get(ICommandService);
     try {
-      return await cs.executeCommand('doc.operation.show-hyper-link-edit-popup');
+      const ok = await cs.executeCommand('doc.operation.show-hyper-link-edit-popup');
+      // Don't immediately restore — the popup needs the editor unit to
+      // remain focused while the user types the URL. Restoration
+      // happens via the next user action (click on a shape, open Find,
+      // etc.) which re-focuses the slide unit through the usual flow.
+      void restoreSlideFocus; // referenced to keep close handler if we ever wire it
+      return ok;
     } catch {
+      restoreSlideFocus();
       return false;
     }
   }
@@ -491,240 +510,6 @@ function _moveActiveSlide(delta: -1 | 1): boolean {
 //
 // We clear any prior selection first so Ctrl+A from a partially-
 // selected state always lands on "every element, nothing else".
-// Bulk-align every selected element to the SELECTION bounding box
-// (not the slide). Targets:
-//   left   — every element shares the leftmost left
-//   center — every element shares the horizontal centre of the bbox
-//   right  — every element's (left + width) shares the rightmost right
-//   top    — every element shares the topmost top
-//   middle — every element shares the vertical centre of the bbox
-//   bottom — every element's (top + height) shares the bottommost bottom
-//
-// Aligning to the selection bbox is the PowerPoint default when 2+ are
-// selected. With only 1 element selected the align operation is a no-op
-// (there's nothing else to align to).
-export type AlignAxis = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
-
-// Distribute 3+ selected elements evenly along an axis. Preserves the
-// outermost two (leftmost + rightmost for horizontal, topmost + bottommost
-// for vertical) and re-spaces every interior element so the gaps between
-// CENTRES (not edges) are equal. Equal-centre distribution matches
-// PowerPoint and reads as visually uniform even when widths differ.
-//
-// No-op when fewer than 3 are selected — needs an "outside two" to space
-// between. Each element's repositioning runs through
-// slide.operation.update-element so the live BaseObject refreshes
-// alongside the snapshot and the action is undoable.
-export function distributeSelectedElements(axis: 'horizontal' | 'vertical'): boolean {
-  return withUndo(() => _distributeSelectedElements(axis));
-}
-
-function _distributeSelectedElements(axis: 'horizontal' | 'vertical'): boolean {
-  const univer = getUniver();
-  if (!univer) return false;
-  const targets = getAllSelectedElementIds();
-  if (targets.length < 3) return false;
-  const instances = univer.__getInjector().get(IUniverInstanceService);
-  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
-  if (!model) return false;
-  const unitId = model.getUnitId();
-  const cs = univer.__getInjector().get(ICommandService);
-  const rects: Array<{ pageId: string; id: string; left: number; top: number; width: number; height: number; cx: number; cy: number }> = [];
-  for (const sel of targets) {
-    const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
-    if (!el) continue;
-    const left = el.left ?? 0;
-    const top = el.top ?? 0;
-    const width = el.width ?? 0;
-    const height = el.height ?? 0;
-    rects.push({
-      pageId: sel.pageId,
-      id: sel.elementId,
-      left, top, width, height,
-      cx: left + width / 2,
-      cy: top + height / 2,
-    });
-  }
-  if (rects.length < 3) return false;
-  rects.sort((a, b) => (axis === 'horizontal' ? a.cx - b.cx : a.cy - b.cy));
-  const first = rects[0]!;
-  const last = rects[rects.length - 1]!;
-  const startCentre = axis === 'horizontal' ? first.cx : first.cy;
-  const endCentre = axis === 'horizontal' ? last.cx : last.cy;
-  const step = (endCentre - startCentre) / (rects.length - 1);
-  let touched = 0;
-  for (let i = 1; i < rects.length - 1; i += 1) {
-    const r = rects[i]!;
-    const targetCentre = startCentre + step * i;
-    const nextProps: Record<string, number> = {};
-    if (axis === 'horizontal') {
-      const nextLeft = targetCentre - r.width / 2;
-      if (Math.abs(nextLeft - r.left) < 0.5) continue;
-      nextProps.left = nextLeft;
-    } else {
-      const nextTop = targetCentre - r.height / 2;
-      if (Math.abs(nextTop - r.top) < 0.5) continue;
-      nextProps.top = nextTop;
-    }
-    try {
-      void cs.executeCommand('slide.operation.update-element', {
-        unitId,
-        oKey: r.id,
-        props: nextProps,
-      });
-      touched += 1;
-    } catch {
-      const el = model.getPage(r.pageId)?.pageElements?.[r.id];
-      if (el) {
-        if (nextProps.left !== undefined) el.left = nextProps.left;
-        if (nextProps.top !== undefined) el.top = nextProps.top;
-        touched += 1;
-      }
-    }
-  }
-  if (touched === 0) return false;
-  model.incrementRev();
-  const active = model.getActivePage();
-  if (active) model.setActivePage(active);
-  notify(`Distributed ${rects.length} elements ${axis === 'horizontal' ? 'horizontally' : 'vertically'}`);
-  return true;
-}
-
-export function alignSelectedElements(axis: AlignAxis): boolean {
-  return withUndo(() => _alignSelectedElements(axis));
-}
-
-function _alignSelectedElements(axis: AlignAxis): boolean {
-  const univer = getUniver();
-  if (!univer) return false;
-  const targets = getAllSelectedElementIds();
-  if (targets.length < 2) return false;
-  const instances = univer.__getInjector().get(IUniverInstanceService);
-  const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
-  if (!model) return false;
-  const unitId = model.getUnitId();
-  const cs = univer.__getInjector().get(ICommandService);
-  // Collect current rects for every target.
-  const rects: Array<{ pageId: string; id: string; left: number; top: number; width: number; height: number }> = [];
-  for (const sel of targets) {
-    const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
-    if (!el) continue;
-    rects.push({
-      pageId: sel.pageId,
-      id: sel.elementId,
-      left: el.left ?? 0,
-      top: el.top ?? 0,
-      width: el.width ?? 0,
-      height: el.height ?? 0,
-    });
-  }
-  if (rects.length < 2) return false;
-  // Selection bounding box.
-  const minLeft = Math.min(...rects.map((r) => r.left));
-  const maxRight = Math.max(...rects.map((r) => r.left + r.width));
-  const minTop = Math.min(...rects.map((r) => r.top));
-  const maxBottom = Math.max(...rects.map((r) => r.top + r.height));
-  const bboxCenterX = (minLeft + maxRight) / 2;
-  const bboxCenterY = (minTop + maxBottom) / 2;
-  let touched = 0;
-  for (const r of rects) {
-    const nextProps: Record<string, number> = {};
-    if (axis === 'left') nextProps.left = minLeft;
-    else if (axis === 'right') nextProps.left = maxRight - r.width;
-    else if (axis === 'center') nextProps.left = bboxCenterX - r.width / 2;
-    else if (axis === 'top') nextProps.top = minTop;
-    else if (axis === 'bottom') nextProps.top = maxBottom - r.height;
-    else if (axis === 'middle') nextProps.top = bboxCenterY - r.height / 2;
-    // Skip if the move is sub-pixel (avoid spurious updates).
-    const dx = nextProps.left !== undefined ? Math.abs(nextProps.left - r.left) : 0;
-    const dy = nextProps.top !== undefined ? Math.abs(nextProps.top - r.top) : 0;
-    if (dx < 0.5 && dy < 0.5) continue;
-    try {
-      void cs.executeCommand('slide.operation.update-element', {
-        unitId,
-        oKey: r.id,
-        props: nextProps,
-      });
-      touched += 1;
-    } catch {
-      const el = model.getPage(r.pageId)?.pageElements?.[r.id];
-      if (el) {
-        if (nextProps.left !== undefined) el.left = nextProps.left;
-        if (nextProps.top !== undefined) el.top = nextProps.top;
-        touched += 1;
-      }
-    }
-  }
-  if (touched === 0) return false;
-  model.incrementRev();
-  const active = model.getActivePage();
-  if (active) model.setActivePage(active);
-  notify(`Aligned ${touched} element${touched === 1 ? '' : 's'}`);
-  return true;
-}
-
-// Tab / Shift+Tab cycling: select the next (or previous) element on the
-// active page after whichever element is currently the bridge's
-// "selected" tuple. Wraps at the ends.
-//
-// When nothing is selected we land on the first element (or last for
-// 'prev'), so a fresh slide + Tab brings up the first object without
-// the user having to click first.
-export function cycleSelectionOnActivePage(direction: 'next' | 'prev'): boolean {
-  const univer = getUniver();
-  if (!univer) return false;
-  try {
-    const injector = univer.__getInjector();
-    const instances = injector.get(IUniverInstanceService);
-    const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
-    if (!model) return false;
-    const unitId = model.getUnitId();
-    const activePage = model.getActivePage();
-    if (!activePage) return false;
-    // Stable order driven by the element insertion sequence, mirroring
-    // PowerPoint's Tab order. We sort by zIndex first (bottom-up) so
-    // Tab cycles roughly back-to-front, matching what users expect
-    // when laying out stacked shapes.
-    const elementIds = Object.values(activePage.pageElements ?? {})
-      .filter((e) => !!e?.id)
-      .sort((a, b) => (a!.zIndex ?? 0) - (b!.zIndex ?? 0))
-      .map((e) => e!.id);
-    if (elementIds.length === 0) return false;
-    const cur = getSelectedElement();
-    const curIdx = cur ? elementIds.indexOf(cur.elementId) : -1;
-    let nextIdx: number;
-    if (curIdx < 0) {
-      nextIdx = direction === 'next' ? 0 : elementIds.length - 1;
-    } else if (direction === 'next') {
-      nextIdx = (curIdx + 1) % elementIds.length;
-    } else {
-      nextIdx = (curIdx - 1 + elementIds.length) % elementIds.length;
-    }
-    const targetId = elementIds[nextIdx];
-    if (!targetId) return false;
-    const canvasView = injector.get(CanvasView);
-    const renderUnit = canvasView.getRenderUnitByPageId(activePage.id, unitId);
-    const scene = renderUnit?.scene;
-    if (!scene) return false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const transformer = scene.getTransformer() as any;
-    if (!transformer) return false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const objects = (scene.getAllObjects?.() ?? []) as Array<any>;
-    const target = objects.find((o) => o?.oKey === targetId);
-    if (!target) return false;
-    if (typeof transformer.clearSelectedObjects === 'function') {
-      transformer.clearSelectedObjects();
-    } else if (typeof transformer.clearControls === 'function') {
-      transformer.clearControls();
-    }
-    transformer.setSelectedControl(target);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function selectAllOnActivePage(): boolean {
   const univer = getUniver();
   if (!univer) return false;

@@ -40,7 +40,9 @@ export function AlignPicker({ value, onChange }: AlignPickerProps) {
 
   useDismiss(!!anchor, popoverRef, () => setAnchor(null));
 
-  const current = ALIGNS.find((a) => a.value === value) ?? ALIGNS[0];
+  // ALIGNS is a non-empty literal (left/center/right/justify); [0] is
+  // always inhabited.
+  const current = ALIGNS.find((a) => a.value === value) ?? ALIGNS[0]!;
   const pos = anchorPosition(anchor, 184, 96);
 
   function pick(entry: AlignEntry) {

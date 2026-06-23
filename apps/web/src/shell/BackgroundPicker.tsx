@@ -75,7 +75,8 @@ function rgbToHex(rgb: string | null | undefined | void): string {
   const m = rgb.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
   if (!m) return '#ffffff';
   const toHex = (n: string) => Math.max(0, Math.min(255, parseInt(n, 10))).toString(16).padStart(2, '0');
-  return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`.toUpperCase();
+  // 3 numeric capture groups — all inhabited once `m` is truthy.
+  return `#${toHex(m[1]!)}${toHex(m[2]!)}${toHex(m[3]!)}`.toUpperCase();
 }
 
 export function BackgroundPicker({ anchorRect, onClose }: BackgroundPickerProps) {

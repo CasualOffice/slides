@@ -43,8 +43,9 @@ export function useFocusTrap(active: boolean, ref: RefObject<HTMLElement>) {
         e.preventDefault();
         return;
       }
-      const firstEl = items[0];
-      const lastEl = items[items.length - 1];
+      // length > 0 was just asserted — both indexes are inhabited.
+      const firstEl = items[0]!;
+      const lastEl = items[items.length - 1]!;
       const activeEl = document.activeElement as HTMLElement | null;
       if (e.shiftKey) {
         if (activeEl === firstEl || !container.contains(activeEl)) {

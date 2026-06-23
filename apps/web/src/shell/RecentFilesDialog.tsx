@@ -165,6 +165,7 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
                   disabled={busy}
                   onClick={() => void handleOpen(entry)}
                   title={`Open ${entry.name}`}
+                  aria-label={`Open ${entry.name}`}
                   data-testid="recent-item"
                   data-recent-name={entry.name}
                 >
@@ -198,7 +199,7 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
           </ul>
         )}
 
-        {error && <p className="cs-recent__error">{error}</p>}
+        {error && <p className="cs-recent__error" role="alert" aria-live="assertive">{error}</p>}
 
         <footer className="cs-recent__footer">
           {entries && entries.length > 0 && (
