@@ -692,19 +692,13 @@ export function App() {
     // Tab / Shift+Tab cycle through elements on the active slide. Runs
     // in CAPTURE phase so it wins over the browser's default focus-ring
     // traversal whenever the click target is the canvas surface — we
-    // bail out for real form fields / focusable controls and dialogs
-    // so normal Tab navigation in chrome controls keeps working.
+    // bail out for real form fields (INPUT/TEXTAREA) and dialogs so
+    // normal Tab navigation in chrome controls keeps working.
     const tabCycleHandler = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const target = e.target as HTMLElement | null;
-      if (target && (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'BUTTON' ||
-        target.tagName === 'A' ||
-        target.tagName === 'SELECT'
-      )) return;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON' || target.tagName === 'A' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA')) return;
       if (typeof document !== 'undefined' && document.querySelector('[role="dialog"]')) return;
       e.preventDefault();
       e.stopPropagation();
@@ -719,9 +713,9 @@ export function App() {
       }
     };
     // PageUp / PageDown navigate slides in editing mode. The slideshow
-    // overlay has its own handler — skip when a dialog is open or focus
-    // is in an editable surface so paging inside text edit doesn't jump
-    // slides under the user.
+    // has its own equivalent handler — skip when a dialog is open or
+    // focus is in an editable surface so paging inside a text edit
+    // doesn't jump slides under the user.
     const pageNavHandler = (e: KeyboardEvent) => {
       if (e.key !== 'PageUp' && e.key !== 'PageDown' && e.key !== 'Home' && e.key !== 'End') return;
       if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;

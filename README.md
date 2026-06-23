@@ -4,7 +4,7 @@
 
 **Open-source self-hosted web slides editor with `.pptx` round-trip — an alternative to Google Slides, PowerPoint Online, and PPTist (deeper fidelity than the latter; closer to native Office UX than the former two).**
 
-[![Deploy](https://github.com/schnsrw/slides/actions/workflows/deploy-pages.yml/badge.svg?branch=main)](https://github.com/schnsrw/slides/actions/workflows/deploy-pages.yml)
+[![Deploy](https://github.com/CasualOffice/slides/actions/workflows/deploy-pages.yml/badge.svg?branch=main)](https://github.com/CasualOffice/slides/actions/workflows/deploy-pages.yml)
 [![Fidelity](https://img.shields.io/badge/pptx%20fidelity-93%2F99%20%E2%9C%93-brightgreen)](./docs/FIDELITY_TRACKER.md)
 [![Wave](https://img.shields.io/badge/latest-wave%2012-blue)](./docs/FIDELITY_TRACKER.md)
 [![Version](https://img.shields.io/badge/version-v0.1.0-brightgreen)](./CHANGELOG.md)
@@ -20,9 +20,9 @@ Casual Slides is a **self-hostable, browser-based slides editor** that looks and
 
 **Compares to:** Google Slides · Microsoft PowerPoint Online · PPTist · OnlyOffice Presentation Editor.
 
-Built on [Univer OSS](https://github.com/dream-num/univer) (Apache-2.0) — the OSS variant, **never the Pro package** — with a fork-and-patch layer for the gaps Univer hasn't filled (collab rev tracking, element mutations as `CommandType.MUTATION`, new `IPageElement` variants for tables/charts/video). Sister projects: [Casual Sheets](https://github.com/schnsrw/sheets) (`.xlsx`, v0.2.1) and [Casual Editor](https://github.com/schnsrw/docx) (`.docx`).
+Built on [Univer OSS](https://github.com/dream-num/univer) (Apache-2.0) — the OSS variant, **never the Pro package** — with a fork-and-patch layer for the gaps Univer hasn't filled (collab rev tracking, element mutations as `CommandType.MUTATION`, new `IPageElement` variants for tables/charts/video). Sister projects: [Casual Sheets](https://github.com/CasualOffice/sheets) (`.xlsx`, v0.2.1) and [Casual Editor](https://github.com/CasualOffice/docx) (`.docx`).
 
-> 🎉 **Status: v0.1.0 (2026-06-01) — first tagged release.** Single-user editor works end-to-end with `.pptx` round-trip; Office ribbon, layouts, themes, backgrounds, format pane, presenter view, find-and-replace, slideshow, PDF + PNG export, recent files, autosave, error boundary, Docker self-host all live. **Co-edit is gated behind `VITE_COLLAB_ENABLED`** (default off) — the existing raw-WebSocket broadcast remains a single-active-editor spike; the Yjs + Hocuspocus migration ([Casual Sheets has it](https://github.com/schnsrw/sheets/blob/main/docs/PRODUCTION_PIPELINE.md)) is the v0.2.0 target. See [`CHANGELOG.md`](./CHANGELOG.md).
+> 🎉 **Status: v0.1.0 (2026-06-01) — first tagged release.** Single-user editor works end-to-end with `.pptx` round-trip; Office ribbon, layouts, themes, backgrounds, format pane, presenter view, find-and-replace, slideshow, PDF + PNG export, recent files, autosave, error boundary, Docker self-host all live. **Co-edit is gated behind `VITE_COLLAB_ENABLED`** (default off) — the existing raw-WebSocket broadcast remains a single-active-editor spike; the Yjs + Hocuspocus migration ([Casual Sheets has it](https://github.com/CasualOffice/sheets/blob/main/docs/PRODUCTION_PIPELINE.md)) is the v0.2.0 target. See [`CHANGELOG.md`](./CHANGELOG.md).
 
 ---
 
@@ -62,7 +62,7 @@ Today's collab is the v0.0.x "good enough for one editor at a time" spike:
 - 173-line bridge that broadcasts mutations via JSON envelopes; sufficient for single-active-editor sessions
 - Anonymous rooms by URL · presence callbacks · echo-loop guard via `fromCollab` flag
 
-**Yjs + Hocuspocus migration is the v0.1.0 blocker.** Same shape Casual Sheets uses ([`apps/server/src/index.ts`](https://github.com/schnsrw/sheets/blob/main/apps/server/src/index.ts) — Fastify + Hocuspocus + rate limit + room cap + replay retry + dead-letter). The migration is mechanical port work; what's holding it is fidelity-first investment.
+**Yjs + Hocuspocus migration is the v0.1.0 blocker.** Same shape Casual Sheets uses ([`apps/server/src/index.ts`](https://github.com/CasualOffice/sheets/blob/main/apps/server/src/index.ts) — Fastify + Hocuspocus + rate limit + room cap + replay retry + dead-letter). The migration is mechanical port work; what's holding it is fidelity-first investment.
 
 See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the system diagram and target Y.Doc shape.
 
@@ -71,8 +71,8 @@ See [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the system diagram and 
 **One image, one port.** The repo's root `Dockerfile` is a multi-stage build (deps → build-web → runtime) that produces a single `node:22-alpine` image. The runtime serves the built Vite bundle from `apps/web/dist` *and* the `/collab` WebSocket relay on the same port — no nginx, no reverse-proxy WS plumbing.
 
 ```sh
-docker build -t schnsrw/casual-slides:latest .
-docker run -p 3000:3000 schnsrw/casual-slides:latest
+docker build -t casualoffice/casual-slides:latest .
+docker run -p 3000:3000 casualoffice/casual-slides:latest
 # open http://localhost:3000
 # verify: curl http://localhost:3000/health → {"ok":true,"rooms":N,"ts":…}
 ```
@@ -102,7 +102,7 @@ The `docker-publish.yml` workflow (triggered on `v*` tags) builds multi-arch (`l
 
 Univer's slides packages are real but have gaps the upstream hasn't filled yet. We track them in [`docs/UNIVER_SLIDES_GAPS.md`](./docs/UNIVER_SLIDES_GAPS.md) (10 gaps). For each gap:
 
-1. Land the change in the fork at [`schnsrw/univer-revamp`](https://github.com/schnsrw/univer-revamp) on a `slide/<tag>` branch.
+1. Land the change in the fork at [`CasualOffice/univer-revamp`](https://github.com/CasualOffice/univer-revamp) on a `slide/<tag>` branch.
 2. Open the upstream PR to `dream-num/univer`.
 3. Mirror the same diff as a `pnpm patch` artifact under [`patches/`](./patches/) so production builds get the fix without waiting for an upstream release.
 
@@ -110,7 +110,7 @@ The first patch is already live:
 
 | # | Branch | What | Status |
 |---|---|---|---|
-| Gap 1 | [`slide/rev-tracking`](https://github.com/schnsrw/univer-revamp/tree/slide/rev-tracking) | `getRev` / `setRev` / `incrementRev` on `SlideDataModel` | ✅ patched here, upstream PR pending |
+| Gap 1 | [`slide/rev-tracking`](https://github.com/CasualOffice/univer-revamp/tree/slide/rev-tracking) | `getRev` / `setRev` / `incrementRev` on `SlideDataModel` | ✅ patched here, upstream PR pending |
 | Gap 2 | `slide/element-mutations` | Route element ops through `CommandType.MUTATION` + COMMAND pairs with inverses (collab + undo blocker) | ⏳ next |
 | Gap 3 | `slide/element-{table,chart,line,video}` | New page-element types | ⏳ P4 |
 | Gap 8 | `slide/facade-api` | `FSlide` / `FPage` / `FElement` facade | ⏳ P1 ongoing |
@@ -156,7 +156,7 @@ The dev server boots the Spike A bootstrap — a 3-page deck rendered via `@univ
 └── CLAUDE.md                     # project guardrails for AI-assisted development
 ```
 
-The Univer fork lives in a separate repo: [`schnsrw/univer-revamp`](https://github.com/schnsrw/univer-revamp). We consume `@univerjs/*` from npm at v0.24.0 and apply patches; the fork is for upstream PR authorship.
+The Univer fork lives in a separate repo: [`CasualOffice/univer-revamp`](https://github.com/CasualOffice/univer-revamp). We consume `@univerjs/*` from npm at v0.24.0 and apply patches; the fork is for upstream PR authorship.
 
 ---
 
@@ -170,9 +170,9 @@ The Univer fork lives in a separate repo: [`schnsrw/univer-revamp`](https://gith
 | pptx export | PptxGenJS (MIT) — planned P1 |
 | pptx import | JSZip + fast-xml-parser → `ISlideData` (custom) — planned P0 Spike B |
 | Collab transport | Yjs (CRDT) + Hocuspocus over WebSocket — planned P2 |
-| Collab server | Fastify + Hocuspocus, lifted from `schnsrw/sheets` — planned P2 |
+| Collab server | Fastify + Hocuspocus, lifted from `CasualOffice/sheets` — planned P2 |
 | Persistence | Redis — optional, 7-day TTL — planned P2 |
-| Self-host | Docker (multi-arch) + WOPI + JWT + admin + webhooks, lifted from `schnsrw/sheets` — planned P6 |
+| Self-host | Docker (multi-arch) + WOPI + JWT + admin + webhooks, lifted from `CasualOffice/sheets` — planned P6 |
 
 ---
 
@@ -190,4 +190,4 @@ The Univer fork lives in a separate repo: [`schnsrw/univer-revamp`](https://gith
 
 Apache-2.0. See [`LICENSE`](./LICENSE).
 
-The Univer fork at [`schnsrw/univer-revamp`](https://github.com/schnsrw/univer-revamp) retains its upstream Apache-2.0 license. The `pnpm patch` artifacts under [`patches/`](./patches/) are derived from that fork and are also Apache-2.0.
+The Univer fork at [`CasualOffice/univer-revamp`](https://github.com/CasualOffice/univer-revamp) retains its upstream Apache-2.0 license. The `pnpm patch` artifacts under [`patches/`](./patches/) are derived from that fork and are also Apache-2.0.

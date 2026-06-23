@@ -1,7 +1,12 @@
 packages:
   - "apps/*"
-
-# The fork at ../univer-revamp/ is a separate pnpm workspace and is NOT
-# included here. We consume @univerjs/* from npm at the pinned version
-# (currently 0.24.0, matching the fork). Patches land via `pnpm patch`
-# and are captured in patches/ — see docs/UNIVER_SLIDES_GAPS.md.
+  # Engine consumed from source via the univer-revamp submodule (not npm).
+  # Mirror the engine's internal globs so its workspace:* inter-deps resolve
+  # within this unified workspace.
+  - "univer-revamp/common/*"
+  - "univer-revamp/packages/*"
+  - "univer-revamp/presets"
+  - "univer-revamp/presets/packages/*"
+  - "univer-revamp/mockdata"
+  # Design system / UI kit (single package).
+  - "design-book"

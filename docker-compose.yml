@@ -11,7 +11,7 @@
 
 services:
   app:
-    image: schnsrw/casual-slides:latest
+    image: casualoffice/casual-slides:latest
     build:
       context: .
       dockerfile: Dockerfile

@@ -97,7 +97,11 @@ export function PresenterView({
         </div>
         <div className="cs-slideshow__presenter-timer">
           <Icon name="timer" size={14} />
-          <span className="cs-slideshow__presenter-timer-value">
+          <span
+            className="cs-slideshow__presenter-timer-value"
+            aria-live="off"
+            aria-label={t('presenter.elapsedAria', { elapsed: formatElapsed(elapsedMs) })}
+          >
             {formatElapsed(elapsedMs)}
           </span>
           <button

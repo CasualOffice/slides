@@ -1,0 +1,10 @@
+[submodule "collab"]
+	path = collab
+	url = git@github.com:CasualOffice/collab.git
+[submodule "design-book"]
+	path = design-book
+	url = git@github.com:CasualOffice/design-book.git
+[submodule "univer-revamp"]
+	path = univer-revamp
+	url = git@github.com:CasualOffice/univer-revamp.git
+	branch = slides/fidelity-roadmap

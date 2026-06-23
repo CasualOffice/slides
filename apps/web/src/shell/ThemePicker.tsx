@@ -29,7 +29,7 @@ export interface Theme {
 }
 
 export const THEMES: Theme[] = [
-  { id: 'classic',  name: 'Classic',  background: 'rgb(255, 255, 255)', swatch: '#ffffff', accent: '#0891B2', headingFont: 'Inter',            bodyFont: 'Inter',          headingRgb: '#1F2937', bodyRgb: '#374151' },
+  { id: 'classic',  name: 'Classic',  background: 'rgb(255, 255, 255)', swatch: '#ffffff', accent: '#0D9488', headingFont: 'Inter',            bodyFont: 'Inter',          headingRgb: '#1F2937', bodyRgb: '#374151' },
   { id: 'paper',    name: 'Paper',    background: 'rgb(250, 248, 244)', swatch: '#faf8f4', accent: '#5b4636', headingFont: 'Merriweather',     bodyFont: 'PT Sans',        headingRgb: '#3b2f25', bodyRgb: '#5b4636' },
   { id: 'sky',      name: 'Sky',      background: 'rgb(230, 244, 255)', swatch: '#e6f4ff', accent: '#1a73e8', headingFont: 'Montserrat',       bodyFont: 'Open Sans',      headingRgb: '#0b3d91', bodyRgb: '#1f3a5f' },
   { id: 'mint',     name: 'Mint',     background: 'rgb(230, 250, 240)', swatch: '#e6faf0', accent: '#107c41', headingFont: 'Poppins',          bodyFont: 'Lato',           headingRgb: '#0c5c30', bodyRgb: '#1f4a35' },

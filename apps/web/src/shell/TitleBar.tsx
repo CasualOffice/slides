@@ -344,7 +344,7 @@ export function TitleBar({
       if (menuId === 'help') {
         if (itemId === 'about') onOpenAbout();
         if (itemId === 'repo') {
-          window.open('https://github.com/schnsrw/slides', '_blank', 'noopener,noreferrer');
+          window.open('https://github.com/CasualOffice/slides', '_blank', 'noopener,noreferrer');
         }
       }
     },

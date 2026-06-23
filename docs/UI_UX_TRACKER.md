@@ -5,7 +5,7 @@ Constraint: **SVG icons only, no emoji, no icon fonts**.
 
 Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked · `[-]` won't fix
 
-Last update: 2026-05-28 — **Waves 1 + 2 + 3 pushed**. Latest commits: a572cbb (Format pane + Slideshow presenter), 2266296 (Find &amp; Replace). Layout clamp fix `0dc12d6` resolves the right-edge trim. Wave 3 agents leaked into main mid-flight; W1b agent was stopped, will be redone serially.
+Last update: 2026-05-30 — **Brand refresh (cyan → teal) + Wave 0 production-hardening pass landed in working tree**. Logo redrawn (`brand.svg`, `favicon.svg`), token system collapsed to one accent family + semantic error/warn/success tokens, disabled opacity unified at MD3 0.38. Wave 0 fixes: root error boundary, busy overlay on Open/Save, pptx import resilience (size/encryption/corrupt detection with friendly messages), autosave to IDB + dirty `beforeunload` guard + restore banner, WCAG quick wins (`--cs-text-dim` 4.94:1, aria-labels on icon-only buttons, aria-live on slideshow timer, error banner role=alert). Previous: a572cbb Format pane + Slideshow presenter, 2266296 Find &amp; Replace, 0dc12d6 layout clamp.
 
 ---
 
@@ -17,6 +17,70 @@ Last update: 2026-05-28 — **Waves 1 + 2 + 3 pushed**. Latest commits: a572cbb 
 - **Accessibility** — WCAG 2.2 AA contrast (≥ 4.5:1 text, ≥ 3:1 UI), `aria-modal` + focus trap on dialogs, `aria-live` for transient status, screen-reader labels on every icon-only button.
 - **No emoji, no icon fonts, no unicode arrows in labels.** Inline SVG only.
 - **Optimistic UI for collab-bound actions** — every command goes through `slide.mutation.*` so Phase 2 collab gets it for free.
+
+---
+
+## Wave 0 — production hardening (landed 2026-05-30, in working tree)
+
+Higher-leverage than any open Wave-5 bucket — these are the gaps that
+made the editor feel pre-beta to a discerning user. All six are now
+implemented; commit + push pending.
+
+### Bucket H0 — Brand consolidation
+- [x] `:root` accent swapped cyan-600 → teal-600 (`#0D9488`); `--cs-accent-dk`, `--cs-accent-bg`, `--cs-focus` aligned; added `--cs-accent-bg-hv` for primary-button hover (was hardcoded `#fde2d4` orange).
+- [x] New semantic tokens `--cs-error / --cs-error-bg / --cs-error-border`, `--cs-warn` trio, `--cs-success` trio. Six previously-hardcoded literals in `.cs-titlebar__pill--error`, `.cs-titlebar__live--{live,connecting,error}`, `.cs-recent__error` now pull from tokens.
+- [x] `--cs-disabled-opacity: 0.38` — Material spec; replaces `.45 / .55 / .35 / .60` variants across 7 selectors.
+- [x] Old cyan rgba `rgba(8, 145, 178, ...)` (find-replace highlight ring + focus shadow) repainted to teal `rgba(13, 148, 136, ...)`.
+- [x] ThemePicker "Classic" theme accent `#0891B2 → #0D9488`.
+- [x] Brand mark redrawn — clean 32×40 hand-coded SVG (`public/brand.svg`, `public/favicon.svg`) with teal/emerald gradient page + folded corner + centered play disc. TitleBar and AboutDialog reference it via `<img src>` instead of inline SVG.
+- [x] Marketing site (`../site`) `--slides` token swapped red-700 → teal-600 to match. Logo asset mirrored to `../site/public/slides-logo.{svg,png}`.
+
+### Bucket H1 — Root error boundary
+- [x] `shell/ErrorBoundary.tsx` — class component with `componentDidCatch`, fallback renders a branded card (logo + title + lede + Reload button + collapsible stack). Mounted in `main.tsx` around the App + provider subtree.
+- [x] `dialogs.errors.boundary.*` i18n keys (`title`, `lede`, `reload`, `detailsLabel`).
+- [x] `console.error` mirror so a future Sentry/Datadog sink picks it up automatically.
+
+### Bucket H2 — Busy overlay (perceived performance)
+- [x] `shell/BusyOverlay.tsx` — renders inside `.cs-workspace` when `opening || saving`. Spinner + label, `role="status"`, `aria-busy="true"`, pointer-events block so the user can't reach the canvas mid-load.
+- [x] `.cs-spinner` reusable utility (28 px brand-tinted ring, 0.8 s rotation, `prefers-reduced-motion` honoured).
+- [x] `chrome.workspace.busy{Opening,Saving}` i18n keys.
+
+### Bucket H3 — PPTX import resilience
+- [x] `pptx-import.ts` top-of-`importPptxToSlides`:
+  - 200 MB soft cap with `formatBytes` reporting — refuses oversized files before JSZip allocates inflate buffers.
+  - OLE compound-file magic-byte sniff (`D0 CF 11 E0 A1 B1 1A E1`) → "password-protected, decrypt in PowerPoint first" message.
+  - JSZip.loadAsync wrapped → "corrupt or not a PowerPoint file" with the underlying cause.
+  - "presentation.xml not found" rephrased to user-readable "missing its presentation manifest".
+- [x] Errors cross the worker boundary as strings (current shape) and surface in App.tsx's existing `error` pill verbatim.
+- [x] `errors.pptx{TooLarge,Corrupt,Encrypted}` i18n keys seeded for the eventual W1b migration.
+
+### Bucket H4 — Autosave + crash recovery
+- [x] `storage/autosave.ts` — separate IDB (`casual-slides-autosave`) with a single `current` row keyed on `key`. `saveAutosave`, `loadAutosave`, `clearAutosave`; quota / private-mode failures swallowed to `console.warn`.
+- [x] App.tsx: 30 s debounced autosave on every `dirty` snapshot change; cleared on Save success and on Open (the new deck replaces any pending recovery record).
+- [x] App.tsx: `beforeunload` guard registered only while `dirty` — browsers show their native "leave site?" dialog.
+- [x] `shell/AutosaveRestoreBanner.tsx` — bottom-anchored snackbar offered on mount IF the user is still on `DEFAULT_SLIDE_DATA`. Restore replaces the snapshot (marks dirty so the next Save promotes it); Dismiss `clearAutosave()`s.
+- [x] `chrome.autosave.{title,subtitle,restore,dismiss}` i18n keys; `formatRelative` for the timestamp.
+
+### Bucket H5 — WCAG 2.2 AA quick wins
+- [x] `--cs-text-dim` `#80868b` → `#6b7177` — was 3.68:1 (fail), now 4.94:1 (AA body text).
+- [x] `RecentFilesDialog` Open button gained `aria-label`; error pill gained `role="alert"` + `aria-live="assertive"`.
+- [x] `AboutDialog` close button gained `aria-label`.
+- [x] `PresenterView` elapsed timer: explicit `aria-live="off"` + `aria-label` so the value is readable on focus without announcing every second.
+- [x] `presenter.elapsedAria` i18n key.
+- [x] Slideshow counter + FormatPane collapsibles confirmed already wired (`aria-live="polite"` and `aria-expanded` respectively).
+
+### Bucket H6 — Tracker maintenance
+- [x] Brand-colour decision (line ~273) updated from cyan to teal.
+- [x] Bucket I replaced with concrete items (see new Bucket I below).
+
+### Not yet (deliberate cut for this pass)
+- [x] Initial splash while Univer boots — `shell/UniverBootSplash.tsx` paints over the canvas area while Univer's plugin lifecycle warms up. Logo + small spinner + "Starting the editor…" copy. App.tsx flips it off ~120 ms after `SlideDataModel` is reachable inside the existing `wire()` effect; 8 s safety net so a hung engine doesn't strand the user; resets on `snapshot.id` change so Open/import remount also shows the splash. `prefers-reduced-motion` honoured. New `chrome.workspace.bootSplash` key; new `.cs-spinner--sm` variant.
+- [ ] `noUncheckedIndexedAccess` + `as any` cleanup.
+- [x] Code-splitting — `React.lazy` on 6 modally-shown surfaces (SlideShow, ThemePicker, PageSetupDialog, PropertiesDialog, RecentFilesDialog, AboutDialog) wrapped in a single `<Suspense fallback={null}>` block in `App.tsx`; gated on the `open` boolean so the chunk import only fires on first activation. Plus dynamic `await import('./shell/download-slide')` at the PNG / PDF call sites so `html-to-image` + `jsPDF` aren't paid until a user clicks Download. Emits 6 small lazy chunks (3–10 KB each) + keeps the ~200 KB `html2canvas` chunk genuinely deferred behind a click. Net main-bundle effect is modest — the dialogs themselves were small — but the Download path is now the only entry to the heaviest non-Univer dep. Bigger gain (Univer vendor split via `manualChunks`) is a follow-up.
+- [x] `setInterval` / `setTimeout` cleanup audit — auditor flagged 8 sites; actual count was 2 hygiene fixes (Toolbar `tryWire`, CollabProvider `tryStart` retry timeouts now capture + clear their handles in the effect cleanup). All other 22 sites were already correctly captured + cleared.
+- [x] CI infrastructure — `.github/workflows/ci.yml` now runs three jobs in parallel: `typecheck`, **`unit`** (Vitest 1.6 + fake-indexeddb), and `e2e` (Playwright). Unit specs cover the two highest-leverage new modules: `src/storage/autosave.test.ts` (5 tests — null on empty, save+load roundtrip, overwrite semantics on the single-row store, clear, deep-clone-on-save proof) and `src/pptx/pptx-import.test.ts` (4 tests — 200 MB size cap, OLE magic-byte detection of password-protected files, JSZip parse failure → "corrupt" message, real ZIP without `ppt/presentation.xml` → "missing manifest" message). Pinned to vitest 1.x for Vite 5 peer compatibility. `pnpm test:unit` from root; `pnpm test` / `pnpm test:watch` inside `apps/web/`. 9 tests, ~1 s wall clock.
+- [x] Collab feature gate — `VITE_COLLAB_ENABLED` (default `false`). `CollabProvider` early-returns on `?room=…` if the flag isn't `'true'`, console-warns once so the operator sees the reason in devtools. `apps/web/.env.example` documents the flag; `apps/web/src/vite-env.d.ts` carries the typed contract; `playwright.collab.config.ts` opens the gate for the multi-tab spec via `webServer.env`. Still TODO upstream: the 7 `TODO(collab)` editing paths (drag-reorder, theme cascade, find-replace, format pane, layout, background, slide context moves) still bypass the command bus — this gate keeps them out of shared rooms until fork-side `slide.mutation.*` patches land (UNIVER_SLIDES_GAPS.md Gap 1.4).
+- [x] Dockerfile + deploy story — **single image, single port** (mirroring sheet's pattern per CLAUDE.md): one `node:22-alpine` runtime hosts both the Vite-built bundle AND the `/collab` WebSocket relay. Static-file serving added to `apps/server/src/index.ts` via the new `apps/server/src/static.ts` (MIME table, streaming responses, `safeJoin` traversal guard, immutable cache on hashed `/assets/*`, no-cache on `index.html`, SPA fallback). Root `Dockerfile` is multi-stage (deps → build-web → runtime); `.dockerignore` keeps the image lean; `docker-compose.yml` adds restart policy + healthcheck; `.github/workflows/docker-publish.yml` builds `linux/amd64` + `linux/arm64`, signs with SLSA provenance + SBOM, and pushes rolling tags (`:0.1.0`, `:0.1`, `:0`, `:latest`) on every `v*` git tag. Smoke-tested locally: `/health` JSON, hashed-asset cache, SPA fallback, path-traversal defence all behave. README's "Self-host" section rewritten with the operator-facing build args table.
 
 ---
 
@@ -209,11 +273,14 @@ Scope: `Toolbar.tsx` + new components. Industry-standard format controls.
 - [ ] Real print preview (slide-by-slide, not viewport).
 - [ ] Recent files pin / favorite.
 
-### Bucket I — Accessibility pass
-- [ ] `aria-modal="true"` + focus trap on every dialog.
-- [ ] Remove `text-transform: lowercase` on live status pill.
-- [ ] Tooltip truncation on filename input (grow on focus).
-- [ ] `aria-describedby` on disabled buttons explaining why.
+### Bucket I — Accessibility pass (W0 took the quick wins; these remain)
+- [ ] Touch targets — Toolbar (32×32) and StatusBar (22 h) below the WCAG 2.2 AA 44×44 floor. Decide: (a) widen, or (b) commit to "desktop only" and document.
+- [ ] Canvas keyboard support — element select, arrow-nudge, Tab-cycle. Currently mouse-only outside of Univer's internal text edit.
+- [ ] SlideRail focused-tile visual outline (`:focus-visible`) so the arrow-key keyboard nav announced on focus matches the visible state.
+- [ ] `prefers-reduced-motion` for the find-replace dialog slide-in (the other animations already gated).
+- [ ] `forced-colors: active` pass — high-contrast Windows mode currently untested.
+- [ ] FindReplaceDialog `aria-modal` semantics — currently `aria-modal="false"` by design (popover-like, lets the user keep editing). Either document the exemption in a comment + commit text, or flip to true + focus-trap.
+- [ ] `aria-describedby` on disabled toolbar buttons (Paint Format, Insert Link, etc.) explaining "selection required".
 
 ### Bucket J — Find & replace + keyboard
 - [ ] Ctrl+F integrated find (not browser default).
@@ -223,10 +290,10 @@ Scope: `Toolbar.tsx` + new components. Industry-standard format controls.
 - [ ] Arrow-key nudge selection.
 
 ### Bucket K — Visual / theming consolidation
-- [ ] Pick one brand colour (red vs Google blue) and align focus / active / primary.
-- [ ] Compress title bar to 56-60 px.
+- [x] Pick one brand colour — **teal** (`#0D9488 / Tailwind teal-600`), refreshed 2026-05-30. Old cyan retired; all hardcoded fallbacks repointed; semantic tokens cover error/warn/success surfaces. See Bucket H0 above.
+- [ ] Compress title bar to 56-60 px (currently 64).
 - [ ] Dark mode pass (or drop `color-scheme: light dark`).
-- [ ] Slide-rail thumbnails: render miniature instead of numbered list.
+- [ ] Slide-rail thumbnails: render miniature instead of numbered list (W4 partially in flight).
 
 ---
 
@@ -281,4 +348,4 @@ Verified against a headless browser on both dev + a production build:
 
 - **Other Claude session is running on this repo** — agents below use `isolation: "worktree"` so they branch off `main` at HEAD without disturbing the live tree. Merge order matters; we'll review each before fast-forward.
 - **Icon library choice**: Lucide (MIT, 1.4k icons, tree-shakable) recommended. Alternatives: Heroicons (MIT), Phosphor (MIT). Defaulting to Lucide unless overridden.
-- **Brand colour**: decided 2026-05-28 — **cyan** (`--cs-accent: #0891B2`, `--cs-accent-dk: #0E7490`, `--cs-accent-bg: #ECFEFF`, `--cs-focus: #0891B2`). Chosen to differ from PowerPoint red, LibreOffice Impress orange, Google Slides yellow. CSS vars updated in main; the favicon-style brand SVG inside TitleBar.tsx + AboutDialog.tsx still paints `#B7472A` — repaint in a follow-up pass once W1b finishes touching those files.
+- **Brand colour**: refreshed 2026-05-30 from cyan to **teal** — `--cs-accent: #0D9488`, `--cs-accent-dk: #0F766E`, `--cs-accent-bg: #F0FDFA`, `--cs-accent-bg-hv: #CCFBF1`, `--cs-focus: #0D9488`. Still distinct from PowerPoint red, Impress orange, Google Slides yellow; new logo is a teal/emerald gradient page with a centred play disc (32×40 viewBox, hand-coded, ~1.2 KB). Memory: `[[project-brand-color]]`.

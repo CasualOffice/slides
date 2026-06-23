@@ -2,8 +2,8 @@
 #
 # Casual Slides — single image: web bundle + /collab WebSocket relay.
 #
-#   docker build -t schnsrw/casual-slides:latest .
-#   docker run -p 3000:3000 schnsrw/casual-slides:latest
+#   docker build -t casualoffice/casual-slides:latest .
+#   docker run -p 3000:3000 casualoffice/casual-slides:latest
 #   open http://localhost:3000
 #
 # For docker-compose (sets sensible env defaults + restart policy):
@@ -87,7 +87,7 @@ ARG CASUAL_BUILD_DATE=unknown
 LABEL org.opencontainers.image.title="Casual Slides" \
       org.opencontainers.image.description="PowerPoint-flavored web slides editor with .pptx round-trip and optional real-time co-edit. Single image: web app + /collab WebSocket relay on one port. Built on Univer OSS." \
       org.opencontainers.image.url="https://slide.schnsrw.live/" \
-      org.opencontainers.image.source="https://github.com/schnsrw/slides" \
+      org.opencontainers.image.source="https://github.com/CasualOffice/slides" \
       org.opencontainers.image.documentation="https://schnsrw.live/casual-slides/" \
       org.opencontainers.image.vendor="Sachin Sarwa" \
       org.opencontainers.image.authors="Sachin Sarwa <schnsrw@gmail.com>" \

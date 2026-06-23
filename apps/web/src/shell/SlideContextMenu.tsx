@@ -90,8 +90,8 @@ function reorderPage(pageId: string, delta: -1 | 1): void {
   const target = idx + delta;
   if (target < 0 || target >= order.length) return;
   // In-place swap — keeps the array reference stable for any consumers
-  // that captured it.
-  [order[idx], order[target]] = [order[target], order[idx]];
+  // that captured it. Both indexes were just bounds-checked.
+  [order[idx], order[target]] = [order[target]!, order[idx]!];
   model.incrementRev();
   // Re-emit on activePage$ so the SlideSideBar subscriber re-renders
   // and reads the new pageOrder. Without this the rail keeps painting
