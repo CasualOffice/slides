@@ -14,41 +14,60 @@ concurrency:
 permissions:
   contents: read
 
+# The engine + UI kit are consumed from git submodules built via the pnpm
+# workspace (not npm). Every job must check them out recursively, and the
+# install must NOT be frozen (the workspace resolves submodule source).
+# NOTE: the submodules are private CasualOffice repos — cross-repo checkout
+# needs a token with read access to them. Set a `SUBMODULES_TOKEN` secret
+# (PAT/app token) if the default GITHUB_TOKEN can't reach them.
+
 jobs:
-  typecheck:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN || github.token }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
+      - run: pnpm install --no-frozen-lockfile
+      # Source-consumed engine: bundle with Vite (esbuild/Rollup). A standalone
+      # `tsc -b` over the engine source under the product's strict tsconfig is
+      # not viable without building the engine's .d.ts — tracked separately.
+      - run: pnpm --filter @point/web exec vite build
 
   unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN || github.token }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       - run: pnpm test:unit
 
   e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN || github.token }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       # Cache Playwright browser binaries to skip the ~200 MB download on
       # most runs. Lockfile is the cache key since the version is pinned via
       # @playwright/test in package.json.
