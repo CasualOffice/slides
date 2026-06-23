@@ -48,7 +48,7 @@ jobs:
           # Canonical URL is the apex of the subdomain — slide.schnsrw.live/
           # — so assets are root-relative. A small /slides/ redirect (added
           # below) keeps the GitHub-provided URL working
-          # (schnsrw.github.io/slides/ → 301 → slide.schnsrw.live/slides/
+          # (casualoffice.github.io/slides/ → 301 → slide.schnsrw.live/slides/
           # → redirect → /).
           PAGES_BASE: /
         run: pnpm --filter @point/web build
@@ -56,7 +56,7 @@ jobs:
       - name: Assemble Pages artifact
         # CNAME tells GitHub Pages which host to serve; without it in every
         # deploy, the custom-domain config in the Pages UI gets dropped.
-        # The /slides/index.html redirect makes the schnsrw.github.io URL
+        # The /slides/index.html redirect makes the casualoffice.github.io URL
         # land on the app instead of 404.
         run: |
           set -euo pipefail

@@ -71,7 +71,7 @@ jobs:
         # patch; `:latest` is the bleeding edge.
         uses: docker/metadata-action@v5
         with:
-          images: schnsrw/casual-slides
+          images: casualoffice/casual-slides
           tags: |
             type=semver,pattern={{version}},value=${{ steps.tag.outputs.raw }}
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.tag.outputs.raw }}
@@ -81,7 +81,7 @@ jobs:
             org.opencontainers.image.title=Casual Slides
             org.opencontainers.image.description=PowerPoint-flavored web slides editor with .pptx round-trip and optional real-time co-edit.
             org.opencontainers.image.url=https://slide.schnsrw.live/
-            org.opencontainers.image.source=https://github.com/schnsrw/slides
+            org.opencontainers.image.source=https://github.com/CasualOffice/slides
             org.opencontainers.image.documentation=https://schnsrw.live/casual-slides/
             org.opencontainers.image.vendor=Sachin Sarwa
             org.opencontainers.image.licenses=Apache-2.0

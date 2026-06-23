@@ -4449,7 +4449,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // one dependency attribution.
     await expect(dialog).toContainText('Casual Slides');
     await expect(dialog).toContainText('Apache-2.0');
-    await expect(dialog).toContainText('github.com/schnsrw/slides');
+    await expect(dialog).toContainText('github.com/CasualOffice/slides');
     await expect(dialog).toContainText('Univer OSS');
     await expect(dialog).toContainText('PptxGenJS');
 

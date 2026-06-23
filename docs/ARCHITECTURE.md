@@ -224,7 +224,7 @@ Slides has fewer feature-plugins than sheet today. Bootstrap loads everything ea
 | Decision | Rationale |
 | --- | --- |
 | Build on Univer Slides, not compose from primitives | Architectural symmetry with sheet; Univer's slide data model already matches Google Slides API and aligns with OOXML PresentationML structurally. See [`RESEARCH.md`](./RESEARCH.md). |
-| Fork-first (`schnsrw/univer-revamp`) wired via pnpm overrides | Slides needs patches from day 1 (collab rev, missing element types). Sheet's "fork is optional" approach won't work here. |
+| Fork-first (`CasualOffice/univer-revamp`) wired via pnpm overrides | Slides needs patches from day 1 (collab rev, missing element types). Sheet's "fork is optional" approach won't work here. |
 | Yjs over OT/ShareDB | Same reasoning as sheet — proven Hocuspocus adapter, awareness protocol, no central authority. |
 | PptxGenJS for export | MIT, mature, generates real OOXML pptx. No alternative in OSS JS. |
 | Custom pptx importer (JSZip + xml) | No equivalent of ExcelJS exists for pptx. We own this surface like we own xlsx for sheet. |

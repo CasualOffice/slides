@@ -2,7 +2,7 @@
 
 What `@univerjs/slides` / `@univerjs/slides-ui` ship today (v0.24.0) and what we need to add to ship Casual Slides. Each gap below maps to a concrete patch in `../univer-revamp/`.
 
-Fork remote: `git@github.com:schnsrw/univer-revamp.git` · branch `dev` · **v0.24.0** (in sync with sheet's vendored copy as of 2026-05-25).
+Fork remote: `git@github.com:CasualOffice/univer-revamp.git` · branch `dev` · **v0.24.0** (in sync with sheet's vendored copy as of 2026-05-25).
 
 ---
 

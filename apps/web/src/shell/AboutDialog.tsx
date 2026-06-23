@@ -93,7 +93,7 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
             <dt>{t('about.source')}</dt>
             <dd>
               <a
-                href="https://github.com/schnsrw/slides"
+                href="https://github.com/CasualOffice/slides"
                 target="_blank"
                 rel="noreferrer noopener"
               >

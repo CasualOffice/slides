@@ -43,7 +43,7 @@ Slides has gaps Univer hasn't filled (no collab rev tracking on `SlideDataModel`
 
 **Workflow:** land the change in the fork (`../univer-revamp/` on `dev`), open an upstream PR to `dream-num/univer`, mirror the same diff as a `pnpm patch` artifact in [`patches/`](./patches/) so production builds get the fix without waiting for an upstream release. See [`docs/UNIVER_SLIDES_GAPS.md`](./docs/UNIVER_SLIDES_GAPS.md#fork-management-strategy).
 
-Fork location: `../univer-revamp/` at **v0.24.0** (synced with sheet's vendored copy as of 2026-05-25). Commits land in `schnsrw/univer-revamp` on `dev`.
+Fork location: `../univer-revamp/` at **v0.24.0** (synced with sheet's vendored copy as of 2026-05-25). Commits land in `CasualOffice/univer-revamp` on `dev`.
 
 We tried `pnpm overrides: link:` to the fork; it doesn't work — the fork's packages use `workspace:*` deps that can't resolve across workspaces. Sheet's `patchedDependencies` pattern is what we use.
 
