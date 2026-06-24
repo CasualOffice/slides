@@ -3417,8 +3417,18 @@ function parseTableCellAppearance(tcPr: unknown, theme: ThemeMap | null): { fill
   return out;
 }
 
-function parseTable(tbl: unknown, reg: ImageRegistry, elementId: string): { rows: Array<{ height?: number; cells: Array<{ text?: string; richText?: unknown; fillRgb?: string; outlineRgb?: string; outlineWeight?: number; colSpan?: number; rowSpan?: number; hMerge?: boolean; vMerge?: boolean }> }>; columnWidths?: number[] } {
-  const rows: Array<{ height?: number; cells: Array<{ text?: string; richText?: unknown; fillRgb?: string; outlineRgb?: string; outlineWeight?: number; colSpan?: number; rowSpan?: number; hMerge?: boolean; vMerge?: boolean }> }> = [];
+// Mirror of @univerjs/slides ITableCell — the shape the table-adaptor reads.
+interface ISlideRichTextCell {
+  text?: ISlideRichTextProps;
+  fill?: { rgb?: string };
+  border?: { outlineFill?: { rgb?: string }; weight?: number };
+  colSpan?: number;
+  rowSpan?: number;
+  merged?: boolean;
+}
+
+function parseTable(tbl: unknown, reg: ImageRegistry, elementId: string, frameWidth = 0, frameHeight = 0): { rows: Array<{ height?: number; cells: ISlideRichTextCell[] }>; columnWidths?: number[]; rowHeights?: number[] } {
+  const rows: Array<{ height?: number; cells: ISlideRichTextCell[] }> = [];
   const columnWidths: number[] = [];
   const tblGrid = findChild(tbl, 'a:tblGrid');
   for (const col of toArray(findChild(tblGrid, 'a:gridCol'))) {
@@ -3465,14 +3475,20 @@ function parseTable(tbl: unknown, reg: ImageRegistry, elementId: string): { rows
     const height = typeof hRaw === 'string' || typeof hRaw === 'number'
       ? (Number.isFinite(parseInt(String(hRaw), 10)) ? parseInt(String(hRaw), 10) / EMU_PER_PIXEL : undefined)
       : undefined;
-    const cells: Array<{ text?: string; richText?: unknown; fillRgb?: string; outlineRgb?: string; outlineWeight?: number; colSpan?: number; rowSpan?: number; hMerge?: boolean; vMerge?: boolean }> = [];
+    // ITableCell shape (matches @univerjs/slides ITableCell, which the
+    // table-adaptor reads): text is an ISlideRichTextProps object (NOT a bare
+    // string), fill is an IColorStyle, border is { outlineFill, weight }, and a
+    // span-covered cell sets `merged`. The old flat shape (text:string,
+    // fillRgb, outlineRgb/Weight, hMerge/vMerge) silently dropped every cell's
+    // text, fill and border at render time.
+    const cells: Array<ISlideRichTextCell> = [];
     let cellIdx = 0;
     for (const tc of toArray(findChild(tr, 'a:tc'))) {
       if (!tc || typeof tc !== 'object') continue;
       const tcNode = tc as XmlNode;
       const gridSpan = tcNode['@gridSpan'];
       const rowSpan = tcNode['@rowSpan'];
-      const cell: { text?: string; richText?: unknown; fillRgb?: string; outlineRgb?: string; outlineWeight?: number; colSpan?: number; rowSpan?: number; hMerge?: boolean; vMerge?: boolean } = {};
+      const cell: ISlideRichTextCell = {};
       if (typeof gridSpan === 'string' || typeof gridSpan === 'number') {
         const n = parseInt(String(gridSpan), 10);
         if (Number.isFinite(n) && n > 1) cell.colSpan = n;
@@ -3481,11 +3497,21 @@ function parseTable(tbl: unknown, reg: ImageRegistry, elementId: string): { rows
         const n = parseInt(String(rowSpan), 10);
         if (Number.isFinite(n) && n > 1) cell.rowSpan = n;
       }
-      if (tcNode['@hMerge'] === '1' || tcNode['@hMerge'] === 1 || tcNode['@hMerge'] === 'true') cell.hMerge = true;
-      if (tcNode['@vMerge'] === '1' || tcNode['@vMerge'] === 1 || tcNode['@vMerge'] === 'true') cell.vMerge = true;
+      // hMerge / vMerge mark a cell covered by another cell's span — the
+      // renderer skips cells with `merged`.
+      if (tcNode['@hMerge'] === '1' || tcNode['@hMerge'] === 1 || tcNode['@hMerge'] === 'true'
+        || tcNode['@vMerge'] === '1' || tcNode['@vMerge'] === 1 || tcNode['@vMerge'] === 'true') {
+        cell.merged = true;
+      }
       const tcPr = findChild(tc, 'a:tcPr');
       const inlineAppearance = parseTableCellAppearance(tcPr, reg.theme);
-      Object.assign(cell, inlineAppearance);
+      if (inlineAppearance.fillRgb) cell.fill = { rgb: inlineAppearance.fillRgb };
+      if (inlineAppearance.outlineRgb || inlineAppearance.outlineWeight != null) {
+        cell.border = {
+          ...(inlineAppearance.outlineRgb ? { outlineFill: { rgb: inlineAppearance.outlineRgb } } : {}),
+          ...(inlineAppearance.outlineWeight != null ? { weight: inlineAppearance.outlineWeight } : {}),
+        };
+      }
       // G5 — fall back to the table-style fill / text attrs when the
       // cell carries no inline fill. Inline `<a:tcPr><a:solidFill>`
       // always wins (matches PowerPoint precedence: direct formatting
@@ -3493,7 +3519,7 @@ function parseTable(tbl: unknown, reg: ImageRegistry, elementId: string): { rows
       const styleCell = resolveTableCellStyle(styleDef, tblFlags, {
         row: rowIdx, col: cellIdx, rowCount, colCount,
       });
-      if (!cell.fillRgb && styleCell.fillRgb) cell.fillRgb = styleCell.fillRgb;
+      if (!cell.fill && styleCell.fillRgb) cell.fill = { rgb: styleCell.fillRgb };
       const txBody = findChild(tc, 'a:txBody');
       if (txBody) {
         const cellElId = `${elementId}-r${rowIdx}-c${cellIdx}`;
@@ -3508,8 +3534,13 @@ function parseTable(tbl: unknown, reg: ImageRegistry, elementId: string): { rows
           Object.keys(cellFallback).length > 0 ? cellFallback : undefined,
           reg.theme, reg.imageRelMap,
         );
-        if (text) cell.text = text;
-        if (rich) cell.richText = { text, ...props, rich };
+        // Prefer the rich doc (preserves per-run formatting) — the adaptor
+        // uses `text.rich` when present and the flat `text.*` props otherwise.
+        if (rich != null) {
+          cell.text = { ...props, rich } as ISlideRichTextProps;
+        } else if (text != null) {
+          cell.text = { ...props, text } as ISlideRichTextProps;
+        }
       }
       cells.push(cell);
       cellIdx += 1;
@@ -3517,7 +3548,32 @@ function parseTable(tbl: unknown, reg: ImageRegistry, elementId: string): { rows
     rows.push({ ...(height !== undefined ? { height } : {}), cells });
     rowIdx += 1;
   }
-  return { rows, ...(columnWidths.length > 0 ? { columnWidths } : {}) };
+
+  // The renderer (table-adaptor) lays cells out from `rowHeights`/`columnWidths`
+  // absolute arrays — without rowHeights every row collapses to zero height and
+  // the whole table paints as a single horizontal line. Build rowHeights from
+  // the parsed `<a:tr h>`, and even-distribute the frame's height across any
+  // rows that omit `@h` (some generators do). Same safety net for columns when
+  // `<a:tblGrid>` is missing.
+  const rowHeights = rows.map((r) => r.height);
+  const missingH = rowHeights.filter((h) => h == null || !(h > 0)).length;
+  if (missingH > 0 && frameHeight > 0) {
+    const known = rowHeights.reduce<number>((s, h) => s + (h && h > 0 ? h : 0), 0);
+    const fill = Math.max(0, frameHeight - known) / missingH;
+    for (let i = 0; i < rowHeights.length; i++) {
+      if (!(rowHeights[i]! > 0)) rowHeights[i] = fill;
+    }
+  }
+  if (columnWidths.length === 0 && colCount > 0 && frameWidth > 0) {
+    for (let i = 0; i < colCount; i++) columnWidths.push(frameWidth / colCount);
+  }
+
+  const resolvedRowHeights = rowHeights.map((h) => (h && h > 0 ? h : 0));
+  return {
+    rows,
+    ...(columnWidths.length > 0 ? { columnWidths } : {}),
+    ...(resolvedRowHeights.some((h) => h > 0) ? { rowHeights: resolvedRowHeights } : {}),
+  };
 }
 
 // H2 + H3 — parse `<c:chart>` XML payload into a structured IChart so
@@ -3850,7 +3906,7 @@ async function processGraphicFrame(
   const tbl = findChild(graphicData, 'a:tbl');
   if (tbl) {
     const elId = `s${pageOrdinal}-tbl-${zIndex}`;
-    const table = parseTable(tbl, reg, elId);
+    const table = parseTable(tbl, reg, elId, width, height);
     return {
       id: elId,
       zIndex,
@@ -3863,8 +3919,7 @@ async function processGraphicFrame(
       flipY,
       title: '',
       description: '',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      type: 6 as any, // PageElementType.TABLE (added via fork patch)
+      type: PageElementType.TABLE,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       table: table as any,
     } as unknown as IPageElement;
@@ -3911,8 +3966,7 @@ async function processGraphicFrame(
       flipY,
       title: '',
       description: '',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      type: 7 as any, // PageElementType.CHART
+      type: PageElementType.CHART,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       chart: structured as any,
     } as unknown as IPageElement;
