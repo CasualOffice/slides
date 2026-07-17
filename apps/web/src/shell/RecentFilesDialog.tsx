@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { TFunction } from 'i18next';
 import type { RecentMeta } from '../storage/recent-files';
 import { clearRecents, listRecents, loadRecent, removeRecent, setRecentPinned } from '../storage/recent-files';
+import { useTranslation } from '../i18n';
 import { Icon } from './icons';
 import { useFocusTrap } from './use-focus-trap';
 
@@ -16,26 +18,27 @@ export interface RecentFilesDialogProps {
   onOpen: (bytes: ArrayBuffer, fileName: string) => void;
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+function formatSize(bytes: number, t: TFunction<'dialogs'>): string {
+  if (bytes < 1024) return t('recent.size.bytes', { value: bytes });
+  if (bytes < 1024 * 1024) return t('recent.size.kilobytes', { value: (bytes / 1024).toFixed(1) });
+  return t('recent.size.megabytes', { value: (bytes / 1024 / 1024).toFixed(2) });
 }
 
-function formatRelative(epoch: number): string {
+function formatRelative(epoch: number, t: TFunction<'dialogs'>, locale: string): string {
   const diffMs = Date.now() - epoch;
   const sec = Math.max(0, Math.floor(diffMs / 1000));
-  if (sec < 60) return 'just now';
+  if (sec < 60) return t('recent.relative.justNow');
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} min${min === 1 ? '' : 's'} ago`;
+  if (min < 60) return t('recent.relative.minutes', { count: min });
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} hr${hr === 1 ? '' : 's'} ago`;
+  if (hr < 24) return t('recent.relative.hours', { count: hr });
   const day = Math.floor(hr / 24);
-  if (day < 30) return `${day} day${day === 1 ? '' : 's'} ago`;
-  return new Date(epoch).toLocaleDateString();
+  if (day < 30) return t('recent.relative.days', { count: day });
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(epoch);
 }
 
 export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogProps) {
+  const { t, i18n } = useTranslation('dialogs');
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(open, dialogRef);
   const [entries, setEntries] = useState<RecentMeta[] | null>(null);
@@ -77,7 +80,7 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
       try {
         const bytes = await loadRecent(entry.id);
         if (!bytes) {
-          setError('Entry no longer available.');
+          setError(t('recent.entryUnavailable'));
           await refresh();
           return;
         }
@@ -89,7 +92,7 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
         setBusy(false);
       }
     },
-    [onClose, onOpen, refresh],
+    [onClose, onOpen, refresh, t],
   );
 
   const handleRemove = useCallback(
@@ -130,28 +133,28 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
   if (!open) return null;
 
   return (
-    <div className="cs-recent__backdrop" role="dialog" aria-modal="true" aria-label="Recent files">
+    <div className="cs-recent__backdrop" role="dialog" aria-modal="true" aria-label={t('recent.ariaLabel')}>
       <div className="cs-recent" ref={dialogRef} data-testid="recent-dialog" tabIndex={-1}>
         <header className="cs-recent__header">
           <Icon name="history" size={16} />
-          <h2 className="cs-recent__title">Recent files</h2>
+          <h2 className="cs-recent__title">{t('recent.title')}</h2>
           <button
             type="button"
             className="cs-recent__close"
             onClick={onClose}
-            title="Close (Esc)"
+            title={t('recent.closeTooltip')}
           >
             <Icon name="close" size={16} />
           </button>
         </header>
 
         {entries === null && !error && (
-          <p className="cs-recent__empty">Loading…</p>
+          <p className="cs-recent__empty">{t('recent.loading')}</p>
         )}
 
         {entries && entries.length === 0 && !error && (
           <p className="cs-recent__empty">
-            No recent decks yet. Open a .pptx and it'll appear here.
+            {t('recent.empty')}
           </p>
         )}
 
@@ -164,23 +167,32 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
                   className="cs-recent__open"
                   disabled={busy}
                   onClick={() => void handleOpen(entry)}
-                  title={`Open ${entry.name}`}
-                  aria-label={`Open ${entry.name}`}
+                  title={t('recent.openTooltip', { name: entry.name })}
+                  aria-label={t('recent.openTooltip', { name: entry.name })}
                   data-testid="recent-item"
                   data-recent-name={entry.name}
                 >
                   <Icon name="slideshow" size={20} />
                   <span className="cs-recent__name">{entry.name}</span>
                   <span className="cs-recent__meta">
-                    {formatSize(entry.size)} · {formatRelative(entry.openedAt)}
+                    {t('recent.meta', {
+                      size: formatSize(entry.size, t),
+                      relative: formatRelative(
+                        entry.openedAt,
+                        t,
+                        i18n.resolvedLanguage ?? i18n.language,
+                      ),
+                    })}
                   </span>
                 </button>
                 <button
                   type="button"
                   className={`cs-recent__pin${entry.pinned ? ' cs-recent__pin--on' : ''}`}
                   onClick={(e) => void handleTogglePin(entry, e)}
-                  title={entry.pinned ? 'Unpin' : 'Pin to top'}
-                  aria-label={entry.pinned ? `Unpin ${entry.name}` : `Pin ${entry.name}`}
+                  title={entry.pinned ? t('recent.unpin') : t('recent.pinToTop')}
+                  aria-label={entry.pinned
+                    ? t('recent.unpinAriaLabel', { name: entry.name })
+                    : t('recent.pinAriaLabel', { name: entry.name })}
                   aria-pressed={!!entry.pinned}
                 >
                   <Icon name="star" size={14} filled={!!entry.pinned} />
@@ -189,8 +201,8 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
                   type="button"
                   className="cs-recent__remove"
                   onClick={(e) => void handleRemove(entry, e)}
-                  title="Remove from list"
-                  aria-label={`Remove ${entry.name}`}
+                  title={t('recent.removeTooltip')}
+                  aria-label={t('recent.removeAriaLabel', { name: entry.name })}
                 >
                   <Icon name="close" size={14} />
                 </button>
@@ -208,11 +220,11 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
               className="cs-btn cs-btn--ghost"
               onClick={() => void handleClear()}
             >
-              Clear all
+              {t('recent.clearAll')}
             </button>
           )}
           <button type="button" className="cs-btn cs-btn--ghost" onClick={onClose}>
-            Close
+            {t('recent.close')}
           </button>
         </footer>
       </div>

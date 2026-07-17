@@ -1,17 +1,17 @@
-// Toolbar v2 — Google Slides-grade single-row formatting toolbar.
+// Toolbar — Microsoft Office-style tabbed ribbon.
 //
-// Layout (left to right):
-//   Group 1: Undo · Redo · Print · Paint format
-//   Group 3: Text box · Image · Shape · Line
-//   Group 5: New slide · Layout · Theme · Background
-//   Group 6: Font family · Font size · Bold · Italic · Underline · Strikethrough · Text color · Fill color · Border color
-//   Group 7: Align · Bullet · Number · Indent- · Indent+ · Line spacing · Clear formatting
-//   Group 8: Slideshow CTA (right-aligned)
+// A tab strip (ホーム / 挿入 / デザイン) selects which labeled command groups
+// the ribbon body shows. A persistent quick-access group (undo/redo/print)
+// and the Slideshow CTA stay visible on every tab. Tab → group mapping:
+//   home:   clipboard · slide+layout · font · paragraph · arrange
+//   insert: insert
+//   design: themes · background+layout
 //
-// The row never scrolls horizontally. A ResizeObserver tracks the toolbar
-// width — when the natural width of the children exceeds the available
-// space, groups 6 + 7 collapse into a single "More" popover so the rest
-// stays visible.
+// The reused group JSX (group1/groupClipboard/groupInsert/groupSlide/
+// groupLayout/groupTheme/groupBackground/groupArrange/group6/group7) is the
+// same set of controls the old single-row toolbar dispatched — only the
+// layout changed. The ribbon body scrolls horizontally on a narrow window
+// instead of collapsing into a "More" popover.
 //
 // All formatting controls dispatch existing Univer commands (see the
 // constants below + univer/commands.ts). Where a command is genuinely
@@ -19,11 +19,14 @@
 // control is left OUT entirely rather than rendered as an inert button —
 // a dead button reads as broken. We never fake a dispatch.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { ReactNode } from 'react';
 import type { Univer, IShapeProperties, ITextRun, IDocumentData } from '@univerjs/core';
 import { BorderStyleTypes, ICommandService, IUndoRedoService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
+import { PageElementType } from '@univerjs/slides';
+import { CanvasView } from '@univerjs/slides-ui';
 import { useTranslation } from '../i18n';
-import { clearFormatting, dispatchSlideCommand } from '../univer/commands';
+import { clearFormatting, dispatchSlideCommand, hasElementClipboard } from '../univer/commands';
 import { getAllSelectedElementIds, getSelectedElement, subscribeSelection } from './selection';
 import { BackgroundPicker } from './BackgroundPicker';
 import { LayoutPicker } from './LayoutPicker';
@@ -34,7 +37,6 @@ import { ColorPicker } from './toolbar/ColorPicker';
 import { AlignPicker, type AlignValue } from './toolbar/AlignPicker';
 import { ListPicker, type ListMode } from './toolbar/ListPicker';
 import { LineSpacingPicker } from './toolbar/LineSpacingPicker';
-import { OverflowPopover } from './toolbar/OverflowPopover';
 
 // ============================================================ shapes ===
 
@@ -120,9 +122,80 @@ function insertShapeOfType(shapeType: string): void {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       element: element as any,
     });
+    // The insert mutation only writes the model — the live scene object is
+    // materialized separately by CanvasView (the official insert operations
+    // do the same). Without this the shape doesn't paint until a reload.
+    try {
+      const canvasView = univer.__getInjector().get(CanvasView);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const obj = canvasView.createObjectToPage(element as any, pageId, unitId);
+      if (obj) canvasView.setObjectActiveByPage(obj, pageId, unitId);
+    } catch { /* scene not ready — model still has the element, will render on next full refresh */ }
   } catch {
     /* silent — Univer not ready */
   }
+}
+
+// Manual `slide.mutation.insert-element` payload for a table. The Univer
+// fork already renders tables (TableAdaptor) and round-trips them through
+// pptx import/export — only the create path was missing. We mirror
+// `insertShapeOfType`: grab the model, active page + next zIndex, centre a
+// rows×cols grid and dispatch the insert mutation. Cell text defaults to
+// Calibri to match the Office-like deck font.
+function insertTableOfSize(rows: number, cols: number): void {
+  const w = window as unknown as { univer?: Univer };
+  const univer = w.univer;
+  if (!univer) return;
+  try {
+    const instances = univer.__getInjector().get(IUniverInstanceService);
+    const model = instances.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+    if (!model) return;
+    const unitId = model.getUnitId();
+    const activePage = model.getActivePage();
+    if (!activePage) return;
+    const pageId = activePage.id;
+    const existingZ = Object.values(activePage.pageElements ?? {}).reduce((m, e) => Math.max(m, e?.zIndex ?? 0), 0);
+    const COL_W = 150;
+    const ROW_H = 40;
+    const columnWidths = Array.from({ length: cols }, () => COL_W);
+    const rowHeights = Array.from({ length: rows }, () => ROW_H);
+    const totalW = COL_W * cols;
+    const totalH = ROW_H * rows;
+    const pageSize = model.getPageSize?.() ?? { width: 960, height: 540 };
+    const pageW = pageSize.width ?? 960;
+    const pageH = pageSize.height ?? 540;
+    const left = Math.round((pageW - totalW) / 2);
+    const top = Math.round((pageH - totalH) / 2);
+    const border = { outlineFill: { rgb: 'rgb(148, 163, 184)' }, weight: 1 };
+    const rowsArr = Array.from({ length: rows }, (_r, r) => ({
+      cells: Array.from({ length: cols }, () => ({
+        text: { text: '', fs: 14, ff: 'Calibri', cl: { rgb: 'rgb(31, 41, 55)' } },
+        fill: { rgb: r === 0 ? 'rgb(241, 245, 249)' : 'rgb(255, 255, 255)' },
+        border,
+      })),
+    }));
+    const element = {
+      id: `manual-table-${Date.now().toString(36)}`,
+      zIndex: existingZ + 1,
+      left, top, width: totalW, height: totalH,
+      title: '', description: '',
+      type: PageElementType.TABLE,
+      table: { columnWidths, rowHeights, rows: rowsArr },
+    };
+    void dispatchSlideCommand('slide.mutation.insert-element', {
+      unitId, pageId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      element: element as any,
+    });
+    // Materialize the live scene object (see insertShapeOfType) so the new
+    // table paints immediately instead of only after a reload/slide-switch.
+    try {
+      const canvasView = univer.__getInjector().get(CanvasView);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const obj = canvasView.createObjectToPage(element as any, pageId, unitId);
+      if (obj) canvasView.setObjectActiveByPage(obj, pageId, unitId);
+    } catch { /* scene not ready — model still has the element, will render on next full refresh */ }
+  } catch { /* silent — Univer not ready */ }
 }
 
 // ============================================================ undo/redo ===
@@ -334,7 +407,7 @@ const DEFAULT_FORMAT: FormatState = {
   italic: false,
   underline: false,
   strikethrough: false,
-  font: 'Inter',
+  font: 'Calibri',
   size: 18,
   align: 'left',
   list: 'none',
@@ -344,71 +417,16 @@ const DEFAULT_FORMAT: FormatState = {
   borderColor: null,
 };
 
-// ============================================================ resize ===
-
-// Threshold breakdown:
-//   - Groups 1+3+5 (icon-only) ≈ 320 px including separators
-//   - Group 6 (font+size+B/I/U/S+3 colors) ≈ 440 px
-//   - Group 7 (align/list/indent×2/spacing/clear/link) ≈ 260 px
-//   - Slideshow CTA + padding ≈ 160 px
-// Overflow is detected by measuring the inner row's scrollWidth vs its
-// clientWidth — anything that genuinely overflows the available space
-// triggers the "More" popover. Estimating from a hardcoded breakpoint is
-// brittle: pickers grow with i18n labels, locale, font, etc. Real
-// measurement Just Works.
-//
-// We need two passes per tick:
-//   1. Force `overflow=false` so groups 6+7 render inline, then measure.
-//   2. If the row's scrollWidth exceeds clientWidth, set `overflow=true`
-//      and re-render — the inline groups fold into the More popover.
-//
-// We add a small hysteresis (8 px) so a borderline width doesn't
-// thrash between expanded/collapsed on every resize tick.
-function useToolbarOverflow(rootRef: React.RefObject<HTMLDivElement>): boolean {
-  const [overflow, setOverflow] = useState(false);
-
-  // Measure on every relevant change. We re-measure after the DOM commits
-  // by reading scrollWidth from the inner row element.
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const HYSTERESIS = 8;
-    const measure = () => {
-      const row = el.querySelector('.cs-toolbar2__row') as HTMLElement | null;
-      if (!row) return;
-      const sw = row.scrollWidth;
-      const cw = row.clientWidth;
-      setOverflow((prev) => {
-        // If inline content exceeds available width → collapse.
-        if (!prev && sw > cw + HYSTERESIS) return true;
-        // If collapsed and the available width grew enough that all the
-        // hidden groups + a margin could fit back, expand again. We
-        // approximate the hidden groups as ~430 px (group 6) + ~330 px
-        // (group 7) + 26 px of separators = ~786 px. When clientWidth
-        // grows back past scrollWidth + 786 + HYSTERESIS, the previously
-        // hidden groups should fit inline again.
-        if (prev && cw > sw + 786 + HYSTERESIS) return false;
-        return prev;
-      });
-    };
-    measure();
-    const ro = new ResizeObserver(() => measure());
-    ro.observe(el);
-    const row = el.querySelector('.cs-toolbar2__row');
-    if (row) ro.observe(row as Element);
-    return () => ro.disconnect();
-  }, [rootRef]);
-
-  return overflow;
-}
-
 // ============================================================ Toolbar ===
 
 export function Toolbar() {
   const { t } = useTranslation();
   const { undos, redos } = useUndoRedoCounts();
   const rootRef = useRef<HTMLDivElement>(null);
-  const overflow = useToolbarOverflow(rootRef);
+  // Office-style ribbon: a tab strip selects which command groups the ribbon
+  // body shows. Quick-access (undo/redo/print) + the Slideshow CTA stay
+  // visible on every tab.
+  const [activeTab, setActiveTab] = useState<'home' | 'insert' | 'design'>('home');
 
   const [format, setFormat] = useState<FormatState>(DEFAULT_FORMAT);
   // Fill/border act on the selected shape; disable when nothing is selected.
@@ -416,27 +434,164 @@ export function Toolbar() {
   const hasShapeSelection = !!selectedEl;
   const [bgAnchor, setBgAnchor] = useState<DOMRect | null>(null);
   const [layoutAnchor, setLayoutAnchor] = useState<DOMRect | null>(null);
-  const [overflowAnchor, setOverflowAnchor] = useState<DOMRect | null>(null);
   // Category dropdowns — "Insert ▾" (text/image/shape/line) and "Slide ▾"
   // (new/layout/theme/background). Keeps the toolbar compact while leaving
   // text formatting flat + always visible.
   const [insertAnchor, setInsertAnchor] = useState<DOMRect | null>(null);
   const [slideAnchor, setSlideAnchor] = useState<DOMRect | null>(null);
+  // "Arrange ▾" (z-order · align-to-slide · duplicate/delete) — PowerPoint's
+  // [配置] dropdown. Acts on the selected element, so the trigger disables
+  // when nothing is selected rather than opening a menu of dead items.
+  const [arrangeAnchor, setArrangeAnchor] = useState<DOMRect | null>(null);
+  // PowerPoint-style table size grid hover state (rows/cols the pointer is
+  // over inside the Insert ▾ popover). null when not hovering the grid.
+  const [tableHover, setTableHover] = useState<{ r: number; c: number } | null>(null);
+
+  // Clipboard — Paste enablement mirrors the in-memory element clipboard so
+  // the button doesn't read as broken when there's nothing to paste. We flip
+  // it true after any copy/cut; the initial value honours a clipboard carried
+  // over from a prior editor mount.
+  const [canPaste, setCanPaste] = useState<boolean>(() => hasElementClipboard());
+
+  // Format painter — one-shot "copy this element's look, apply to the next
+  // one I click". Armed on click after capturing the selected element's text
+  // + shape style; the selection-change effect below applies it to the next
+  // distinct element, then disarms. Matches PowerPoint's single-use brush
+  // (double-click-to-lock is out of scope for v1).
+  const [painterArmed, setPainterArmed] = useState(false);
+  const paintStyleRef = useRef<{
+    text: Record<string, unknown> | null;
+    shape: IShapeProperties | null;
+    sourceId: string;
+  } | null>(null);
+
+  // Reflect the selected element's authored text style in the controls.
+  // This is especially important after opening a PPTX with a family that is
+  // not in the default deck; the picker keeps and displays that exact name.
+  useEffect(() => {
+    if (!selectedEl) return;
+    try {
+      const w = window as unknown as { univer?: Univer };
+      const model = w.univer?.__getInjector().get(IUniverInstanceService)
+        .getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+      const richText = model?.getPage(selectedEl.pageId)?.pageElements?.[selectedEl.elementId]?.richText;
+      if (!richText) return;
+      const firstRun = richText.rich?.body?.textRuns?.[0]?.ts;
+      setFormat((previous) => ({
+        ...previous,
+        font: firstRun?.ff || richText.ff || previous.font,
+        size: firstRun?.fs || richText.fs || previous.size,
+        bold: (firstRun?.bl ?? richText.bl) === 1,
+        italic: (firstRun?.it ?? richText.it) === 1,
+        underline: !!(firstRun?.ul ?? richText.ul),
+        strikethrough: !!(firstRun?.st ?? richText.st),
+      }));
+    } catch {
+      /* editor may be remounting after an import */
+    }
+  }, [selectedEl]);
 
   // Dismiss the Insert / Slide category popovers on outside click. They are
   // rendered inside the toolbar root, so a click outside rootRef closes them.
   const rootForDismiss = rootRef;
   useEffect(() => {
-    if (!insertAnchor && !slideAnchor) return;
+    if (!insertAnchor && !slideAnchor && !arrangeAnchor) return;
     const handler = (e: MouseEvent) => {
       if (!rootForDismiss.current?.contains(e.target as Node)) {
         setInsertAnchor(null);
         setSlideAnchor(null);
+        setArrangeAnchor(null);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [insertAnchor, slideAnchor, rootForDismiss]);
+  }, [insertAnchor, slideAnchor, arrangeAnchor, rootForDismiss]);
+
+  // ─────────────────────────────────────────────── format painter
+  // Snapshot the selected element's authored style. We read the SAME fields
+  // the toolbar writes: run-level text style (ff/fs/bl/it/ul/st/cl) from the
+  // first text run, and the shape's fill + outline. Returns false when there's
+  // nothing selected to sample.
+  function captureSelectedStyle(): boolean {
+    const sel = getSelectedElement();
+    if (!sel) return false;
+    const w = window as unknown as { univer?: Univer };
+    const model = w.univer
+      ?.__getInjector()
+      .get(IUniverInstanceService)
+      .getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+    if (!model) return false;
+    const el = model.getPage(sel.pageId)?.pageElements?.[sel.elementId];
+    if (!el) return false;
+
+    let text: Record<string, unknown> | null = null;
+    const rt = el.richText as (typeof el.richText & { rich?: IDocumentData }) | undefined;
+    if (rt) {
+      const first = (rt.rich?.body?.textRuns?.[0]?.ts ?? {}) as Record<string, unknown>;
+      const flat = rt as unknown as Record<string, unknown>;
+      const pick = (k: string) => (first[k] !== undefined ? first[k] : flat[k]);
+      text = {};
+      for (const key of ['ff', 'fs', 'bl', 'it', 'ul', 'st', 'cl'] as const) {
+        const v = pick(key);
+        if (v !== undefined && v !== null) text[key] = structuredClone(v);
+      }
+      if (Object.keys(text).length === 0) text = null;
+    }
+
+    const shape = el.shape?.shapeProperties
+      ? (structuredClone(el.shape.shapeProperties) as IShapeProperties)
+      : null;
+
+    if (!text && !shape) return false;
+    paintStyleRef.current = { text, shape, sourceId: sel.elementId };
+    return true;
+  }
+
+  // Apply the captured style to whatever element is selected NOW. Reuses the
+  // same whole-element mutation helpers the manual toolbar buttons use, so the
+  // write is collab/undo-consistent with a normal font/fill change.
+  function applyCapturedStyle(): boolean {
+    const snap = paintStyleRef.current;
+    if (!snap) return false;
+    let applied = false;
+    if (snap.text) {
+      const patch = snap.text;
+      const ok = mutateSelectedTextStyle((ts) => {
+        Object.assign(ts, patch);
+      });
+      applied = applied || ok;
+    }
+    if (snap.shape) {
+      const src = snap.shape;
+      const ok = mutateSelectedShape((sp) => {
+        if (src.shapeBackgroundFill) sp.shapeBackgroundFill = structuredClone(src.shapeBackgroundFill);
+        if (src.outline) sp.outline = structuredClone(src.outline);
+      });
+      applied = applied || ok;
+    }
+    return applied;
+  }
+
+  // While the painter is armed, the first selection change to a DIFFERENT
+  // element receives the captured style; then we disarm. Clicking back on the
+  // source element (or empty canvas) leaves the brush armed.
+  useEffect(() => {
+    if (!painterArmed) return;
+    const snap = paintStyleRef.current;
+    if (!snap || !selectedEl) return;
+    if (selectedEl.elementId === snap.sourceId) return;
+    applyCapturedStyle();
+    setPainterArmed(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEl, painterArmed]);
+
+  function onPaintFormat() {
+    if (painterArmed) {
+      setPainterArmed(false);
+      return;
+    }
+    if (captureSelectedStyle()) setPainterArmed(true);
+  }
 
   // Helper for "icon toggle" buttons. If a text doc is being edited,
   // the doc.command.* path runs against the editor (run-level granularity).
@@ -520,8 +675,8 @@ export function Toolbar() {
   }
 
   // ──────────────────────────────────────────────────── render groups
-  // Each group is wrapped in a fragment so the overflow logic can swap
-  // chunks of buttons out cleanly.
+  // Each group is a fragment of reused controls; the ribbon body places
+  // them under the active tab and labels them (see `ribbonGroup` below).
   const group1 = (
     <>
       <button
@@ -553,8 +708,62 @@ export function Toolbar() {
       >
         <Icon name="print" size={18} />
       </button>
-      {/* Paint format omitted until Univer exposes a copy-format pipe — a
-          dead button is worse UX than no button. TODO(univer). */}
+    </>
+  );
+
+  // Clipboard group — PowerPoint's Home-tab leading cluster: Paste · Cut ·
+  // Copy · Format painter. Cut/Copy/Paint act on the selected element; Paste
+  // drops the in-memory clipboard element onto the active slide. All dispatch
+  // real casual-slides commands (see univer/commands.ts) — no faked buttons.
+  const groupClipboard = (
+    <>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar:pasteShortcut')}
+        aria-label={t('toolbar:paste')}
+        disabled={!canPaste}
+        onClick={() => void dispatchSlideCommand('casual-slides.command.paste-element')}
+      >
+        <Icon name="content_paste" size={18} />
+      </button>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar:cutShortcut')}
+        aria-label={t('toolbar:cut')}
+        disabled={!hasShapeSelection}
+        onClick={async () => {
+          const ok = await dispatchSlideCommand('casual-slides.command.cut-element');
+          if (ok) setCanPaste(true);
+        }}
+      >
+        <Icon name="content_cut" size={18} />
+      </button>
+      <button
+        type="button"
+        className="cs-toolbar2__btn"
+        title={t('toolbar:copyShortcut')}
+        aria-label={t('toolbar:copy')}
+        disabled={!hasShapeSelection}
+        onClick={async () => {
+          const ok = await dispatchSlideCommand('casual-slides.command.copy-element');
+          if (ok) setCanPaste(true);
+        }}
+      >
+        <Icon name="content_copy" size={18} />
+      </button>
+      <button
+        type="button"
+        className={`cs-toolbar2__btn ${painterArmed ? 'is-active' : ''}`}
+        title={t('toolbar:paintFormat')}
+        aria-label={t('toolbar:paintFormat')}
+        aria-pressed={painterArmed}
+        disabled={!hasShapeSelection && !painterArmed}
+        onClick={onPaintFormat}
+      >
+        <Icon name="format_paint" size={18} filled={painterArmed} />
+      </button>
     </>
   );
 
@@ -656,6 +865,30 @@ export function Toolbar() {
     >
       <Icon name="view_module" size={18} />
       <span className="cs-toolbar2__btn-label">{t('toolbar:layout')}</span>
+    </button>
+  );
+
+  // "Arrange ▾" category dropdown trigger — PowerPoint's [配置] menu. Every
+  // item needs a selected element, so the whole trigger disables (with a
+  // "select a shape first" hint) rather than opening a menu of no-ops.
+  const groupArrange = (
+    <button
+      type="button"
+      className="cs-toolbar2__btn cs-toolbar2__btn--labeled"
+      title={hasShapeSelection ? t('toolbar:group.arrange') : t('toolbar:selectShapeFirst')}
+      aria-label={t('toolbar:group.arrange')}
+      aria-haspopup="menu"
+      aria-expanded={!!arrangeAnchor}
+      disabled={!hasShapeSelection}
+      onClick={(e) => {
+        setInsertAnchor(null);
+        setSlideAnchor(null);
+        setArrangeAnchor(arrangeAnchor ? null : e.currentTarget.getBoundingClientRect());
+      }}
+    >
+      <Icon name="auto_awesome_motion" size={18} />
+      <span className="cs-toolbar2__btn-label">{t('toolbar:group.arrange')}</span>
+      <Icon name="expand_more" size={14} className="cs-toolbar2__caret" />
     </button>
   );
 
@@ -806,67 +1039,87 @@ export function Toolbar() {
     </>
   );
 
+  // Wrap a set of reused controls in an Office-style ribbon group: the
+  // controls on top, the localized group name underneath (as PowerPoint does).
+  const ribbonGroup = (labelKey: string, controls: ReactNode) => (
+    <div className="cs-ribbon__group">
+      <div className="cs-ribbon__group-controls">{controls}</div>
+      <div className="cs-ribbon__group-label">{t(labelKey)}</div>
+    </div>
+  );
+  const sep = <span className="cs-ribbon__group-sep" aria-hidden="true" />;
+
+  const slideshowCta = (
+    <button
+      type="button"
+      className="cs-btn cs-btn--ghost"
+      title={t('toolbar:slideshowShortcut')}
+      aria-label={t('toolbar:slideshow')}
+      onClick={() => {
+        const open = (window as Window & { __casualSlides_openSlideshow?: () => void })
+          .__casualSlides_openSlideshow;
+        open?.();
+      }}
+    >
+      {/* De-saturated to ghost styling — Present is the bottom-right
+          status-bar primary path (Audit S3). This stays for users
+          who reach for the toolbar end out of habit, but doesn't
+          compete for color hierarchy with Save. Audit P4. */}
+      <Icon name="play_arrow" size={18} />
+      <span>{t('toolbar:slideshow')}</span>
+    </button>
+  );
+
+  const TABS = ['home', 'insert', 'design'] as const;
+
   return (
-    <div className="cs-toolbar" ref={rootRef}>
-      <div className="cs-toolbar2__row" role="toolbar" aria-label={t('toolbar:group.actions')}>
-        {group1}
-        <span className="cs-toolbar__sep" aria-hidden="true" />
-        {groupInsert}
-        {groupSlide}
-        {/* Audit S2 — inline Theme / Background / Layout, promoted out
-            of the Slide ▾ dropdown so they're discoverable at a glance. */}
-        <span className="cs-toolbar__sep" aria-hidden="true" />
-        {groupLayout}
-        {groupTheme}
-        {groupBackground}
-        {/* Character formatting (font / size / B I U S / colours) is ALWAYS
-            visible — never hidden behind "More". Only the secondary paragraph
-            group (align / list / indent) collapses when space is tight. */}
-        <span className="cs-toolbar__sep" aria-hidden="true" />
-        {group6}
-        {!overflow && (
+    <div className="cs-toolbar cs-ribbon" ref={rootRef}>
+      <div className="cs-ribbon__tabs" role="tablist" aria-label={t('toolbar:group.actions')}>
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab}
+            className={`cs-ribbon__tab${activeTab === tab ? ' is-active' : ''}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {t(`toolbar:ribbon.${tab}`)}
+          </button>
+        ))}
+      </div>
+
+      <div className="cs-ribbon__body" role="toolbar" aria-label={t('toolbar:group.actions')}>
+        {/* Persistent quick-access group — visible on every tab. */}
+        {ribbonGroup('toolbar:ribbonGroup.quickAccess', group1)}
+        {sep}
+
+        {activeTab === 'home' && (
           <>
-            <span className="cs-toolbar__sep" aria-hidden="true" />
-            {group7}
+            {ribbonGroup('toolbar:group.clipboard', groupClipboard)}
+            {sep}
+            {ribbonGroup('toolbar:group.slide', <>{groupSlide}{groupLayout}</>)}
+            {sep}
+            {ribbonGroup('toolbar:ribbonGroup.font', group6)}
+            {sep}
+            {ribbonGroup('toolbar:group.paragraph', group7)}
+            {sep}
+            {ribbonGroup('toolbar:group.arrange', groupArrange)}
           </>
         )}
-        {overflow && (
+
+        {activeTab === 'insert' && ribbonGroup('toolbar:group.insert', groupInsert)}
+
+        {activeTab === 'design' && (
           <>
-            <span className="cs-toolbar__sep" aria-hidden="true" />
-            <button
-              type="button"
-              className="cs-toolbar2__btn"
-              title={t('toolbar:moreActions')}
-              aria-label={t('toolbar:moreActions')}
-              aria-haspopup="dialog"
-              aria-expanded={!!overflowAnchor}
-              onClick={(e) =>
-                setOverflowAnchor(overflowAnchor ? null : e.currentTarget.getBoundingClientRect())
-              }
-            >
-              <Icon name="more_vert" size={18} />
-            </button>
+            {ribbonGroup('toolbar:ribbonGroup.theme', groupTheme)}
+            {sep}
+            {ribbonGroup('toolbar:ribbonGroup.background', <>{groupBackground}{groupLayout}</>)}
           </>
         )}
+
         <div className="cs-toolbar__spacer" />
-        <button
-          type="button"
-          className="cs-btn cs-btn--ghost"
-          title={t('toolbar:slideshowShortcut')}
-          aria-label={t('toolbar:slideshow')}
-          onClick={() => {
-            const open = (window as Window & { __casualSlides_openSlideshow?: () => void })
-              .__casualSlides_openSlideshow;
-            open?.();
-          }}
-        >
-          {/* De-saturated to ghost styling — Present is the bottom-right
-              status-bar primary path (Audit S3). This stays for users
-              who reach for the toolbar end out of habit, but doesn't
-              compete for color hierarchy with Save. Audit P4. */}
-          <Icon name="play_arrow" size={18} />
-          <span>{t('toolbar:slideshow')}</span>
-        </button>
+        {slideshowCta}
       </div>
 
       {/* Insert ▾ category popover */}
@@ -877,6 +1130,7 @@ export function Toolbar() {
           role="menu"
           aria-label={t('toolbar:group.insert')}
           onMouseDown={(e) => e.stopPropagation()}
+          onMouseLeave={() => setTableHover(null)}
         >
           <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
             onClick={() => { setInsertAnchor(null); void dispatchSlideCommand('slide.command.add-text'); }}>
@@ -910,6 +1164,37 @@ export function Toolbar() {
                 <Icon name={item.icon} size={18} />
               </button>
             ))}
+          </div>
+          <div className="cs-toolbar2__popover-sep" role="separator" />
+          <div className="cs-toolbar2__popover-label">
+            {tableHover ? `${tableHover.r + 1} × ${tableHover.c + 1}` : t('toolbar:table')}
+          </div>
+          <div
+            className="cs-toolbar2__table-grid"
+            role="menu"
+            aria-label={t('toolbar:table')}
+          >
+            {Array.from({ length: 6 }, (_row, r) =>
+              Array.from({ length: 8 }, (_col, c) => {
+                const on = !!tableHover && r <= tableHover.r && c <= tableHover.c;
+                return (
+                  <button
+                    key={`${r}-${c}`}
+                    type="button"
+                    role="menuitem"
+                    className={`cs-toolbar2__table-cell${on ? ' is-on' : ''}`}
+                    aria-label={`${r + 1} × ${c + 1}`}
+                    onMouseEnter={() => setTableHover({ r, c })}
+                    onFocus={() => setTableHover({ r, c })}
+                    onClick={() => {
+                      setInsertAnchor(null);
+                      setTableHover(null);
+                      insertTableOfSize(r + 1, c + 1);
+                    }}
+                  />
+                );
+              }),
+            )}
           </div>
         </div>
       )}
@@ -946,10 +1231,54 @@ export function Toolbar() {
         </div>
       )}
 
-      {overflow && overflowAnchor && (
-        <OverflowPopover anchor={overflowAnchor} onClose={() => setOverflowAnchor(null)}>
-          {group7}
-        </OverflowPopover>
+      {/* Arrange ▾ category popover — z-order · align-to-slide · duplicate/delete */}
+      {arrangeAnchor && (
+        <div
+          className="cs-toolbar2__popover cs-toolbar2__popover--slidecat"
+          style={{ top: arrangeAnchor.bottom + 6, left: arrangeAnchor.left }}
+          role="menu"
+          aria-label={t('toolbar:group.arrange')}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setArrangeAnchor(null); void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'front' }); }}>
+            <Icon name="flip_to_front" size={16} /><span>{t('toolbar:bringToFront')}</span>
+          </button>
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setArrangeAnchor(null); void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'forward' }); }}>
+            <Icon name="arrow_upward" size={16} /><span>{t('toolbar:bringForward')}</span>
+          </button>
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setArrangeAnchor(null); void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'backward' }); }}>
+            <Icon name="arrow_downward" size={16} /><span>{t('toolbar:sendBackward')}</span>
+          </button>
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setArrangeAnchor(null); void dispatchSlideCommand('casual-slides.command.z-order', { direction: 'back' }); }}>
+            <Icon name="flip_to_back" size={16} /><span>{t('toolbar:sendToBack')}</span>
+          </button>
+          <div className="cs-toolbar2__popover-sep" role="separator" />
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setArrangeAnchor(null); void dispatchSlideCommand('casual-slides.command.center-on-slide', { axis: 'both' }); }}>
+            <Icon name="filter_center_focus" size={16} /><span>{t('toolbar:centerOnSlide')}</span>
+          </button>
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setArrangeAnchor(null); void dispatchSlideCommand('casual-slides.command.center-on-slide', { axis: 'h' }); }}>
+            <Icon name="format_align_center" size={16} /><span>{t('toolbar:alignCenterHorizontal')}</span>
+          </button>
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setArrangeAnchor(null); void dispatchSlideCommand('casual-slides.command.center-on-slide', { axis: 'v' }); }}>
+            <Icon name="vertical_align_center" size={16} /><span>{t('toolbar:alignMiddleVertical')}</span>
+          </button>
+          <div className="cs-toolbar2__popover-sep" role="separator" />
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setArrangeAnchor(null); void dispatchSlideCommand('casual-slides.command.duplicate-element'); }}>
+            <Icon name="content_copy" size={16} /><span>{t('toolbar:duplicate')}</span>
+          </button>
+          <button type="button" role="menuitem" className="cs-toolbar2__popover-item"
+            onClick={() => { setArrangeAnchor(null); void dispatchSlideCommand('casual-slides.command.delete-element'); }}>
+            <Icon name="delete" size={16} /><span>{t('toolbar:deleteElement')}</span>
+          </button>
+        </div>
       )}
 
       <BackgroundPicker anchorRect={bgAnchor} onClose={() => setBgAnchor(null)} />

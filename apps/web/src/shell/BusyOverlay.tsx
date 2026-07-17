@@ -10,11 +10,9 @@ export interface BusyOverlayProps {
 }
 
 export function BusyOverlay({ opening, saving }: BusyOverlayProps) {
+  const { t } = useTranslation('chrome');
   if (!opening && !saving) return null;
-  // TODO(i18n): key under chrome.workspace.* once the W1b string
-  // migration sweep reaches App.tsx + the workspace surfaces (the
-  // drop-overlay literal next to us still carries the same TODO).
-  const label = opening ? 'Opening deck…' : 'Saving deck…';
+  const label = opening ? t('workspace.busyOpening') : t('workspace.busySaving');
   return (
     <div
       className="cs-workspace__busy-overlay"
@@ -28,3 +26,4 @@ export function BusyOverlay({ opening, saving }: BusyOverlayProps) {
     </div>
   );
 }
+import { useTranslation } from '../i18n';

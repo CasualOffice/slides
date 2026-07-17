@@ -10,6 +10,7 @@ export interface UniverBootSplashProps {
 }
 
 export function UniverBootSplash({ visible }: UniverBootSplashProps) {
+  const { t } = useTranslation('chrome');
   if (!visible) return null;
   return (
     <div
@@ -19,7 +20,7 @@ export function UniverBootSplash({ visible }: UniverBootSplashProps) {
       data-testid="boot-splash"
     >
       <img
-        src={`${import.meta.env.BASE_URL}brand.svg`}
+        src="/assets/ppt-editor/brand.svg"
         alt=""
         width={44}
         height={55}
@@ -27,9 +28,9 @@ export function UniverBootSplash({ visible }: UniverBootSplashProps) {
       />
       <div className="cs-spinner cs-spinner--sm" aria-hidden="true" />
       <span className="cs-workspace__boot-splash-text">
-        {/* TODO(i18n): chrome.workspace.bootSplash once W1b lands. */}
-        Starting the editor…
+        {t('workspace.bootSplash')}
       </span>
     </div>
   );
 }
+import { useTranslation } from '../i18n';

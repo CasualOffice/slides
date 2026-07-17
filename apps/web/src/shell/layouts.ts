@@ -1,5 +1,6 @@
 import type { IPageElement, ISlideRichTextProps } from '@univerjs/slides';
 import { PageElementType } from '@univerjs/slides';
+import { deckString } from '../default-slide';
 
 // Slide-layout templates. Each layout defines a set of TEXT-type
 // placeholders pre-positioned for a 960 × 540 px slide (matches Univer's
@@ -34,10 +35,10 @@ const PAGE_H = 540;
 // reads these from the flat richText fields (wave-6 rich body would be
 // the upgrade path; the flat fields keep the placeholder visible in any
 // renderer state).
-const titleStyle: Partial<ISlideRichTextProps> = { fs: 36, bl: 1, cl: { rgb: '#1F2937' } };
-const subtitleStyle: Partial<ISlideRichTextProps> = { fs: 20, cl: { rgb: '#4B5563' } };
-const headingStyle: Partial<ISlideRichTextProps> = { fs: 22, bl: 1, cl: { rgb: '#1F2937' } };
-const bodyStyle: Partial<ISlideRichTextProps> = { fs: 16, cl: { rgb: '#374151' } };
+const titleStyle: Partial<ISlideRichTextProps> = { fs: 36, ff: 'Calibri', bl: 1, cl: { rgb: '#1F2937' } };
+const subtitleStyle: Partial<ISlideRichTextProps> = { fs: 20, ff: 'Calibri', cl: { rgb: '#4B5563' } };
+const headingStyle: Partial<ISlideRichTextProps> = { fs: 22, ff: 'Calibri', bl: 1, cl: { rgb: '#1F2937' } };
+const bodyStyle: Partial<ISlideRichTextProps> = { fs: 16, ff: 'Calibri', cl: { rgb: '#374151' } };
 
 let idCounter = 0;
 function newElId(prefix: string): string {
@@ -90,8 +91,8 @@ export const LAYOUT_TEMPLATES: LayoutTemplate[] = [
       { x: 20, y: 56, w: 60, h: 8, kind: 'body' },
     ],
     buildElements: () => toMap([
-      textEl('title', 1, 80, 200, 800, 80, 'Click to add title', titleStyle),
-      textEl('sub', 2, 160, 300, 640, 50, 'Click to add subtitle', subtitleStyle),
+      textEl('title', 1, 80, 200, 800, 80, deckString('addTitle'), titleStyle),
+      textEl('sub', 2, 160, 300, 640, 50, deckString('addSubtitle'), subtitleStyle),
     ]),
   },
   {
@@ -102,8 +103,8 @@ export const LAYOUT_TEMPLATES: LayoutTemplate[] = [
       { x: 6, y: 26, w: 88, h: 60, kind: 'body' },
     ],
     buildElements: () => toMap([
-      textEl('title', 1, 60, 50, 840, 70, 'Click to add title', titleStyle),
-      textEl('body', 2, 60, 140, 840, 360, 'Click to add content', bodyStyle),
+      textEl('title', 1, 60, 50, 840, 70, deckString('addTitle'), titleStyle),
+      textEl('body', 2, 60, 140, 840, 360, deckString('addContent'), bodyStyle),
     ]),
   },
   {
@@ -115,9 +116,9 @@ export const LAYOUT_TEMPLATES: LayoutTemplate[] = [
       { x: 52, y: 26, w: 42, h: 60, kind: 'body' },
     ],
     buildElements: () => toMap([
-      textEl('title', 1, 60, 50, 840, 70, 'Click to add title', titleStyle),
-      textEl('body-l', 2, 60, 140, 400, 360, 'Click to add content', bodyStyle),
-      textEl('body-r', 3, 500, 140, 400, 360, 'Click to add content', bodyStyle),
+      textEl('title', 1, 60, 50, 840, 70, deckString('addTitle'), titleStyle),
+      textEl('body-l', 2, 60, 140, 400, 360, deckString('addContent'), bodyStyle),
+      textEl('body-r', 3, 500, 140, 400, 360, deckString('addContent'), bodyStyle),
     ]),
   },
   {
@@ -131,11 +132,11 @@ export const LAYOUT_TEMPLATES: LayoutTemplate[] = [
       { x: 52, y: 36, w: 42, h: 50, kind: 'body' },
     ],
     buildElements: () => toMap([
-      textEl('title', 1, 60, 50, 840, 70, 'Click to add title', titleStyle),
+      textEl('title', 1, 60, 50, 840, 70, deckString('addTitle'), titleStyle),
       textEl('hd-l', 2, 60, 140, 400, 40, 'Heading', headingStyle),
       textEl('hd-r', 3, 500, 140, 400, 40, 'Heading', headingStyle),
-      textEl('body-l', 4, 60, 200, 400, 300, 'Click to add content', bodyStyle),
-      textEl('body-r', 5, 500, 200, 400, 300, 'Click to add content', bodyStyle),
+      textEl('body-l', 4, 60, 200, 400, 300, deckString('addContent'), bodyStyle),
+      textEl('body-r', 5, 500, 200, 400, 300, deckString('addContent'), bodyStyle),
     ]),
   },
   {

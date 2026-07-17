@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Icon } from './icons';
 import { clearFormatting, dispatchSlideCommand } from '../univer/commands';
+import { getSelectedElement } from './selection';
 
 // Google Docs-style title bar — single chrome block with brand on the
 // left, editable filename + menu strip stacked in the middle, action
@@ -148,6 +149,26 @@ function buildMenus(t: (key: string) => string): MenuDef[] {
 
 const isSep = (i: MenuDef['items'][number]): i is { id: string; label: '---' } => i.label === '---';
 
+function siteReturnTarget(): { href: string; label: string } {
+  const locale = typeof window === 'undefined'
+    ? 'ja'
+    : new URLSearchParams(window.location.search).get('lang') || 'ja';
+  const supported = new Set(['ja', 'en', 'es', 'fr', 'zh-cn', 'zh-tw']);
+  const lang = supported.has(locale) ? locale : 'ja';
+  const labels: Record<string, string> = {
+    ja: 'RuRu Lab の PowerPoint ページへ戻る',
+    en: 'Back to RuRu Lab PowerPoint',
+    es: 'Volver a PowerPoint de RuRu Lab',
+    fr: 'Retour à PowerPoint sur RuRu Lab',
+    'zh-cn': '返回 RuRu Lab PowerPoint',
+    'zh-tw': '返回 RuRu Lab PowerPoint',
+  };
+  return {
+    href: `/${lang}/powerpoint.html`,
+    label: labels[lang] ?? 'RuRu Lab の PowerPoint ページへ戻る',
+  };
+}
+
 // Best-effort clipboard fallback. Univer registers `univer.command.cut/copy/
 // paste` in @univerjs/ui, but those rely on a focused editor surface. When
 // the focus is on the slide canvas (not a text frame), Univer's commands
@@ -155,6 +176,14 @@ const isSep = (i: MenuDef['items'][number]): i is { id: string; label: '---' } =
 // route the action through its native focused-element handler. Both paths
 // can fail in headless contexts — we swallow the rejection.
 async function dispatchClipboard(cmd: 'cut' | 'copy' | 'paste'): Promise<void> {
+  if (cmd === 'paste') {
+    if (await dispatchSlideCommand('casual-slides.command.paste-element')) return;
+  } else if (getSelectedElement()) {
+    const id = cmd === 'cut'
+      ? 'casual-slides.command.cut-element'
+      : 'casual-slides.command.copy-element';
+    if (await dispatchSlideCommand(id)) return;
+  }
   const ok = await dispatchSlideCommand(`univer.command.${cmd}`);
   if (ok) return;
   // TODO: drop the execCommand fallback once Univer routes canvas-level
@@ -206,6 +235,7 @@ export function TitleBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const menuStripRef = useRef<HTMLDivElement>(null);
   const MENUS = buildMenus(t);
+  const siteReturn = siteReturnTarget();
 
   useEffect(() => setDraft(fileName), [fileName]);
   useEffect(() => {
@@ -382,13 +412,20 @@ export function TitleBar({
 
   return (
     <header className="cs-titlebar">
-      <a className="cs-titlebar__brand" href="#" aria-label={t('titlebar.brand')}>
+      <a
+        className="cs-titlebar__brand"
+        href={siteReturn.href}
+        aria-label={siteReturn.label}
+        title={siteReturn.label}
+      >
+        <Icon name="arrow_back" size={18} />
         <img
-          src={`${import.meta.env.BASE_URL}brand.svg`}
-          alt={t('titlebar.brand')}
+          src="/assets/ppt-editor/brand.svg"
+          alt=""
           width={32}
           height={40}
         />
+        <span className="cs-titlebar__brand-label">RuRu Lab</span>
       </a>
       <div className="cs-titlebar__center">
         <div className="cs-titlebar__row cs-titlebar__row--top">

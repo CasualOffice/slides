@@ -52,7 +52,7 @@ function ErrorFallback({ error, details }: { error: Error; details: ErrorInfo | 
     <div className="cs-error-boundary" role="alert" aria-live="assertive">
       <div className="cs-error-boundary__card">
         <img
-          src={`${import.meta.env.BASE_URL}brand.svg`}
+          src="/assets/ppt-editor/brand.svg"
           alt=""
           width={44}
           height={55}

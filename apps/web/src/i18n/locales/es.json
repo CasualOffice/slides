@@ -1,0 +1,842 @@
+{
+  "chrome": {
+    "titlebar": {
+      "brand": "Casual Slides",
+      "filenameRename": "Cambiar nombre",
+      "actions": {
+        "open": "Abrir",
+        "opening": "Abriendo",
+        "save": "Guardar",
+        "saving": "Guardando",
+        "share": "Compartir",
+        "shareComingSoon": "Próximamente",
+        "you": "Tú",
+        "youInitial": "T"
+      },
+      "collab": {
+        "live": "en vivo",
+        "idle": "inactivo",
+        "connecting": "conectando",
+        "reconnecting": "reconectando",
+        "error": "error",
+        "liveTooltip_one": "Colaborando en la sala «{{room}}» · {{count}} persona",
+        "liveTooltip_other": "Colaborando en la sala «{{room}}» · {{count}} personas",
+        "stateTooltip": "Sala de colaboración {{room}} ({{state}})"
+      },
+      "saved": {
+        "saving": "Guardando…",
+        "dirty": "Cambios no guardados",
+        "clean": "Guardado"
+      },
+      "pill": {
+        "dismissStatus": "Cerrar estado",
+        "dismissError": "Cerrar error"
+      }
+    },
+    "workspace": {
+      "dropPptx": "Suelta un archivo .pptx para abrirlo",
+      "busyOpening": "Abriendo presentación…",
+      "busySaving": "Guardando presentación…",
+      "bootSplash": "Iniciando el editor…"
+    },
+    "autosave": {
+      "title": "¿Restaurar la presentación no guardada?",
+      "subtitle": "{{name}} · última edición {{when}}",
+      "restore": "Restaurar",
+      "dismiss": "Descartar"
+    },
+    "slideRail": {
+      "ariaLabel": "Miniaturas de diapositivas",
+      "slideLabel": "Diapositiva {{index}}",
+      "newSlide": "Nueva diapositiva",
+      "duplicate": "Duplicar diapositiva",
+      "delete": "Eliminar diapositiva"
+    },
+    "status": {
+      "untitled": "Presentación sin título",
+      "savedSize": "Guardado · {{size}} KB",
+      "loaded_one": "Se cargó {{count}} diapositiva",
+      "loaded_other": "Se cargaron {{count}} diapositivas",
+      "savedSlide": "Guardado · diapositiva {{index}}.png",
+      "rendering": "Procesando {{done}} / {{total}}…",
+      "savedFile": "Guardado · {{name}}",
+      "copyName": "{{name}} (copia)",
+      "copyCreated": "Copia creada · {{name}}",
+      "dropUnsupported": "Suelta un archivo .pptx o una imagen"
+    }
+  },
+  "menu": {
+    "file": {
+      "label": "Archivo",
+      "new": "Nuevo",
+      "open": "Abrir",
+      "recent": "Archivos recientes",
+      "save": "Guardar",
+      "properties": "Propiedades",
+      "share": "Compartir",
+      "shortcut": {
+        "new": "Ctrl+N",
+        "open": "Ctrl+O",
+        "save": "Ctrl+S"
+      },
+      "pageSetup": "Configuración de página",
+      "downloadPng": "Descargar diapositiva como PNG",
+      "downloadPdf": "Descargar presentación como PDF",
+      "makeCopy": "Crear una copia"
+    },
+    "edit": {
+      "label": "Editar",
+      "undo": "Deshacer",
+      "redo": "Rehacer",
+      "cut": "Cortar",
+      "copy": "Copiar",
+      "paste": "Pegar",
+      "shortcut": {
+        "undo": "Ctrl+Z",
+        "redo": "Ctrl+Y",
+        "cut": "Ctrl+X",
+        "copy": "Ctrl+C",
+        "paste": "Ctrl+V"
+      }
+    },
+    "view": {
+      "label": "Vista",
+      "fit": "Ajustar a la ventana",
+      "zoomIn": "Acercar",
+      "zoomOut": "Alejar",
+      "thumbs": "Panel de diapositivas",
+      "notes": "Notas del presentador",
+      "shortcut": {
+        "zoomIn": "Ctrl++",
+        "zoomOut": "Ctrl+-"
+      }
+    },
+    "insert": {
+      "label": "Insertar",
+      "text": "Cuadro de texto",
+      "shape": "Forma",
+      "image": "Imagen",
+      "slide": "Nueva diapositiva",
+      "shortcut": {
+        "slide": "Ctrl+M"
+      }
+    },
+    "format": {
+      "label": "Formato",
+      "bold": "Negrita",
+      "italic": "Cursiva",
+      "underline": "Subrayado",
+      "strikethrough": "Tachado",
+      "alignLeft": "Alinear a la izquierda",
+      "alignCenter": "Alinear al centro",
+      "alignRight": "Alinear a la derecha",
+      "alignJustify": "Justificar",
+      "indentDecrease": "Disminuir sangría",
+      "indentIncrease": "Aumentar sangría",
+      "clearFormatting": "Borrar formato",
+      "insertLink": "Insertar enlace",
+      "shortcut": {
+        "bold": "Ctrl+B",
+        "italic": "Ctrl+I",
+        "underline": "Ctrl+U",
+        "strikethrough": "Alt+Shift+5",
+        "indentDecrease": "Shift+Tab",
+        "indentIncrease": "Tab",
+        "clearFormatting": "Ctrl+\\",
+        "insertLink": "Ctrl+K"
+      }
+    },
+    "slide": {
+      "label": "Diapositiva",
+      "new": "Nueva diapositiva",
+      "duplicate": "Duplicar diapositiva",
+      "theme": "Aplicar tema…",
+      "delete": "Eliminar diapositiva",
+      "shortcut": {
+        "new": "Ctrl+M",
+        "duplicate": "Ctrl+D",
+        "delete": "Shift+Del"
+      }
+    },
+    "arrange": {
+      "label": "Organizar",
+      "bringToFront": "Traer al frente",
+      "bringForward": "Avanzar un nivel",
+      "sendBackward": "Retroceder un nivel",
+      "sendToBack": "Enviar al fondo",
+      "centerH": "Centrar en diapositiva (horizontal)",
+      "centerV": "Centrar en diapositiva (vertical)",
+      "centerBoth": "Centrar en diapositiva",
+      "shortcut": {
+        "bringToFront": "Ctrl+Alt+]",
+        "bringForward": "Ctrl+Shift+]",
+        "sendBackward": "Ctrl+Shift+[",
+        "sendToBack": "Ctrl+Alt+["
+      }
+    },
+    "help": {
+      "label": "Ayuda",
+      "about": "Acerca de Casual Slides",
+      "repo": "Repositorio de GitHub"
+    }
+  },
+  "toolbar": {
+    "tools": {
+      "undo": "Deshacer",
+      "undoTooltip": "Deshacer (Ctrl+Z)",
+      "redo": "Rehacer",
+      "redoTooltip": "Rehacer (Ctrl+Y)",
+      "print": "Imprimir",
+      "select": "Seleccionar",
+      "textbox": "Cuadro de texto",
+      "image": "Imagen",
+      "shape": "Forma",
+      "line": "Línea",
+      "addComment": "Añadir comentario",
+      "newSlide": "Nueva diapositiva",
+      "newSlideTooltip": "Nueva diapositiva (Ctrl+M)",
+      "layout": "Diseño",
+      "theme": "Tema",
+      "background": "Fondo",
+      "transition": "Transición",
+      "slideshow": "Presentación de diapositivas",
+      "slideshowTooltip": "Iniciar presentación de diapositivas (F5)"
+    },
+    "shapes": {
+      "rectangle": "Rectángulo",
+      "ellipse": "Elipse",
+      "line": "Línea",
+      "arrowRight": "Flecha derecha",
+      "arrowLeft": "Flecha izquierda",
+      "arrowUp": "Flecha arriba",
+      "arrowDown": "Flecha hacia abajo",
+      "triangle": "Triángulo",
+      "diamond": "Rombo",
+      "pentagon": "Pentágono",
+      "hexagon": "Hexágono",
+      "octagon": "Octágono",
+      "chevron": "Chevrón",
+      "plus": "Más / Cruz",
+      "star": "Estrella"
+    },
+    "group": {
+      "history": "Historial",
+      "insert": "Insertar",
+      "slide": "Diapositiva",
+      "text": "Formato de texto",
+      "paragraph": "Párrafo",
+      "actions": "Acciones",
+      "clipboard": "Portapapeles",
+      "arrange": "Organizar"
+    },
+    "ribbon": {
+      "home": "Inicio",
+      "insert": "Insertar",
+      "design": "Diseño"
+    },
+    "ribbonGroup": {
+      "quickAccess": "Acceso rápido",
+      "font": "Fuente",
+      "theme": "Temas",
+      "background": "Fondo"
+    },
+    "undo": "Deshacer",
+    "undoShortcut": "Deshacer (Ctrl+Z)",
+    "redo": "Rehacer",
+    "redoShortcut": "Rehacer (Ctrl+Y)",
+    "print": "Imprimir",
+    "printShortcut": "Imprimir (Ctrl+P)",
+    "paintFormat": "Copiar formato",
+    "paste": "Pegar",
+    "pasteShortcut": "Pegar (Ctrl+V)",
+    "cut": "Cortar",
+    "cutShortcut": "Cortar (Ctrl+X)",
+    "copy": "Copiar",
+    "copyShortcut": "Copiar (Ctrl+C)",
+    "bringToFront": "Traer al frente",
+    "bringForward": "Traer adelante",
+    "sendBackward": "Enviar atrás",
+    "sendToBack": "Enviar al fondo",
+    "centerOnSlide": "Centrar en la diapositiva",
+    "alignCenterHorizontal": "Centrar horizontalmente",
+    "alignMiddleVertical": "Centrar en el medio",
+    "duplicate": "Duplicar",
+    "deleteElement": "Eliminar",
+    "textBox": "Cuadro de texto",
+    "image": "Insertar imagen",
+    "shape": "Insertar forma",
+    "line": "Insertar línea",
+    "table": "Tabla",
+    "newSlide": "Nueva diapositiva",
+    "newSlideShortcut": "Nueva diapositiva (Ctrl+M)",
+    "duplicateSlide": "Duplicar diapositiva",
+    "layout": "Diseño",
+    "theme": "Tema",
+    "background": "Fondo",
+    "fontFamily": "Fuente",
+    "fontFamilyAria": "Familia de fuentes",
+    "fontSize": "Tamaño de fuente",
+    "fontSizeDecrease": "Disminuir el tamaño de fuente",
+    "fontSizeIncrease": "Aumentar el tamaño de fuente",
+    "bold": "Negrita",
+    "boldShortcut": "Negrita (Ctrl+B)",
+    "italic": "Cursiva",
+    "italicShortcut": "Cursiva (Ctrl+I)",
+    "underline": "Subrayado",
+    "underlineShortcut": "Subrayado (Ctrl+U)",
+    "strikethrough": "Tachado",
+    "strikethroughShortcut": "Tachado (Alt+Mayús+5)",
+    "textColor": "Color del texto",
+    "fillColor": "Color de relleno",
+    "borderColor": "Color del borde",
+    "selectShapeFirst": "Seleccione una forma primero",
+    "align": "Alinear",
+    "alignLeft": "Alinear a la izquierda",
+    "alignCenter": "Alinear al centro",
+    "alignRight": "Alinear a la derecha",
+    "alignJustify": "Justificar",
+    "list": "Lista",
+    "listBulleted": "Lista con viñetas",
+    "listNumbered": "Lista numerada",
+    "indentDecrease": "Disminuir sangría",
+    "indentIncrease": "Aumentar sangría",
+    "lineSpacing": "Interlineado",
+    "lineSpacingValue": "Espaciado {{value}}",
+    "lineSpacingCustom": "Espaciado personalizado...",
+    "clearFormatting": "Borrar formato",
+    "insertLink": "Insertar enlace",
+    "insertLinkShortcut": "Insertar enlace (Ctrl+K)",
+    "more": "Más",
+    "moreActions": "Más acciones de la barra de herramientas",
+    "slideshow": "Presentación de diapositivas",
+    "slideshowShortcut": "Iniciar presentación de diapositivas (F5)",
+    "shape_rect": "Rectángulo",
+    "shape_ellipse": "Elipse",
+    "shape_line": "Línea",
+    "shape_rightArrow": "Flecha derecha",
+    "shape_leftArrow": "Flecha izquierda",
+    "shape_upArrow": "Flecha arriba",
+    "shape_downArrow": "Flecha hacia abajo",
+    "shape_triangle": "Triángulo",
+    "shape_diamond": "Rombo",
+    "shape_pentagon": "Pentágono",
+    "shape_hexagon": "Hexágono",
+    "shape_octagon": "Octágono",
+    "shape_chevron": "Chevrón",
+    "shape_plus": "más",
+    "shape_star5": "Estrella",
+    "color": {
+      "noFill": "Sin relleno",
+      "reset": "Reiniciar",
+      "themeColors": "Colores del tema",
+      "recent": "Colores recientes",
+      "custom": "personalizado",
+      "apply": "Aplicar",
+      "hexLabel": "HEX",
+      "white": "blanco",
+      "lightGray": "Gris claro",
+      "gray": "gris",
+      "darkGray": "Gris oscuro",
+      "nearBlack": "Casi negro",
+      "cream": "crema",
+      "sky": "cielo",
+      "mint": "menta",
+      "red": "rojo",
+      "orange": "naranja",
+      "yellow": "amarillo",
+      "green": "Verde",
+      "blue": "azul",
+      "indigo": "índigo",
+      "purple": "Púrpura",
+      "pink": "rosa"
+    },
+    "font": {
+      "sectionPopular": "populares",
+      "sectionSerif": "Serifa",
+      "sectionSans": "Sans-serif",
+      "sectionMono": "monoespacio",
+      "sectionDisplay": "Pantalla"
+    },
+    "spacing": {
+      "single": "Sencillo",
+      "preset1_15": "1.15",
+      "preset1_5": "1.5",
+      "double": "doble",
+      "preset2_5": "2.5",
+      "preset3": "3"
+    }
+  },
+  "statusbar": {
+    "slideCount_one": "Diapositiva {{current}} de {{total}}",
+    "slideCount_other": "Diapositiva {{current}} de {{total}}",
+    "language": "Español",
+    "viewNormal": "Vista normal",
+    "viewSorter": "Clasificador de diapositivas: próximamente",
+    "notesShow": "Mostrar notas del presentador",
+    "notesHide": "Ocultar notas del presentador",
+    "zoomIn": "Acercar",
+    "zoomOut": "Alejar",
+    "zoomLabel": "Zoom",
+    "zoomValue": "{{percent}}%",
+    "zoomReset": "Restablecer el zoom al 100%",
+    "present": "Presentación de diapositivas",
+    "presentTooltip": "Iniciar presentación de diapositivas (F5)",
+    "selectionTooltip": "Posición y tamaño del elemento seleccionado.",
+    "selectionCount_one": "{{count}} elemento seleccionado",
+    "selectionCount_other": "{{count}} elementos seleccionados",
+    "selectionCountTooltip": "Número de elementos seleccionados"
+  },
+  "notes": {
+    "title": "Notas del presentador",
+    "hint": "Notas privadas que no se exportan",
+    "closeTooltip": "Ocultar notas (Vista → Notas del presentador)",
+    "regionLabel": "Notas del presentador",
+    "placeholderActive": "Añade notas del presentador para esta diapositiva…",
+    "placeholderEmpty": "Seleccione una diapositiva para agregar notas"
+  },
+  "dialogs": {
+    "theme": {
+      "title": "Temas",
+      "hint": "Se aplica a todas las diapositivas.",
+      "ariaLabel": "Elige un tema",
+      "closeTooltip": "Cerrar (Esc)",
+      "names": {
+        "classic": "Clásico",
+        "paper": "papel",
+        "sky": "cielo",
+        "mint": "menta",
+        "sunset": "puesta de sol",
+        "lavender": "lavanda",
+        "graphite": "Grafito",
+        "ocean": "océano"
+      }
+    },
+    "background": {
+      "title": "Fondo",
+      "ariaLabel": "Color de fondo",
+      "presetsLabel": "Ajustes preestablecidos de color",
+      "custom": "Personalizado",
+      "apply": "Aplicar",
+      "applyToAll": "Aplicar a todas las diapositivas",
+      "close": "Cerrar",
+      "colors": {
+        "white": "blanco",
+        "lightGray": "Gris claro",
+        "gray": "gris",
+        "darkGray": "Gris oscuro",
+        "nearBlack": "Casi negro",
+        "cream": "crema",
+        "sky": "cielo",
+        "mint": "menta",
+        "red": "rojo",
+        "orange": "naranja",
+        "yellow": "amarillo",
+        "green": "Verde",
+        "blue": "azul",
+        "indigo": "índigo",
+        "purple": "Púrpura",
+        "pink": "rosa"
+      },
+      "image": "Imagen"
+    },
+    "layout": {
+      "header": "Insertar diapositiva con diseño",
+      "names": {
+        "blank": "En blanco",
+        "titleSlide": "Diapositiva de título",
+        "titleContent": "Título + contenido",
+        "twoContent": "dos contenidos",
+        "comparison": "Comparación",
+        "sectionHeader": "Encabezado de sección"
+      },
+      "placeholders": {
+        "clickToAddTitle": "Haga clic para agregar título",
+        "clickToAddSubtitle": "Haga clic para agregar subtítulo",
+        "clickToAddContent": "Haga clic para agregar contenido",
+        "heading": "Encabezado",
+        "sectionTitle": "Título de la sección"
+      },
+      "modeInsert": "Insertar diapositiva",
+      "modeApply": "Aplicar a la diapositiva actual",
+      "headerInsert": "Insertar diapositiva con diseño",
+      "headerApply": "Cambiar el diseño de la diapositiva actual"
+    },
+    "properties": {
+      "title": "Propiedades",
+      "ariaLabel": "Propiedades de la presentación",
+      "closeTooltip": "Cerrar (Esc)",
+      "close": "Cerrar",
+      "untitled": "Presentación sin título",
+      "keys": {
+        "title": "Título",
+        "author": "Autor",
+        "created": "Creado",
+        "modified": "Última modificación",
+        "lastModifiedBy": "Última modificación por",
+        "slides": "Diapositivas",
+        "pageSize": "Tamaño de página",
+        "elements": "Elementos",
+        "textLength": "Longitud del texto",
+        "format": "Formato"
+      },
+      "values": {
+        "pageSize": "{{width}} × {{height}} px · {{widthIn}} × {{heightIn}} pulgadas",
+        "textCharacters_one": "{{count}} carácter",
+        "textCharacters_other": "{{count}} caracteres",
+        "format": "PowerPoint (.pptx)"
+      }
+    },
+    "recent": {
+      "title": "Archivos recientes",
+      "ariaLabel": "Archivos recientes",
+      "closeTooltip": "Cerrar (Esc)",
+      "loading": "Cargando…",
+      "empty": "No hay presentaciones recientes. Abre un archivo .pptx para verlo aquí.",
+      "clearAll": "Borrar todo",
+      "close": "Cerrar",
+      "openTooltip": "Abrir {{name}}",
+      "removeTooltip": "Eliminar de la lista",
+      "removeAriaLabel": "Quitar {{name}}",
+      "entryUnavailable": "La entrada ya no está disponible.",
+      "meta": "{{size}} · {{relative}}",
+      "size": {
+        "bytes": "{{value}}B",
+        "kilobytes": "{{value}} KB",
+        "megabytes": "{{value}}MB"
+      },
+      "relative": {
+        "justNow": "justo ahora",
+        "minutes_one": "Hace {{count}} minutos",
+        "minutes_other": "Hace {{count}} minutos",
+        "hours_one": "Hace {{count}} horas",
+        "hours_other": "Hace {{count}} horas",
+        "days_one": "Hace {{count}} día",
+        "days_other": "Hace {{count}} días"
+      },
+      "pinToTop": "Fijar arriba",
+      "unpin": "Desfijar",
+      "pinAriaLabel": "Fijar {{name}}",
+      "unpinAriaLabel": "Desfijar {{name}}"
+    },
+    "about": {
+      "title": "Acerca de Casual Slides",
+      "ariaLabel": "Acerca de Casual Slides",
+      "closeTooltip": "Cerrar (Esc)",
+      "close": "Cerrar",
+      "product": "Casual Slides",
+      "tagline": "Aplicación web compatible con PowerPoint, basada en Univer OSS y distribuida bajo la licencia Apache-2.0.",
+      "version": "Versión",
+      "license": "Licencia",
+      "licenseValue": "Apache-2.0",
+      "source": "Fuente",
+      "sourceLink": "github.com/CasualOffice/slides",
+      "live": "en vivo",
+      "liveLink": "slide.schnsrw.live",
+      "attribTitle": "Dependencias de código abierto",
+      "deps": {
+        "univer": {
+          "name": "Univer OSS",
+          "license": "Apache-2.0",
+          "note": "Lienzo de diapositivas + modelo de datos (v0.24.0)."
+        },
+        "pptxgenjs": {
+          "name": "PptxGenJS",
+          "license": "MIT",
+          "note": "Proceso de exportación de .pptx."
+        },
+        "jszip": {
+          "name": "JSZip",
+          "license": "MIT o GPL-3.0 (nosotros usamos MIT)",
+          "note": ".pptx lectura/escritura zip."
+        },
+        "fastXmlParser": {
+          "name": "fast-xml-parser",
+          "license": "MIT",
+          "note": "Análisis OOXML."
+        },
+        "react": {
+          "name": "React",
+          "license": "MIT",
+          "note": "Carcasa de interfaz de usuario."
+        },
+        "lucide": {
+          "name": "Lucide",
+          "license": "ISC",
+          "note": "Barra de herramientas SVG en línea + iconos de menú."
+        },
+        "i18next": {
+          "name": "i18next + react-i18next",
+          "license": "MIT",
+          "note": "Marco de localización de UI."
+        }
+      }
+    },
+    "slideContext": {
+      "newSlide": "Nueva diapositiva",
+      "duplicate": "Duplicar diapositiva",
+      "delete": "Eliminar diapositiva",
+      "moveUp": "Subir",
+      "moveDown": "Bajar",
+      "hide": "Ocultar diapositiva",
+      "unhide": "Mostrar diapositiva",
+      "shortcut": {
+        "duplicate": "Ctrl+D",
+        "delete": "Shift+Del"
+      }
+    },
+    "elementContext": {
+      "cut": "cortar",
+      "copy": "Copiar",
+      "paste": "Pegar",
+      "duplicate": "Duplicar",
+      "bringForward": "adelantar",
+      "sendBackward": "Enviar hacia atrás",
+      "bringToFront": "traer al frente",
+      "sendToBack": "enviar atrás",
+      "center": "Centrar en diapositiva",
+      "alignLeft": "Alinear a la izquierda",
+      "alignCenter": "Alinear centro",
+      "alignRight": "Alinear a la derecha",
+      "alignTop": "Alinear arriba",
+      "alignMiddle": "Alinear en medio",
+      "alignBottom": "Alinear abajo",
+      "distributeH": "Distribuir horizontalmente",
+      "distributeV": "Distribuir verticalmente",
+      "delete": "Eliminar",
+      "shortcut": {
+        "cut": "Ctrl+X",
+        "copy": "Ctrl+C",
+        "paste": "Ctrl+V",
+        "duplicate": "Ctrl+D",
+        "bringForward": "Ctrl+Shift+]",
+        "sendBackward": "Ctrl+Shift+[",
+        "delete": "Del"
+      }
+    },
+    "shortcuts": {
+      "title": "Atajos de teclado",
+      "ariaLabel": "Atajos de teclado",
+      "closeTooltip": "Cerrar (Esc)",
+      "close": "Cerrar",
+      "searchPlaceholder": "Buscar atajos",
+      "searchAriaLabel": "Buscar atajos",
+      "noResults": "Ningún atajo coincide con tu búsqueda.",
+      "openHint": "Presione {{key}} en cualquier momento para abrir esta lista.",
+      "categories": {
+        "file": "Archivo",
+        "edit": "Editar",
+        "slides": "Diapositivas",
+        "elements": "Elementos",
+        "view": "Ver",
+        "slideshow": "Presentación de diapositivas",
+        "help": "Ayuda"
+      },
+      "actions": {
+        "openPptx": "Abrir .pptx",
+        "savePptx": "Guardar .pptx",
+        "print": "Imprimir",
+        "undo": "Deshacer",
+        "redo": "Rehacer",
+        "newSlide": "Nueva diapositiva",
+        "duplicateSlide": "Duplicar diapositiva",
+        "deleteSlide": "Eliminar diapositiva",
+        "moveSlideUp": "Mover diapositiva hacia arriba",
+        "moveSlideDown": "Mover diapositiva hacia abajo",
+        "prevSlide": "Diapositiva anterior",
+        "nextSlide": "Siguiente diapositiva",
+        "firstSlide": "Saltar a la primera diapositiva",
+        "lastSlide": "Saltar a la última diapositiva",
+        "insertLink": "Insertar enlace",
+        "nudge": "Empujar selección 1 px",
+        "nudgeBig": "Empujar selección 10 px",
+        "cycleNext": "Seleccione el siguiente elemento",
+        "cyclePrev": "Seleccionar elemento anterior",
+        "selectAllOnPage": "Seleccionar todo en la diapositiva",
+        "copyElement": "Copiar elemento",
+        "cutElement": "Elemento cortado",
+        "pasteElement": "Pegar elemento",
+        "duplicateElement": "Elemento duplicado",
+        "deleteElement": "Eliminar elemento",
+        "bringForward": "adelantar",
+        "sendBackward": "Enviar hacia atrás",
+        "bringToFront": "traer al frente",
+        "sendToBack": "enviar atrás",
+        "zoomIn": "Acercar",
+        "zoomOut": "alejar",
+        "resetZoom": "Restablecer el zoom al 100%",
+        "fitToWindow": "Ajustar a la ventana",
+        "startSlideshow": "Iniciar presentación de diapositivas",
+        "slideshowNext": "Siguiente diapositiva",
+        "slideshowPrev": "Diapositiva anterior",
+        "slideshowFirst": "Primera diapositiva",
+        "slideshowLast": "Última diapositiva",
+        "slideshowToggleNumber": "Alternar superposición de números de diapositivas",
+        "slideshowToggleFullscreen": "Alternar pantalla completa",
+        "slideshowExit": "Salir de la presentación de diapositivas",
+        "showShortcuts": "Mostrar atajos de teclado"
+      },
+      "elementsHint": "Activo cuando se selecciona un elemento en la diapositiva.",
+      "slideshowHint": "Activo durante la presentación (F5)."
+    },
+    "format": {
+      "ariaLabel": "Opciones de formato",
+      "title": "Opciones de formato",
+      "emptyHint": "Seleccione un elemento en el lienzo para darle formato.",
+      "closeTooltip": "Ocultar panel de formato",
+      "expandSection": "Expandir {{section}}",
+      "collapseSection": "Contraer {{section}}",
+      "noSelection": "Ningún elemento seleccionado",
+      "sections": {
+        "position": "Posición",
+        "size": "Tamaño",
+        "fill": "Rellenar",
+        "border": "frontera",
+        "shadow": "sombra",
+        "opacity": "Opacidad",
+        "arrange": "Organizar"
+      },
+      "opacity": {
+        "label": "Opacidad",
+        "disabledTooltip": "Próximamente con la próxima actualización Univer",
+        "disabledHint": "La opacidad de la forma llegará con la próxima actualización del motor Univer: IShapeProperties no tiene campo alfa en la versión actual."
+      },
+      "arrange": {
+        "bringForward": "Avanzar (Ctrl+Mayús+])",
+        "sendBackward": "Enviar hacia atrás (Ctrl+Mayús+[)",
+        "bringToFront": "Traer al frente (Ctrl+Alt+])",
+        "sendToBack": "Enviar atrás (Ctrl+Alt+[)",
+        "centerH": "Centrar horizontalmente en la diapositiva",
+        "centerV": "Centrar verticalmente en la diapositiva",
+        "centerBoth": "Centrar en diapositiva"
+      },
+      "position": {
+        "x": "x",
+        "y": "Y",
+        "xAria": "Posición horizontal (px)",
+        "yAria": "Posición vertical (px)"
+      },
+      "size": {
+        "width": "Ancho",
+        "height": "altura",
+        "widthAria": "Ancho (px)",
+        "heightAria": "Altura (píxeles)",
+        "lockAspect": "Bloquear relación de aspecto",
+        "unlockAspect": "Desbloquear relación de aspecto"
+      },
+      "fill": {
+        "label": "color de relleno",
+        "none": "Ninguno"
+      },
+      "border": {
+        "colorLabel": "Color del borde",
+        "none": "Sin fronteras",
+        "widthLabel": "Ancho del borde",
+        "widthAria": "Ancho del borde (px)",
+        "dashLabel": "estilo guión",
+        "dash": {
+          "solid": "Sólido",
+          "dashed": "discontinuo",
+          "dotted": "punteado"
+        }
+      },
+      "shadow": {
+        "enable": "Sombra paralela",
+        "colorLabel": "color de sombra",
+        "offsetX": "Desplazamiento X",
+        "offsetY": "Compensación Y",
+        "blur": "Desenfoque",
+        "offsetXAria": "Desplazamiento horizontal de la sombra (px)",
+        "offsetYAria": "Desplazamiento vertical de la sombra (px)",
+        "blurAria": "Radio de desenfoque de sombra (px)"
+      }
+    },
+    "findReplace": {
+      "title": "Buscar y reemplazar",
+      "ariaLabel": "Buscar y reemplazar",
+      "closeTooltip": "Cerrar (Esc)",
+      "close": "Cerrar",
+      "findPlaceholder": "Encontrar en cubierta",
+      "findAriaLabel": "Buscar texto",
+      "replacePlaceholder": "Reemplazar con",
+      "replaceAriaLabel": "Reemplazar texto",
+      "toggleReplace": "Mostrar reemplazar",
+      "hideReplace": "Ocultar reemplazar",
+      "matchCase": "caso de partido",
+      "matchWholeWord": "Coincidir palabra completa",
+      "useRegex": "Usar expresión regular",
+      "previous": "Partido anterior",
+      "next": "Próximo partido",
+      "replaceOne": "Reemplazar",
+      "replaceAll": "Reemplazar todo",
+      "countNone": "Sin resultados",
+      "countOf": "{{current}} de {{total}}",
+      "regexInvalid": "Expresión regular no válida",
+      "replacedCount_one": "Reemplazado {{count}} partido",
+      "replacedCount_other": "{{count}} coincidencias reemplazadas"
+    },
+    "pageSetup": {
+      "title": "Configuración de página",
+      "ariaLabel": "Configuración de página",
+      "close": "Cerrar (Esc)",
+      "cancel": "Cancelar",
+      "apply": "Aplicar",
+      "widescreen": "Pantalla panorámica 16:9",
+      "widescreen1610": "Pantalla ancha 16:10",
+      "standard": "Estándar 4:3",
+      "a4Landscape": "A4 horizontal",
+      "a4Portrait": "Retrato A4",
+      "letterLandscape": "Paisaje de letras de EE. UU.",
+      "custom": "personalizado",
+      "width": "Ancho",
+      "height": "altura",
+      "note": "Cambiar el tamaño de la diapositiva recarga la plataforma para volver a ajustar el lienzo."
+    }
+  },
+  "slideshow": {
+    "ariaLabel": "Presentación de diapositivas",
+    "empty": "No hay diapositivas para presentar.",
+    "notFound": "Diapositiva no encontrada.",
+    "exit": "Salir",
+    "counter": "{{current}} / {{total}}",
+    "tooltips": {
+      "previous": "Anterior ({{key}})",
+      "previousKey": "Flecha izquierda",
+      "next": "Siguiente ({{key}})",
+      "nextKey": "Flecha derecha o espacio",
+      "fullscreen": "Alternar pantalla completa (F)",
+      "exit": "Salir (Escape)",
+      "presenter": "Alternar vista de presentador (P)",
+      "blackscreen": "Alternar pantalla negra (B)"
+    },
+    "presenter": {
+      "nextLabel": "A continuación",
+      "endOfDeck": "Fin de la cubierta",
+      "notesLabel": "Notas del orador",
+      "notesAriaLabel": "Notas del orador para la diapositiva actual",
+      "notesEmpty": "No hay notas en esta diapositiva.",
+      "resetTimer": "Reiniciar",
+      "resetTimerTooltip": "Restablecer el temporizador transcurrido",
+      "currentLabel": "Diapositiva actual",
+      "elapsedAria": "Tiempo transcurrido {{elapsed}}"
+    },
+    "jump": {
+      "title": "ir a la diapositiva",
+      "label": "Número de diapositiva",
+      "hint": "Escriba un número y luego presione Entrar"
+    }
+  },
+  "errors": {
+    "generic": "Algo salió mal.",
+    "unknown": "Error desconocido",
+    "notPptx": "Solo se admiten .pptx archivos",
+    "pptxTooLarge": "El archivo es demasiado grande para abrirlo ({{size}}). El límite es {{limit}}.",
+    "pptxCorrupt": "Este .pptx está corrupto o no es un archivo PowerPoint.",
+    "pptxEncrypted": "Este .pptx está protegido por contraseña. Primero descifralo en PowerPoint y luego vuelve a abrirlo.",
+    "boundary": {
+      "title": "Casual Slides encontré un error inesperado",
+      "lede": "El editor detectó un error de renderizado y se detuvo para evitar dañar su plataforma. Vuelva a cargar para empezar de nuevo. Es posible que se pierdan las ediciones recientes no guardadas desde la última vez que se guardaron.",
+      "reload": "Recargar editor",
+      "detailsLabel": "Detalles técnicos"
+    }
+  }
+}

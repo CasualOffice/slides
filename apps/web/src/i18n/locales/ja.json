@@ -1,0 +1,842 @@
+{
+  "chrome": {
+    "titlebar": {
+      "brand": "Casual Slides",
+      "filenameRename": "名前の変更",
+      "actions": {
+        "open": "開く",
+        "opening": "開いています",
+        "save": "保存",
+        "saving": "保存しています",
+        "share": "シェアする",
+        "shareComingSoon": "近日公開予定",
+        "you": "あなた",
+        "youInitial": "U"
+      },
+      "collab": {
+        "live": "ライブ",
+        "idle": "待機中",
+        "connecting": "接続中",
+        "reconnecting": "再接続中",
+        "error": "エラー",
+        "liveTooltip_one": "ルーム「{{room}}」で共同編集中 · {{count}}人",
+        "liveTooltip_other": "ルーム「{{room}}」で共同編集中 · {{count}}人",
+        "stateTooltip": "コラボルーム{{room}}（{{state}}）"
+      },
+      "saved": {
+        "saving": "保存中…",
+        "dirty": "未保存の変更",
+        "clean": "保存済み"
+      },
+      "pill": {
+        "dismissStatus": "ステータスを閉じる",
+        "dismissError": "エラーを閉じる"
+      }
+    },
+    "workspace": {
+      "dropPptx": ".pptx をドロップして開く",
+      "busyOpening": "プレゼンテーションを開いています…",
+      "busySaving": "プレゼンテーションを保存しています…",
+      "bootSplash": "エディタを起動中…"
+    },
+    "autosave": {
+      "title": "保存されていないデッキを復元しますか?",
+      "subtitle": "{{name}} · 最終編集: {{when}}",
+      "restore": "復元",
+      "dismiss": "破棄"
+    },
+    "slideRail": {
+      "ariaLabel": "スライドサムネイル",
+      "slideLabel": "スライド{{index}}",
+      "newSlide": "新しいスライド",
+      "duplicate": "スライドを複製",
+      "delete": "スライドを削除"
+    },
+    "status": {
+      "untitled": "無題のプレゼンテーション",
+      "savedSize": "保存済み · {{size}} KB",
+      "loaded_one": "{{count}}枚のスライドを読み込みました",
+      "loaded_other": "{{count}}枚のスライドを読み込みました",
+      "savedSlide": "保存済み · スライド{{index}}.png",
+      "rendering": "レンダリング中 {{done}} / {{total}}…",
+      "savedFile": "保存済み · {{name}}",
+      "copyName": "{{name}}（コピー）",
+      "copyCreated": "コピーを作成しました · {{name}}",
+      "dropUnsupported": ".pptx ファイルまたは画像をドロップ"
+    }
+  },
+  "menu": {
+    "file": {
+      "label": "ファイル",
+      "new": "新規",
+      "open": "開く",
+      "recent": "最近のファイル",
+      "save": "保存",
+      "properties": "プロパティ",
+      "share": "共有",
+      "shortcut": {
+        "new": "Ctrl+N",
+        "open": "Ctrl+O",
+        "save": "Ctrl+S"
+      },
+      "pageSetup": "ページ設定",
+      "downloadPng": "スライドを PNG としてダウンロード",
+      "downloadPdf": "デッキを PDF としてダウンロード",
+      "makeCopy": "コピーを作成"
+    },
+    "edit": {
+      "label": "編集",
+      "undo": "元に戻す",
+      "redo": "やり直し",
+      "cut": "切り取り",
+      "copy": "コピー",
+      "paste": "貼り付け",
+      "shortcut": {
+        "undo": "Ctrl+Z",
+        "redo": "Ctrl+Y",
+        "cut": "Ctrl+X",
+        "copy": "Ctrl+C",
+        "paste": "Ctrl+V"
+      }
+    },
+    "view": {
+      "label": "表示",
+      "fit": "ウィンドウに合わせる",
+      "zoomIn": "ズームイン",
+      "zoomOut": "ズームアウト",
+      "thumbs": "スライドパネル",
+      "notes": "発表者ノート",
+      "shortcut": {
+        "zoomIn": "Ctrl++",
+        "zoomOut": "Ctrl+-"
+      }
+    },
+    "insert": {
+      "label": "挿入",
+      "text": "テキストボックス",
+      "shape": "図形",
+      "image": "画像",
+      "slide": "新しいスライド",
+      "shortcut": {
+        "slide": "Ctrl+M"
+      }
+    },
+    "format": {
+      "label": "書式",
+      "bold": "太字",
+      "italic": "斜体",
+      "underline": "下線",
+      "strikethrough": "取り消し線",
+      "alignLeft": "左揃え",
+      "alignCenter": "中央揃え",
+      "alignRight": "右揃え",
+      "alignJustify": "両端揃え",
+      "indentDecrease": "インデントを減らす",
+      "indentIncrease": "インデントを増やす",
+      "clearFormatting": "書式をクリア",
+      "insertLink": "リンクを挿入",
+      "shortcut": {
+        "bold": "Ctrl+B",
+        "italic": "Ctrl+I",
+        "underline": "Ctrl+U",
+        "strikethrough": "Alt+Shift+5",
+        "indentDecrease": "Shift+Tab",
+        "indentIncrease": "Tab",
+        "clearFormatting": "Ctrl+\\",
+        "insertLink": "Ctrl+K"
+      }
+    },
+    "slide": {
+      "label": "スライド",
+      "new": "新しいスライド",
+      "duplicate": "スライドを複製",
+      "theme": "テーマを適用…",
+      "delete": "スライドを削除",
+      "shortcut": {
+        "new": "Ctrl+M",
+        "duplicate": "Ctrl+D",
+        "delete": "Shift+Del"
+      }
+    },
+    "arrange": {
+      "label": "配置",
+      "bringToFront": "最前面へ移動",
+      "bringForward": "前面へ移動",
+      "sendBackward": "背面へ移動",
+      "sendToBack": "最背面へ移動",
+      "centerH": "スライド中央（横）",
+      "centerV": "スライド中央（縦）",
+      "centerBoth": "スライドの中心",
+      "shortcut": {
+        "bringToFront": "Ctrl+Alt+]",
+        "bringForward": "Ctrl+Shift+]",
+        "sendBackward": "Ctrl+Shift+[",
+        "sendToBack": "Ctrl+Alt+["
+      }
+    },
+    "help": {
+      "label": "ヘルプ",
+      "about": "Casual Slides について",
+      "repo": "GitHub リポジトリ"
+    }
+  },
+  "toolbar": {
+    "tools": {
+      "undo": "元に戻す",
+      "undoTooltip": "元に戻す (Ctrl+Z)",
+      "redo": "やり直し",
+      "redoTooltip": "やり直し (Ctrl+Y)",
+      "print": "印刷",
+      "select": "選択",
+      "textbox": "テキストボックス",
+      "image": "画像",
+      "shape": "図形",
+      "line": "線",
+      "addComment": "コメントを追加",
+      "newSlide": "新しいスライド",
+      "newSlideTooltip": "新しいスライド (Ctrl+M)",
+      "layout": "レイアウト",
+      "theme": "テーマ",
+      "background": "背景",
+      "transition": "画面切り替え",
+      "slideshow": "スライドショー",
+      "slideshowTooltip": "スライドショーの開始 (F5)"
+    },
+    "shapes": {
+      "rectangle": "長方形",
+      "ellipse": "楕円",
+      "line": "線",
+      "arrowRight": "右矢印",
+      "arrowLeft": "左矢印",
+      "arrowUp": "上矢印",
+      "arrowDown": "下矢印",
+      "triangle": "三角形",
+      "diamond": "ひし形",
+      "pentagon": "五角形",
+      "hexagon": "六角形",
+      "octagon": "八角形",
+      "chevron": "シェブロン",
+      "plus": "十字",
+      "star": "星"
+    },
+    "group": {
+      "history": "操作履歴",
+      "insert": "挿入",
+      "slide": "スライド",
+      "text": "テキストの書式設定",
+      "paragraph": "段落",
+      "actions": "アクション",
+      "clipboard": "クリップボード",
+      "arrange": "配置"
+    },
+    "ribbon": {
+      "home": "ホーム",
+      "insert": "挿入",
+      "design": "デザイン"
+    },
+    "ribbonGroup": {
+      "quickAccess": "クイックアクセス",
+      "font": "フォント",
+      "theme": "テーマ",
+      "background": "背景"
+    },
+    "undo": "元に戻す",
+    "undoShortcut": "元に戻す (Ctrl+Z)",
+    "redo": "やり直し",
+    "redoShortcut": "やり直し (Ctrl+Y)",
+    "print": "印刷",
+    "printShortcut": "印刷 (Ctrl+P)",
+    "paintFormat": "書式のコピー／貼り付け",
+    "paste": "貼り付け",
+    "pasteShortcut": "貼り付け (Ctrl+V)",
+    "cut": "切り取り",
+    "cutShortcut": "切り取り (Ctrl+X)",
+    "copy": "コピー",
+    "copyShortcut": "コピー (Ctrl+C)",
+    "bringToFront": "最前面へ移動",
+    "bringForward": "前面へ移動",
+    "sendBackward": "背面へ移動",
+    "sendToBack": "最背面へ移動",
+    "centerOnSlide": "スライドの中央",
+    "alignCenterHorizontal": "左右中央",
+    "alignMiddleVertical": "上下中央",
+    "duplicate": "複製",
+    "deleteElement": "削除",
+    "textBox": "テキストボックス",
+    "image": "画像の挿入",
+    "shape": "図形を挿入",
+    "line": "線を挿入",
+    "table": "表",
+    "newSlide": "新しいスライド",
+    "newSlideShortcut": "新しいスライド (Ctrl+M)",
+    "duplicateSlide": "スライドを複製",
+    "layout": "レイアウト",
+    "theme": "テーマ",
+    "background": "背景",
+    "fontFamily": "フォント",
+    "fontFamilyAria": "フォント",
+    "fontSize": "フォントサイズ",
+    "fontSizeDecrease": "フォントサイズを小さくする",
+    "fontSizeIncrease": "フォントサイズを大きくする",
+    "bold": "太字",
+    "boldShortcut": "太字 (Ctrl+B)",
+    "italic": "斜体",
+    "italicShortcut": "斜体 (Ctrl+I)",
+    "underline": "下線",
+    "underlineShortcut": "下線 (Ctrl+U)",
+    "strikethrough": "取り消し線",
+    "strikethroughShortcut": "取り消し線 (Alt+Shift+5)",
+    "textColor": "文字の色",
+    "fillColor": "塗りつぶしの色",
+    "borderColor": "枠線の色",
+    "selectShapeFirst": "最初に形状を選択してください",
+    "align": "整列",
+    "alignLeft": "左揃え",
+    "alignCenter": "中央揃え",
+    "alignRight": "右揃え",
+    "alignJustify": "両端揃え",
+    "list": "リスト",
+    "listBulleted": "箇条書きリスト",
+    "listNumbered": "番号付きリスト",
+    "indentDecrease": "インデントを減らす",
+    "indentIncrease": "インデントを増やす",
+    "lineSpacing": "行間",
+    "lineSpacingValue": "行間 {{value}}",
+    "lineSpacingCustom": "カスタム行間…",
+    "clearFormatting": "書式をクリア",
+    "insertLink": "リンクを挿入",
+    "insertLinkShortcut": "リンクの挿入 (Ctrl+K)",
+    "more": "その他",
+    "moreActions": "その他のツールバーアクション",
+    "slideshow": "スライドショー",
+    "slideshowShortcut": "スライドショーの開始 (F5)",
+    "shape_rect": "長方形",
+    "shape_ellipse": "楕円",
+    "shape_line": "線",
+    "shape_rightArrow": "右矢印",
+    "shape_leftArrow": "左矢印",
+    "shape_upArrow": "上矢印",
+    "shape_downArrow": "下矢印",
+    "shape_triangle": "三角形",
+    "shape_diamond": "ひし形",
+    "shape_pentagon": "五角形",
+    "shape_hexagon": "六角形",
+    "shape_octagon": "八角形",
+    "shape_chevron": "シェブロン",
+    "shape_plus": "プラス",
+    "shape_star5": "星",
+    "color": {
+      "noFill": "塗りつぶしなし",
+      "reset": "リセット",
+      "themeColors": "テーマカラー",
+      "recent": "最近の色",
+      "custom": "カスタム",
+      "apply": "適用",
+      "hexLabel": "HEX",
+      "white": "ホワイト",
+      "lightGray": "ライトグレー",
+      "gray": "グレー",
+      "darkGray": "ダークグレー",
+      "nearBlack": "黒に近い",
+      "cream": "クリーム",
+      "sky": "空",
+      "mint": "ミント",
+      "red": "赤",
+      "orange": "オレンジ",
+      "yellow": "黄色",
+      "green": "緑",
+      "blue": "ブルー",
+      "indigo": "インディゴ",
+      "purple": "紫",
+      "pink": "ピンク"
+    },
+    "font": {
+      "sectionPopular": "人気",
+      "sectionSerif": "セリフ",
+      "sectionSans": "サンセリフ",
+      "sectionMono": "等幅",
+      "sectionDisplay": "ディスプレイ体"
+    },
+    "spacing": {
+      "single": "シングル",
+      "preset1_15": "1.15",
+      "preset1_5": "1.5",
+      "double": "ダブル",
+      "preset2_5": "2.5",
+      "preset3": "3"
+    }
+  },
+  "statusbar": {
+    "slideCount_one": "{{total}}枚中{{current}}枚目",
+    "slideCount_other": "{{total}}枚中{{current}}枚目",
+    "language": "日本語",
+    "viewNormal": "標準表示",
+    "viewSorter": "スライドソーター — 近日公開予定",
+    "notesShow": "発表者ノートを表示",
+    "notesHide": "発表者ノートを非表示",
+    "zoomIn": "ズームイン",
+    "zoomOut": "ズームアウト",
+    "zoomLabel": "ズーム",
+    "zoomValue": "{{percent}}%",
+    "zoomReset": "ズームを 100% にリセット",
+    "present": "スライドショー",
+    "presentTooltip": "スライドショーの開始 (F5)",
+    "selectionTooltip": "選択した要素の位置とサイズ",
+    "selectionCount_one": "{{count}}個の要素を選択中",
+    "selectionCount_other": "{{count}}個の要素を選択中",
+    "selectionCountTooltip": "選択された要素の数"
+  },
+  "notes": {
+    "title": "発表者ノート",
+    "hint": "自分用のメモです。エクスポートされません",
+    "closeTooltip": "ノートを非表示にする ([表示] → [スピーカー ノート])",
+    "regionLabel": "発表者ノート",
+    "placeholderActive": "このスライドに発表者ノートを追加…",
+    "placeholderEmpty": "メモを追加するスライドを選択してください"
+  },
+  "dialogs": {
+    "theme": {
+      "title": "テーマ",
+      "hint": "すべてのスライドに適用されます",
+      "ariaLabel": "テーマを選択してください",
+      "closeTooltip": "閉じる (Esc)",
+      "names": {
+        "classic": "クラシック",
+        "paper": "紙",
+        "sky": "空",
+        "mint": "ミント",
+        "sunset": "日没",
+        "lavender": "ラベンダー",
+        "graphite": "グラファイト",
+        "ocean": "オーシャン"
+      }
+    },
+    "background": {
+      "title": "背景",
+      "ariaLabel": "背景色",
+      "presetsLabel": "カラープリセット",
+      "custom": "カスタム",
+      "apply": "適用",
+      "applyToAll": "すべてのスライドに適用",
+      "close": "閉じる",
+      "colors": {
+        "white": "ホワイト",
+        "lightGray": "ライトグレー",
+        "gray": "グレー",
+        "darkGray": "ダークグレー",
+        "nearBlack": "黒に近い",
+        "cream": "クリーム",
+        "sky": "スカイ",
+        "mint": "ミント",
+        "red": "赤",
+        "orange": "オレンジ",
+        "yellow": "黄色",
+        "green": "緑",
+        "blue": "ブルー",
+        "indigo": "インディゴ",
+        "purple": "紫",
+        "pink": "ピンク"
+      },
+      "image": "画像"
+    },
+    "layout": {
+      "header": "レイアウト付きのスライドを挿入",
+      "names": {
+        "blank": "空白",
+        "titleSlide": "タイトルスライド",
+        "titleContent": "タイトル+内容",
+        "twoContent": "2つのコンテンツ",
+        "comparison": "比較",
+        "sectionHeader": "セクションヘッダー"
+      },
+      "placeholders": {
+        "clickToAddTitle": "クリックしてタイトルを追加",
+        "clickToAddSubtitle": "クリックしてサブタイトルを追加します",
+        "clickToAddContent": "クリックしてコンテンツを追加します",
+        "heading": "見出し",
+        "sectionTitle": "セクションのタイトル"
+      },
+      "modeInsert": "新規挿入",
+      "modeApply": "現在のスライドに適用",
+      "headerInsert": "レイアウト付きのスライドを挿入",
+      "headerApply": "現在のスライドのレイアウトを変更する"
+    },
+    "properties": {
+      "title": "プロパティ",
+      "ariaLabel": "デッキのプロパティ",
+      "closeTooltip": "閉じる (Esc)",
+      "close": "閉じる",
+      "untitled": "無題のデッキ",
+      "keys": {
+        "title": "タイトル",
+        "author": "著者",
+        "created": "作成日",
+        "modified": "最終更新日",
+        "lastModifiedBy": "最終更新者",
+        "slides": "スライド",
+        "pageSize": "ページサイズ",
+        "elements": "要素",
+        "textLength": "テキストの長さ",
+        "format": "フォーマット"
+      },
+      "values": {
+        "pageSize": "{{width}} × {{height}} ピクセル · {{widthIn}} × {{heightIn}} インチ",
+        "textCharacters_one": "{{count}}文字",
+        "textCharacters_other": "{{count}} 文字",
+        "format": "PowerPoint (.pptx)"
+      }
+    },
+    "recent": {
+      "title": "最近のファイル",
+      "ariaLabel": "最近のファイル",
+      "closeTooltip": "閉じる (Esc)",
+      "loading": "読み込み中…",
+      "empty": "最近のデッキはまだありません。 .pptx を開くとここに表示されます。",
+      "clearAll": "すべてクリア",
+      "close": "閉じる",
+      "openTooltip": "開く {{name}}",
+      "removeTooltip": "リストから削除",
+      "removeAriaLabel": "{{name}}を削除",
+      "entryUnavailable": "このファイルは利用できません。",
+      "meta": "{{size}} · {{relative}}",
+      "size": {
+        "bytes": "{{value}}B",
+        "kilobytes": "{{value}} KB",
+        "megabytes": "{{value}} MB"
+      },
+      "relative": {
+        "justNow": "たった今",
+        "minutes_one": "{{count}} 分前",
+        "minutes_other": "{{count}} 分前",
+        "hours_one": "{{count}} 時間前",
+        "hours_other": "{{count}} 時間前",
+        "days_one": "{{count}} 日前",
+        "days_other": "{{count}} 日前"
+      },
+      "pinToTop": "一番上に固定",
+      "unpin": "固定を解除",
+      "pinAriaLabel": "{{name}}を固定",
+      "unpinAriaLabel": "{{name}}の固定を解除"
+    },
+    "about": {
+      "title": "Casual Slides について",
+      "ariaLabel": "Casual Slides について",
+      "closeTooltip": "閉じる (Esc)",
+      "close": "閉じる",
+      "product": "Casual Slides",
+      "tagline": "PowerPoint 互換の Web アプリ。Univer OSS を基盤とし、Apache-2.0 ライセンスで提供しています。",
+      "version": "バージョン",
+      "license": "ライセンス",
+      "licenseValue": "Apache-2.0",
+      "source": "ソース",
+      "sourceLink": "github.com/CasualOffice/slides",
+      "live": "ライブ",
+      "liveLink": "slide.schnsrw.live",
+      "attribTitle": "オープンソースの依存関係",
+      "deps": {
+        "univer": {
+          "name": "Univer OSS",
+          "license": "Apache-2.0",
+          "note": "スライド キャンバス + データ モデル (v0.24.0)。"
+        },
+        "pptxgenjs": {
+          "name": "PptxGenJS",
+          "license": "MIT",
+          "note": ".pptx エクスポート パイプライン。"
+        },
+        "jszip": {
+          "name": "JSZip",
+          "license": "MIT または GPL-3.0 (MIT を使用します)",
+          "note": ".pptx zip 読み取り/書き込み。"
+        },
+        "fastXmlParser": {
+          "name": "fast-xml-parser",
+          "license": "MIT",
+          "note": "OOXML の解析。"
+        },
+        "react": {
+          "name": "React",
+          "license": "MIT",
+          "note": "UIシェル。"
+        },
+        "lucide": {
+          "name": "Lucide",
+          "license": "ISC",
+          "note": "インライン SVG ツールバー + メニュー アイコン。"
+        },
+        "i18next": {
+          "name": "i18next + react-i18next",
+          "license": "MIT",
+          "note": "UI ローカリゼーション フレームワーク。"
+        }
+      }
+    },
+    "slideContext": {
+      "newSlide": "新しいスライド",
+      "duplicate": "スライドを複製",
+      "delete": "スライドを削除",
+      "moveUp": "上に移動",
+      "moveDown": "下に移動",
+      "hide": "スライドを非表示にする",
+      "unhide": "スライドを再表示する",
+      "shortcut": {
+        "duplicate": "Ctrl+D",
+        "delete": "Shift+Del"
+      }
+    },
+    "elementContext": {
+      "cut": "切り取り",
+      "copy": "コピー",
+      "paste": "貼り付け",
+      "duplicate": "複製",
+      "bringForward": "前面へ移動",
+      "sendBackward": "背面へ移動",
+      "bringToFront": "最前面へ移動",
+      "sendToBack": "最背面へ移動",
+      "center": "スライド中央に配置",
+      "alignLeft": "左揃え",
+      "alignCenter": "中央揃え",
+      "alignRight": "右揃え",
+      "alignTop": "上揃え",
+      "alignMiddle": "中央揃え",
+      "alignBottom": "下揃え",
+      "distributeH": "左右に均等配置",
+      "distributeV": "上下に均等配置",
+      "delete": "削除",
+      "shortcut": {
+        "cut": "Ctrl+X",
+        "copy": "Ctrl+C",
+        "paste": "Ctrl+V",
+        "duplicate": "Ctrl+D",
+        "bringForward": "Ctrl+Shift+]",
+        "sendBackward": "Ctrl+Shift+[",
+        "delete": "Del"
+      }
+    },
+    "shortcuts": {
+      "title": "キーボードショートカット",
+      "ariaLabel": "キーボードショートカット",
+      "closeTooltip": "閉じる (Esc)",
+      "close": "閉じる",
+      "searchPlaceholder": "検索ショートカット",
+      "searchAriaLabel": "検索ショートカット",
+      "noResults": "検索に一致するショートカットはありません。",
+      "openHint": "いつでも{{key}}を押すとこのリストが開きます。",
+      "categories": {
+        "file": "ファイル",
+        "edit": "編集",
+        "slides": "スライド",
+        "elements": "要素",
+        "view": "表示",
+        "slideshow": "スライドショー",
+        "help": "ヘルプ"
+      },
+      "actions": {
+        "openPptx": "開く .pptx",
+        "savePptx": "保存 .pptx",
+        "print": "印刷",
+        "undo": "元に戻す",
+        "redo": "やり直し",
+        "newSlide": "新しいスライド",
+        "duplicateSlide": "スライドを複製",
+        "deleteSlide": "スライドを削除",
+        "moveSlideUp": "スライドを上に移動",
+        "moveSlideDown": "スライドを下に移動",
+        "prevSlide": "前のスライド",
+        "nextSlide": "次のスライド",
+        "firstSlide": "最初のスライドにジャンプ",
+        "lastSlide": "最後のスライドにジャンプ",
+        "insertLink": "リンクを挿入",
+        "nudge": "選択範囲を 1 ピクセルずつ微調整します",
+        "nudgeBig": "選択範囲を 10 ピクセル微調整します",
+        "cycleNext": "次の要素を選択",
+        "cyclePrev": "前の要素を選択",
+        "selectAllOnPage": "スライド上のすべてを選択",
+        "copyElement": "要素のコピー",
+        "cutElement": "要素を切り取り",
+        "pasteElement": "要素の貼り付け",
+        "duplicateElement": "要素を複製",
+        "deleteElement": "要素の削除",
+        "bringForward": "前面へ移動",
+        "sendBackward": "背面へ移動",
+        "bringToFront": "最前面へ移動",
+        "sendToBack": "最背面へ移動",
+        "zoomIn": "ズームイン",
+        "zoomOut": "ズームアウト",
+        "resetZoom": "ズームを 100% にリセット",
+        "fitToWindow": "ウィンドウに合わせる",
+        "startSlideshow": "スライドショーを開始する",
+        "slideshowNext": "次のスライド",
+        "slideshowPrev": "前のスライド",
+        "slideshowFirst": "最初のスライド",
+        "slideshowLast": "最後のスライド",
+        "slideshowToggleNumber": "スライド番号オーバーレイの切り替え",
+        "slideshowToggleFullscreen": "全画面表示の切り替え",
+        "slideshowExit": "スライドショーを終了する",
+        "showShortcuts": "キーボード ショートカットを表示する"
+      },
+      "elementsHint": "スライド上で要素が選択されているときにアクティブになります。",
+      "slideshowHint": "プレゼンテーション中にアクティブになります (F5)。"
+    },
+    "format": {
+      "ariaLabel": "書式設定",
+      "title": "書式設定",
+      "emptyHint": "キャンバス上の要素を選択して書式を設定します。",
+      "closeTooltip": "書式設定ペインを閉じる",
+      "expandSection": "{{section}} を展開する",
+      "collapseSection": "折りたたむ {{section}}",
+      "noSelection": "要素が選択されていません",
+      "sections": {
+        "position": "位置",
+        "size": "サイズ",
+        "fill": "塗りつぶし",
+        "border": "枠線",
+        "shadow": "影",
+        "opacity": "不透明度",
+        "arrange": "配置"
+      },
+      "opacity": {
+        "label": "不透明度",
+        "disabledTooltip": "次回の Univer 更新で対応予定",
+        "disabledHint": "形状の不透明度は次の Univer エンジンのアップグレードで導入されます。現在のバージョンでは IShapeProperties にアルファ フィールドがありません。"
+      },
+      "arrange": {
+        "bringForward": "前方に移動 (Ctrl+Shift+])",
+        "sendBackward": "背面へ移動 (Ctrl+Shift+[)",
+        "bringToFront": "前面に移動 (Ctrl+Alt+])",
+        "sendToBack": "背面に移動 (Ctrl+Alt+[)",
+        "centerH": "スライド上で水平方向の中央に配置",
+        "centerV": "スライドの垂直方向の中央に配置",
+        "centerBoth": "スライド中央に配置"
+      },
+      "position": {
+        "x": "X",
+        "y": "Y",
+        "xAria": "水平位置 (px)",
+        "yAria": "垂直位置 (px)"
+      },
+      "size": {
+        "width": "幅",
+        "height": "高さ",
+        "widthAria": "幅 (ピクセル)",
+        "heightAria": "高さ (ピクセル)",
+        "lockAspect": "アスペクト比をロックする",
+        "unlockAspect": "アスペクト比のロックを解除する"
+      },
+      "fill": {
+        "label": "塗りつぶしの色",
+        "none": "なし"
+      },
+      "border": {
+        "colorLabel": "枠線の色",
+        "none": "境界線なし",
+        "widthLabel": "枠線の幅",
+        "widthAria": "枠線の幅 (px)",
+        "dashLabel": "ダッシュスタイル",
+        "dash": {
+          "solid": "実線",
+          "dashed": "破線",
+          "dotted": "点線"
+        }
+      },
+      "shadow": {
+        "enable": "ドロップシャドウ",
+        "colorLabel": "影の色",
+        "offsetX": "オフセット X",
+        "offsetY": "オフセットY",
+        "blur": "ぼかし",
+        "offsetXAria": "影の水平オフセット (px)",
+        "offsetYAria": "影の垂直オフセット (px)",
+        "blurAria": "影のぼかし半径 (px)"
+      }
+    },
+    "findReplace": {
+      "title": "検索と置換",
+      "ariaLabel": "検索と置換",
+      "closeTooltip": "閉じる (Esc)",
+      "close": "閉じる",
+      "findPlaceholder": "プレゼンテーション内を検索",
+      "findAriaLabel": "テキストの検索",
+      "replacePlaceholder": "置換後の文字列",
+      "replaceAriaLabel": "テキストを置換する",
+      "toggleReplace": "置換を表示",
+      "hideReplace": "置換欄を非表示",
+      "matchCase": "大文字と小文字を区別する",
+      "matchWholeWord": "単語全体と一致する",
+      "useRegex": "正規表現を使用する",
+      "previous": "前の一致項目",
+      "next": "次の一致項目",
+      "replaceOne": "置換",
+      "replaceAll": "すべて置き換える",
+      "countNone": "結果はありません",
+      "countOf": "{{total}}の{{current}}",
+      "regexInvalid": "無効な正規表現です",
+      "replacedCount_one": "{{count}}件を置換しました",
+      "replacedCount_other": "{{count}}件を置換しました"
+    },
+    "pageSetup": {
+      "title": "ページ設定",
+      "ariaLabel": "ページ設定",
+      "close": "閉じる (Esc)",
+      "cancel": "キャンセル",
+      "apply": "適用",
+      "widescreen": "ワイドスクリーン 16:9",
+      "widescreen1610": "ワイドスクリーン 16:10",
+      "standard": "標準 4:3",
+      "a4Landscape": "A4横",
+      "a4Portrait": "A4縦",
+      "letterLandscape": "US Letter 横向き",
+      "custom": "カスタム",
+      "width": "幅",
+      "height": "高さ",
+      "note": "スライドのサイズを変更すると、デッキが再ロードされてキャンバスが再調整されます。"
+    }
+  },
+  "slideshow": {
+    "ariaLabel": "スライドショー",
+    "empty": "提示するスライドはありません。",
+    "notFound": "スライドが見つかりません。",
+    "exit": "終了",
+    "counter": "{{current}} / {{total}}",
+    "tooltips": {
+      "previous": "前へ ({{key}})",
+      "previousKey": "左矢印",
+      "next": "次へ ({{key}})",
+      "nextKey": "右矢印またはスペース",
+      "fullscreen": "全画面切り替え (F)",
+      "exit": "出る（逃げる）",
+      "presenter": "発表者ビューの切り替え (P)",
+      "blackscreen": "黒画面の切り替え (B)"
+    },
+    "presenter": {
+      "nextLabel": "次へ",
+      "endOfDeck": "デッキの終わり",
+      "notesLabel": "講演者のメモ",
+      "notesAriaLabel": "現在のスライドの発表者ノート",
+      "notesEmpty": "このスライドにはメモはありません。",
+      "resetTimer": "リセット",
+      "resetTimerTooltip": "経過タイマーをリセットする",
+      "currentLabel": "現在のスライド",
+      "elapsedAria": "経過時間 {{elapsed}}"
+    },
+    "jump": {
+      "title": "スライドに移動",
+      "label": "スライド番号",
+      "hint": "数字を入力して Enter キーを押します"
+    }
+  },
+  "errors": {
+    "generic": "何か問題が発生しました。",
+    "unknown": "不明なエラー",
+    "notPptx": ".pptx ファイルのみがサポートされています",
+    "pptxTooLarge": "ファイルが大きすぎて開けません（{{size}}）。上限は {{limit}} です。",
+    "pptxCorrupt": "この .pptx は壊れているか、PowerPoint ファイルではありません。",
+    "pptxEncrypted": "この .pptx はパスワードで保護されています。まず PowerPoint で復号化してから、再度開きます。",
+    "boundary": {
+      "title": "Casual Slides で予期しないエラーが発生しました",
+      "lede": "エディターはレンダリング エラーを検出し、デッキの破損を避けるために停止しました。新たに開始するにはリロードしてください。最後に保存してから保存されていない最近の編集内容は失われる可能性があります。",
+      "reload": "エディターをリロードする",
+      "detailsLabel": "技術的な詳細"
+    }
+  }
+}

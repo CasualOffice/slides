@@ -30,6 +30,7 @@ import { useCollabBridge } from './collab/CollabProvider';
 import { addRecent } from './storage/recent-files';
 import { type AutosaveRecord, clearAutosave, loadAutosave, saveAutosave } from './storage/autosave';
 import { AutosaveRestoreBanner } from './shell/AutosaveRestoreBanner';
+import { useTranslation } from './i18n';
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -51,9 +52,9 @@ function getCurrentSnapshot(fallback: ISlideData): ISlideData {
   return model?.getSnapshot() ?? fallback;
 }
 
-function deckTitle(snapshot: ISlideData): string {
-  const t = (snapshot.title || '').trim();
-  return t || 'Untitled deck';
+function deckTitle(snapshot: ISlideData, untitled: string): string {
+  const title = (snapshot.title || '').trim();
+  return title || untitled;
 }
 
 // Resolve the main render scene for the focused slide unit. Returns
@@ -90,6 +91,7 @@ function applyZoom(percent: number) {
 }
 
 export function App() {
+  const { t } = useTranslation(['chrome', 'errors']);
   // Active deck. UniverSlide is keyed on snapshot.id — when Open .pptx
   // imports a new deck, the state update + key change forces React to
   // unmount + remount UniverSlide, which spins up a fresh Univer instance
@@ -194,7 +196,14 @@ export function App() {
     };
   }, []);
 
-  const fileName = useMemo(() => deckTitle(snapshot), [snapshot]);
+  const fileName = useMemo(
+    () => deckTitle(snapshot, t('status.untitled')),
+    [snapshot, t],
+  );
+
+  useEffect(() => {
+    document.title = `${t('titlebar.brand')} - ${fileName}`;
+  }, [fileName, t]);
   const slideCount = snapshot.body?.pageOrder?.length ?? 0;
   const collab = useCollabBridge();
 
@@ -481,6 +490,25 @@ export function App() {
   // an editable input (text-frame editor inside Univer manages its own
   // shortcuts; we don't want to step on those).
   useEffect(() => {
+    const isSlideTextEditorOpen = (): boolean => {
+      if (typeof document === 'undefined') return false;
+      const div = document.querySelector('div.univer-absolute.univer-z-10') as HTMLElement | null;
+      if (!div) return false;
+      const width = parseFloat(div.style?.width ?? '0');
+      return width > 0 && div.children.length > 0;
+    };
+
+    // Univer keeps a contenteditable proxy focused while the canvas owns
+    // keyboard input, even when a shape is merely selected. Treating that
+    // proxy as a real text editor swallowed Delete, Ctrl+C/X/V/D and the
+    // other canvas shortcuts. Only native form fields, external editable
+    // DOM, or Univer's actually-open rich-text editor should block them.
+    const isActualEditableTarget = (target: HTMLElement | null): boolean => !!target && (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      (target.isContentEditable && !target.closest('.univer-mount'))
+    );
+
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       // Slide text editor — Univer renders the editor as a canvas inside
@@ -491,17 +519,8 @@ export function App() {
       // our default inEditable check misses it. Detect by walking the
       // SlideEditorContainer and checking it has a RichTextEditor child.
       // (`state.width > 0` translates to inline width > 0 on the div.)
-      const editorOpen = typeof document !== 'undefined' && (() => {
-        const div = document.querySelector('div.univer-absolute.univer-z-10') as HTMLElement | null;
-        if (!div) return false;
-        const w = parseFloat(div.style?.width ?? '0');
-        return w > 0 && div.children.length > 0;
-      })();
-      const inEditable = !!target && (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      );
+      const editorOpen = isSlideTextEditorOpen();
+      const inEditable = isActualEditableTarget(target);
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
@@ -521,6 +540,10 @@ export function App() {
       } else if ((k === 'z' && e.shiftKey) || k === 'y') {
         e.preventDefault();
         void dispatchSlideCommand('univer.command.redo');
+      } else if (k === 'n') {
+        // Ctrl+N — start a new blank presentation in the current editor.
+        e.preventDefault();
+        window.location.reload();
       } else if (k === 'm') {
         // Ctrl+M → append slide. The slides-ui patch fixes the
         // engine-level double-add (AppendSlideOperation was both
@@ -635,12 +658,7 @@ export function App() {
       // — the text-frame editor uses Delete for character deletion.
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       const target = e.target as HTMLElement | null;
-      const inEditable = !!target && (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      );
-      if (inEditable) return;
+      if (isActualEditableTarget(target) || isSlideTextEditorOpen()) return;
       // Shift+Delete deletes the active slide. Bare Delete deletes the
       // currently-selected SHAPE — Google Slides / PowerPoint UX when a
       // non-text element has focus.
@@ -815,7 +833,7 @@ export function App() {
       const out: ISlideData = { ...live, title: fileName };
       const { blob, fileName: producedName } = await getPptxClient().export(out);
       downloadBlob(blob, producedName);
-      setStatus(`Saved · ${(blob.size / 1024).toFixed(1)} KB`);
+      setStatus(t('status.savedSize', { size: (blob.size / 1024).toFixed(1) }));
       // Successful export → clean. Subsequent mutations re-dirty.
       setDirty(false);
       // Authoritative bytes left the browser — the autosave snapshot
@@ -870,7 +888,7 @@ export function App() {
           /* swallow — failure is "won't show in recent", not data loss */
         }
       }
-      setStatus(`Loaded · ${pageCount} slide${pageCount === 1 ? '' : 's'}`);
+      setStatus(t('status.loaded', { count: pageCount }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -924,7 +942,7 @@ export function App() {
       // network + ~50 ms parse on a warm connection.
       const { downloadSlideAsPng } = await import('./shell/download-slide');
       await downloadSlideAsPng(page, pageSize, fileName, activeSlideIndex + 1);
-      setStatus(`Saved · slide ${activeSlideIndex + 1}.png`);
+      setStatus(t('status.savedSlide', { index: activeSlideIndex + 1 }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -944,16 +962,16 @@ export function App() {
     const orderedPages = order.map((id) => pageMap[id]).filter((p) => !!p);
     if (!orderedPages.length) return;
     setError(null);
-    setStatus(`Rendering 0 / ${orderedPages.length}…`);
+    setStatus(t('status.rendering', { done: 0, total: orderedPages.length }));
     try {
       // Same dynamic-import deferral as the PNG path — pulls jsPDF +
       // html-to-image off the initial bundle (those two combined are
       // ~250 KB minified, the single biggest non-Univer chunk).
       const { downloadDeckAsPdf } = await import('./shell/download-slide');
       await downloadDeckAsPdf(orderedPages, pageSize, fileName, (done, total) => {
-        setStatus(`Rendering ${done} / ${total}…`);
+        setStatus(t('status.rendering', { done, total }));
       });
-      setStatus(`Saved · ${fileName}.pdf`);
+      setStatus(t('status.savedFile', { name: `${fileName}.pdf` }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -977,10 +995,12 @@ export function App() {
     const live = getCurrentSnapshot(snapshot);
     const cloned = structuredClone(live);
     cloned.id = `${live.id || 'deck'}-copy-${Date.now().toString(36)}`;
-    cloned.title = `${(live.title || 'Untitled deck').trim()} (copy)`;
+    cloned.title = t('status.copyName', {
+      name: (live.title || t('status.untitled')).trim(),
+    });
     setSnapshot(cloned);
     setDirty(true);
-    setStatus(`Created a copy · ${cloned.title}`);
+    setStatus(t('status.copyCreated', { name: cloned.title }));
   }
 
   // View → Fit to window. Re-invokes SlideRenderController.scrollToCenter
@@ -1075,7 +1095,7 @@ export function App() {
       await dispatchSlideCommand('casual-slides.command.insert-image-from-file', { file } as any);
       return;
     }
-    setError('Drop a .pptx file or an image');
+    setError(t('status.dropUnsupported'));
   }
 
   return (
@@ -1127,8 +1147,7 @@ export function App() {
         {/* === DRAG-AND-DROP IMPORT === */}
         {dragActive && (
           <div className="cs-workspace__drop-overlay" data-testid="drop-overlay" role="status">
-            {/* TODO(i18n): swap to t('workspace.dropPptx') once strings migrate. */}
-            <span className="cs-workspace__drop-overlay-text">Drop .pptx to open</span>
+            <span className="cs-workspace__drop-overlay-text">{t('workspace.dropPptx')}</span>
           </div>
         )}
         <BusyOverlay opening={opening} saving={saving} />

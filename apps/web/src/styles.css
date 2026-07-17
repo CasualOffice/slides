@@ -44,7 +44,7 @@
   --cs-radius:    4px;
   --cs-radius-lg: 8px;
   --cs-titlebar-h: 64px;
-  --cs-toolbar-h:  44px;
+  --cs-toolbar-h:  78px; /* Office-style ribbon: tab strip + labeled command groups */
   --cs-statusbar-h: 28px;
   --cs-font: 'Inter', 'Segoe UI', Roboto, Arial, system-ui, -apple-system, sans-serif;
 }
@@ -136,8 +136,28 @@ button:disabled { cursor: not-allowed; }
 .cs-titlebar__brand {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   flex-shrink: 0;
   text-decoration: none;
+  color: var(--cs-text-mute);
+  border-radius: var(--cs-radius);
+  padding: 0 6px 0 2px;
+}
+
+.cs-titlebar__brand:hover {
+  background: var(--cs-hover);
+  color: var(--cs-text);
+}
+
+.cs-titlebar__brand:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: 2px;
+}
+
+.cs-titlebar__brand-label {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .cs-titlebar__center {
@@ -2010,6 +2030,92 @@ button.cs-statusbar__zoom-value:focus-visible {
   flex-shrink: 0;
 }
 
+/* =================== Office-style ribbon ===================
+   Tab strip (ホーム / 挿入 / デザイン) over a ribbon body of labeled
+   command groups. Reuses the `.cs-toolbar2__*` button styling for the
+   controls inside each group. The body scrolls horizontally on a narrow
+   window instead of clipping. Lives inside the `.cs-toolbar` grid cell,
+   whose height (--cs-toolbar-h) was sized to fit tabs + body + labels.
+*/
+.cs-ribbon {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cs-ribbon__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--cs-border);
+  background: var(--cs-surface);
+  flex: 0 0 auto;
+}
+
+.cs-ribbon__tab {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 5px 14px;
+  font-size: 13px;
+  color: var(--cs-text);
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  transition: background 80ms ease, color 80ms ease;
+}
+.cs-ribbon__tab:hover { background: var(--cs-hover); }
+.cs-ribbon__tab.is-active {
+  color: var(--cs-accent);
+  box-shadow: inset 0 -2px 0 var(--cs-accent);
+  font-weight: 600;
+}
+.cs-ribbon__tab:focus-visible {
+  outline: 2px solid var(--cs-focus);
+  outline-offset: -2px;
+}
+
+.cs-ribbon__body {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 3px 8px 2px;
+  overflow-x: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.cs-ribbon__group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 6px;
+  flex: 0 0 auto;
+}
+.cs-ribbon__group-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+}
+.cs-ribbon__group-label {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--cs-text-dim);
+  margin-top: 2px;
+  white-space: nowrap;
+}
+.cs-ribbon__group-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--cs-border);
+  flex: 0 0 auto;
+}
+/* Keep the quick-access + Slideshow CTA aligned with the control row,
+   not the group labels, so the right side doesn't float. */
+.cs-ribbon__body > .cs-toolbar__spacer { align-self: center; }
+.cs-ribbon__body > .cs-btn { align-self: center; flex: 0 0 auto; }
+
 .cs-toolbar2__btn {
   position: relative;
   display: inline-flex;
@@ -3491,6 +3597,67 @@ body.cs-slide-rail-open .cs-notes {
   }
 }
 
+/* Phone layout: keep the navigation rail useful without sacrificing most of
+   the slide stage. The thumbnail renderer has a fixed 168px source width, so
+   zoom the complete frame rather than clipping or changing its aspect ratio. */
+@media (max-width: 720px) {
+  :root {
+    --cs-mobile-rail-w: 112px;
+  }
+
+  .cs-slide-rail {
+    width: var(--cs-mobile-rail-w);
+  }
+
+  body.cs-slide-rail-open .cs-workspace,
+  body.cs-slide-rail-open .cs-notes {
+    margin-left: var(--cs-mobile-rail-w);
+  }
+
+  .cs-slide-rail__list {
+    padding: 6px 4px;
+    gap: 2px;
+  }
+
+  .cs-slide-rail__item {
+    gap: 3px;
+    padding: 3px 0;
+  }
+
+  .cs-slide-rail__num {
+    width: 12px;
+    padding-top: 3px;
+    font-size: 10px;
+  }
+
+  .cs-slide-rail__thumb-frame {
+    zoom: 0.48;
+  }
+
+  .cs-slide-rail__add {
+    height: 44px;
+    gap: 0;
+  }
+
+  .cs-slide-rail__add > span {
+    display: none;
+  }
+
+  /* On phones the format controls become a scrollable bottom sheet. This
+     leaves the upper canvas visible and avoids a 280px side overlay covering
+     nearly the entire editing surface. */
+  .cs-format-pane {
+    top: auto;
+    left: var(--cs-mobile-rail-w);
+    right: 0;
+    bottom: var(--cs-statusbar-h);
+    width: auto;
+    height: min(44vh, 320px);
+    border-top: 1px solid var(--cs-border);
+    border-left: 1px solid var(--cs-border);
+  }
+}
+
 /* Consistent keyboard focus ring across the interactive chrome — a visible
    focus indicator is a WCAG 2.2 requirement and reads as "professional". */
 .cs-btn:focus-visible,
@@ -3570,6 +3737,27 @@ body.cs-slide-rail-open .cs-notes {
 .cs-toolbar2__shape-cell:focus-visible {
   outline: 2px solid var(--cs-focus);
   outline-offset: -1px;
+}
+
+/* PowerPoint-style table size picker inside the Insert popover. */
+.cs-toolbar2__table-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 16px);
+  gap: 2px;
+  padding: 4px 6px 6px;
+}
+.cs-toolbar2__table-cell {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--cs-border-2, #cbd5e1);
+  border-radius: 2px;
+  background: var(--cs-surface, #fff);
+  cursor: pointer;
+  padding: 0;
+}
+.cs-toolbar2__table-cell.is-on {
+  background: #bfdbfe;
+  border-color: #3b82f6;
 }
 
 /* ================ Layout picker mode toggle ================ */
