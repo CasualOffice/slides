@@ -834,32 +834,15 @@ function parseRunProps(
     resolveThemeSentinel(typeof cs?.['@typeface'] === 'string' && cs['@typeface']) ||
     '';
   if (typeof typeface === 'string' && typeface.length > 0) {
-    out.ff = substituteFontFamily(typeface);
+    // Keep the authored OOXML family in the model. Rendering may fall back to
+    // a metric-compatible local face, but export must round-trip this value.
+    out.ff = typeface;
   } else if (theme) {
     const themeFont = isTitle ? theme.get(FONT_MAJOR_KEY) : theme.get(FONT_MINOR_KEY);
-    if (themeFont) out.ff = substituteFontFamily(themeFont);
+    if (themeFont) out.ff = themeFont;
   }
 
   return out;
-}
-
-// MS-proprietary deck fonts → metric-compatible open-source replacements
-// loaded by index.html via Google Fonts. Without this rewrite, canvas
-// `ctx.font = "Calibri"` resolves to the system fallback chain on every
-// non-Windows machine (everything collapses to Arial). Carlito is
-// designed metric-identical to Calibri by tyPoland; Caladea is the
-// same for Cambria by Huerta Tipográfica.
-const FONT_SUBSTITUTION_MAP: Record<string, string> = {
-  'Calibri': 'Carlito',
-  'Calibri Light': 'Carlito',
-  'Calibri Bold': 'Carlito',
-  'Cambria': 'Caladea',
-  'Cambria Math': 'Caladea',
-};
-
-function substituteFontFamily(family: string): string {
-  const sub = FONT_SUBSTITUTION_MAP[family];
-  return sub ?? family;
 }
 
 // Extract text + first-run formatting from a <p:txBody>.
@@ -1362,7 +1345,10 @@ function extractRichDoc(
         // soft break doesn't add a gap that PowerPoint wouldn't.
         delete style.spaceAbove;
       }
-      const paragraph: IParagraph = { startIndex: cursor };
+      const paragraph: IParagraph = {
+        paragraphId: `p-${paragraphs.length}-${cursor}`,
+        startIndex: cursor,
+      };
       if (Object.keys(style).length > 0) paragraph.paragraphStyle = style;
       // Bullet attaches to the FIRST segment only — continuation lines
       // sit under the bullet without repeating the marker.

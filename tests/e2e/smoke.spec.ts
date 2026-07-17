@@ -311,6 +311,162 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     expect(captured).toContain('slide.mutation.insert-element');
   });
 
+  test('Delete removes a selected shape from the model and canvas, and Ctrl+Z restores it', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(
+      () => !!(window as unknown as { univer?: unknown }).univer,
+      null,
+      { timeout: 15_000 },
+    );
+    await page.waitForTimeout(800);
+
+    const inserted = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const injector = w.univer.__getInjector();
+      const commands = injector.get(w.__casualSlides__ICommandService);
+      const instances = injector.get(w.__casualSlides__IUniverInstanceService);
+      const model = instances.getCurrentUnitOfType(3);
+      const pageId = model.getActivePage().id;
+      const beforeIds = Object.keys(model.getPage(pageId).pageElements);
+      await commands.executeCommand('slide.command.insert-float-shape.rectangle');
+      const afterIds = Object.keys(model.getPage(pageId).pageElements);
+      const elementId = afterIds.find((id) => !beforeIds.includes(id));
+      return { pageId, elementId, before: beforeIds.length, after: afterIds.length };
+    });
+    expect(inserted.after).toBe(inserted.before + 1);
+    expect(inserted.elementId).toBeTruthy();
+
+    await page.waitForFunction(
+      () => !!(window as unknown as { __casualSlides_getSelection?: () => unknown })
+        .__casualSlides_getSelection?.(),
+      null,
+      { timeout: 5_000 },
+    );
+
+    // Reproduce the browser focus state that caused the regression: Univer's
+    // canvas keyboard proxy is contenteditable even though the shape is only
+    // selected and no text editor is open. Delete must not be swallowed.
+    const focusedCanvasProxy = await page.evaluate(() => {
+      const mount = document.querySelector<HTMLElement>('.univer-mount');
+      if (!mount) return false;
+      const proxy = document.createElement('div');
+      proxy.contentEditable = 'true';
+      proxy.dataset.testid = 'canvas-keyboard-proxy';
+      proxy.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0';
+      mount.appendChild(proxy);
+      proxy.focus();
+      return document.activeElement === proxy;
+    });
+    expect(focusedCanvasProxy).toBe(true);
+
+    await page.keyboard.press('Delete');
+    await page.waitForFunction(
+      ({ pageId, expected }) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = window as any;
+        const model = w.univer.__getInjector()
+          .get(w.__casualSlides__IUniverInstanceService)
+          .getCurrentUnitOfType(3);
+        return Object.keys(model.getPage(pageId).pageElements).length === expected;
+      },
+      { pageId: inserted.pageId, expected: inserted.before },
+    );
+    const canvasObjectRemoved = await page.evaluate(({ pageId, elementId }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const injector = w.univer.__getInjector();
+      const instances = injector.get(w.__casualSlides__IUniverInstanceService);
+      const renderManager = injector.get(w.__casualSlides__IRenderManagerService);
+      const model = instances.getCurrentUnitOfType(3);
+      const render = renderManager.getRenderById(model.getUnitId());
+      return !render?.mainComponent?.getSubScenes?.().get(pageId)?.getObject?.(elementId);
+    }, { pageId: inserted.pageId, elementId: inserted.elementId });
+    expect(canvasObjectRemoved).toBe(true);
+
+    await page.keyboard.press('Control+z');
+    await page.waitForFunction(
+      ({ pageId, expected }) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const w = window as any;
+        const model = w.univer.__getInjector()
+          .get(w.__casualSlides__IUniverInstanceService)
+          .getCurrentUnitOfType(3);
+        return Object.keys(model.getPage(pageId).pageElements).length === expected;
+      },
+      { pageId: inserted.pageId, expected: inserted.after },
+    );
+  });
+
+  test('title bar provides a localized return link to the RuRu Lab PowerPoint page', async ({ page }) => {
+    await page.goto('/?lang=ja');
+    const back = page.locator('.cs-titlebar__brand');
+    await expect(back).toBeVisible();
+    await expect(back).toHaveAttribute('href', '/ja/powerpoint.html');
+    await expect(back).toContainText('RuRu Lab');
+  });
+
+  test('PowerPoint element clipboard and history shortcuts operate on a canvas selection', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => !!(window as unknown as { univer?: unknown }).univer);
+    await page.waitForTimeout(800);
+
+    const initial = await page.evaluate(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const injector = w.univer.__getInjector();
+      const commands = injector.get(w.__casualSlides__ICommandService);
+      const instances = injector.get(w.__casualSlides__IUniverInstanceService);
+      const model = instances.getCurrentUnitOfType(3);
+      const pageId = model.getActivePage().id;
+      await commands.executeCommand('slide.command.insert-float-shape.rectangle');
+      return { pageId, count: Object.keys(model.getPage(pageId).pageElements).length };
+    });
+    await page.waitForFunction(
+      () => !!(window as unknown as { __casualSlides_getSelection?: () => unknown })
+        .__casualSlides_getSelection?.(),
+    );
+
+    await page.evaluate(() => {
+      const mount = document.querySelector<HTMLElement>('.univer-mount');
+      if (!mount) throw new Error('Univer mount not found');
+      const proxy = document.createElement('div');
+      proxy.contentEditable = 'true';
+      proxy.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0';
+      mount.appendChild(proxy);
+      proxy.focus();
+    });
+
+    const waitForCount = async (expected: number) => {
+      await page.waitForFunction(
+        ({ pageId, expectedCount }) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const w = window as any;
+          const model = w.univer.__getInjector()
+            .get(w.__casualSlides__IUniverInstanceService)
+            .getCurrentUnitOfType(3);
+          return Object.keys(model.getPage(pageId).pageElements).length === expectedCount;
+        },
+        { pageId: initial.pageId, expectedCount: expected },
+      );
+    };
+
+    await page.keyboard.press('Control+d');
+    await waitForCount(initial.count + 1);
+
+    await page.keyboard.press('Control+c');
+    await page.keyboard.press('Control+v');
+    await waitForCount(initial.count + 2);
+
+    await page.keyboard.press('Control+x');
+    await waitForCount(initial.count + 1);
+
+    await page.keyboard.press('Control+z');
+    await waitForCount(initial.count + 2);
+    await page.keyboard.press('Control+y');
+    await waitForCount(initial.count + 1);
+  });
+
   test('Undo after Text box restores prior state (Gap 2 + Univer undo wiring)', async ({ page }) => {
     // Insert a text element, then dispatch univer.command.undo. The
     // (delete, insert) inverse-mutation pair the slide.command.add-text

@@ -66,7 +66,7 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
 
         <section className="cs-about__hero">
           <img
-            src={`${import.meta.env.BASE_URL}brand.svg`}
+            src="/assets/ppt-editor/brand.svg"
             alt={t('about.product')}
             width={44}
             height={55}

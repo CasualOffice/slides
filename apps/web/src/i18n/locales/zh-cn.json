@@ -1,0 +1,842 @@
+{
+  "chrome": {
+    "titlebar": {
+      "brand": "Casual Slides",
+      "filenameRename": "重命名",
+      "actions": {
+        "open": "打开",
+        "opening": "正在打开",
+        "save": "保存",
+        "saving": "正在保存",
+        "share": "分享",
+        "shareComingSoon": "即将推出",
+        "you": "你",
+        "youInitial": "U"
+      },
+      "collab": {
+        "live": "协作中",
+        "idle": "空闲",
+        "connecting": "正在连接",
+        "reconnecting": "重新连接",
+        "error": "错误",
+        "liveTooltip_one": "正在房间“{{room}}”中协作 · {{count}} 人",
+        "liveTooltip_other": "正在房间“{{room}}”中协作 · {{count}} 人",
+        "stateTooltip": "协作房间 {{room}}（{{state}}）"
+      },
+      "saved": {
+        "saving": "正在保存...",
+        "dirty": "未保存的更改",
+        "clean": "保存完毕"
+      },
+      "pill": {
+        "dismissStatus": "关闭状态提示",
+        "dismissError": "关闭错误提示"
+      }
+    },
+    "workspace": {
+      "dropPptx": "拖放 .pptx 文件以打开",
+      "busyOpening": "正在打开演示文稿…",
+      "busySaving": "正在保存演示文稿…",
+      "bootSplash": "正在启动编辑器…"
+    },
+    "autosave": {
+      "title": "恢复未保存的演示文稿？",
+      "subtitle": "{{name}} · 上次编辑于 {{when}}",
+      "restore": "恢复",
+      "dismiss": "放弃"
+    },
+    "slideRail": {
+      "ariaLabel": "幻灯片缩略图",
+      "slideLabel": "幻灯片{{index}}",
+      "newSlide": "新幻灯片",
+      "duplicate": "复制幻灯片",
+      "delete": "删除幻灯片"
+    },
+    "status": {
+      "untitled": "无标题演示文稿",
+      "savedSize": "已保存 · {{size}} KB",
+      "loaded_one": "已加载 {{count}} 张幻灯片",
+      "loaded_other": "已加载 {{count}} 张幻灯片",
+      "savedSlide": "已保存 · 幻灯片 {{index}}.png",
+      "rendering": "正在渲染 {{done}} / {{total}}…",
+      "savedFile": "已保存 · {{name}}",
+      "copyName": "{{name}}（副本）",
+      "copyCreated": "已创建副本 · {{name}}",
+      "dropUnsupported": "拖放 .pptx 文件或图片"
+    }
+  },
+  "menu": {
+    "file": {
+      "label": "文件",
+      "new": "新",
+      "open": "打开",
+      "recent": "最近的文件",
+      "save": "保存",
+      "properties": "属性",
+      "share": "分享",
+      "shortcut": {
+        "new": "Ctrl+N",
+        "open": "Ctrl+O",
+        "save": "Ctrl+S"
+      },
+      "pageSetup": "页面设置",
+      "downloadPng": "下载 PNG 幻灯片",
+      "downloadPdf": "下载 PDF 格式的幻灯片",
+      "makeCopy": "复印一份"
+    },
+    "edit": {
+      "label": "编辑",
+      "undo": "撤消",
+      "redo": "重做",
+      "cut": "切",
+      "copy": "复制",
+      "paste": "粘贴",
+      "shortcut": {
+        "undo": "Ctrl+Z",
+        "redo": "Ctrl+Y",
+        "cut": "Ctrl+X",
+        "copy": "Ctrl+C",
+        "paste": "Ctrl+V"
+      }
+    },
+    "view": {
+      "label": "视图",
+      "fit": "适应窗口",
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "thumbs": "幻灯片窗格",
+      "notes": "演讲者备注",
+      "shortcut": {
+        "zoomIn": "Ctrl++",
+        "zoomOut": "Ctrl+-"
+      }
+    },
+    "insert": {
+      "label": "插入",
+      "text": "文本框",
+      "shape": "形状",
+      "image": "图片",
+      "slide": "新幻灯片",
+      "shortcut": {
+        "slide": "Ctrl+M"
+      }
+    },
+    "format": {
+      "label": "格式",
+      "bold": "粗体",
+      "italic": "斜体",
+      "underline": "下划线",
+      "strikethrough": "删除线",
+      "alignLeft": "左对齐",
+      "alignCenter": "居中对齐",
+      "alignRight": "右对齐",
+      "alignJustify": "两端对齐",
+      "indentDecrease": "减少缩进",
+      "indentIncrease": "增加缩进",
+      "clearFormatting": "清除格式",
+      "insertLink": "插入链接",
+      "shortcut": {
+        "bold": "Ctrl+B",
+        "italic": "Ctrl+I",
+        "underline": "Ctrl+U",
+        "strikethrough": "Alt+Shift+5",
+        "indentDecrease": "Shift+Tab",
+        "indentIncrease": "Tab",
+        "clearFormatting": "Ctrl+\\",
+        "insertLink": "Ctrl+K"
+      }
+    },
+    "slide": {
+      "label": "幻灯片",
+      "new": "新幻灯片",
+      "duplicate": "复制幻灯片",
+      "theme": "应用主题...",
+      "delete": "删除幻灯片",
+      "shortcut": {
+        "new": "Ctrl+M",
+        "duplicate": "Ctrl+D",
+        "delete": "Shift+Del"
+      }
+    },
+    "arrange": {
+      "label": "排列",
+      "bringToFront": "置于顶层",
+      "bringForward": "上移一层",
+      "sendBackward": "下移一层",
+      "sendToBack": "置于底层",
+      "centerH": "幻灯片中心（水平）",
+      "centerV": "幻灯片中心（垂直）",
+      "centerBoth": "幻灯片中心",
+      "shortcut": {
+        "bringToFront": "Ctrl+Alt+]",
+        "bringForward": "Ctrl+Shift+]",
+        "sendBackward": "Ctrl+Shift+[",
+        "sendToBack": "Ctrl+Alt+["
+      }
+    },
+    "help": {
+      "label": "帮助",
+      "about": "关于Casual Slides",
+      "repo": "GitHub 仓库"
+    }
+  },
+  "toolbar": {
+    "tools": {
+      "undo": "撤消",
+      "undoTooltip": "撤消 (Ctrl+Z)",
+      "redo": "重做",
+      "redoTooltip": "重做 (Ctrl+Y)",
+      "print": "打印",
+      "select": "选择",
+      "textbox": "文本框",
+      "image": "图片",
+      "shape": "形状",
+      "line": "线",
+      "addComment": "添加评论",
+      "newSlide": "新幻灯片",
+      "newSlideTooltip": "新幻灯片（Ctrl+M）",
+      "layout": "布局",
+      "theme": "主题",
+      "background": "背景",
+      "transition": "过渡",
+      "slideshow": "幻灯片放映",
+      "slideshowTooltip": "开始幻灯片放映 (F5)"
+    },
+    "shapes": {
+      "rectangle": "矩形",
+      "ellipse": "椭圆",
+      "line": "线",
+      "arrowRight": "向右箭头",
+      "arrowLeft": "向左箭头",
+      "arrowUp": "向上箭头",
+      "arrowDown": "向下箭头",
+      "triangle": "三角形",
+      "diamond": "菱形",
+      "pentagon": "五边形",
+      "hexagon": "六边形",
+      "octagon": "八边形",
+      "chevron": "V 形",
+      "plus": "加/十字",
+      "star": "星形"
+    },
+    "group": {
+      "history": "操作记录",
+      "insert": "插入",
+      "slide": "幻灯片",
+      "text": "文本格式",
+      "paragraph": "段落",
+      "actions": "操作",
+      "clipboard": "剪贴板",
+      "arrange": "排列"
+    },
+    "ribbon": {
+      "home": "开始",
+      "insert": "插入",
+      "design": "设计"
+    },
+    "ribbonGroup": {
+      "quickAccess": "快速访问",
+      "font": "字体",
+      "theme": "主题",
+      "background": "背景"
+    },
+    "undo": "撤消",
+    "undoShortcut": "撤消 (Ctrl+Z)",
+    "redo": "重做",
+    "redoShortcut": "重做 (Ctrl+Y)",
+    "print": "打印",
+    "printShortcut": "打印（Ctrl+P）",
+    "paintFormat": "格式刷",
+    "paste": "粘贴",
+    "pasteShortcut": "粘贴 (Ctrl+V)",
+    "cut": "剪切",
+    "cutShortcut": "剪切 (Ctrl+X)",
+    "copy": "复制",
+    "copyShortcut": "复制 (Ctrl+C)",
+    "bringToFront": "置于顶层",
+    "bringForward": "上移一层",
+    "sendBackward": "下移一层",
+    "sendToBack": "置于底层",
+    "centerOnSlide": "在幻灯片中居中",
+    "alignCenterHorizontal": "水平居中",
+    "alignMiddleVertical": "垂直居中",
+    "duplicate": "创建副本",
+    "deleteElement": "删除",
+    "textBox": "文本框",
+    "image": "插入图片",
+    "shape": "插入形状",
+    "line": "插入线",
+    "table": "表格",
+    "newSlide": "新幻灯片",
+    "newSlideShortcut": "新幻灯片（Ctrl+M）",
+    "duplicateSlide": "复制幻灯片",
+    "layout": "布局",
+    "theme": "主题",
+    "background": "背景",
+    "fontFamily": "字体",
+    "fontFamilyAria": "字体系列",
+    "fontSize": "字体大小",
+    "fontSizeDecrease": "减小字体大小",
+    "fontSizeIncrease": "增加字体大小",
+    "bold": "粗体",
+    "boldShortcut": "粗体 (Ctrl+B)",
+    "italic": "斜体",
+    "italicShortcut": "斜体 (Ctrl+I)",
+    "underline": "下划线",
+    "underlineShortcut": "下划线 (Ctrl+U)",
+    "strikethrough": "删除线",
+    "strikethroughShortcut": "删除线 (Alt+Shift+5)",
+    "textColor": "文字颜色",
+    "fillColor": "填充颜色",
+    "borderColor": "边框颜色",
+    "selectShapeFirst": "首先选择一个形状",
+    "align": "对齐",
+    "alignLeft": "左对齐",
+    "alignCenter": "居中对齐",
+    "alignRight": "右对齐",
+    "alignJustify": "两端对齐",
+    "list": "列表",
+    "listBulleted": "项目符号列表",
+    "listNumbered": "编号列表",
+    "indentDecrease": "减少缩进",
+    "indentIncrease": "增加缩进",
+    "lineSpacing": "行距",
+    "lineSpacingValue": "行距 {{value}}",
+    "lineSpacingCustom": "自定义行距…",
+    "clearFormatting": "清除格式",
+    "insertLink": "插入链接",
+    "insertLinkShortcut": "插入链接（Ctrl+K）",
+    "more": "更多",
+    "moreActions": "更多工具栏操作",
+    "slideshow": "幻灯片放映",
+    "slideshowShortcut": "开始幻灯片放映 (F5)",
+    "shape_rect": "矩形",
+    "shape_ellipse": "椭圆",
+    "shape_line": "线",
+    "shape_rightArrow": "向右箭头",
+    "shape_leftArrow": "向左箭头",
+    "shape_upArrow": "向上箭头",
+    "shape_downArrow": "向下箭头",
+    "shape_triangle": "三角形",
+    "shape_diamond": "菱形",
+    "shape_pentagon": "五边形",
+    "shape_hexagon": "六边形",
+    "shape_octagon": "八边形",
+    "shape_chevron": "V 形",
+    "shape_plus": "加号",
+    "shape_star5": "星形",
+    "color": {
+      "noFill": "无填充",
+      "reset": "重置",
+      "themeColors": "主题颜色",
+      "recent": "最近的颜色",
+      "custom": "自定义",
+      "apply": "应用",
+      "hexLabel": "HEX",
+      "white": "白色",
+      "lightGray": "浅灰色",
+      "gray": "灰色",
+      "darkGray": "深灰色",
+      "nearBlack": "近黑色",
+      "cream": "奶油",
+      "sky": "天空",
+      "mint": "薄荷",
+      "red": "红色",
+      "orange": "橙色",
+      "yellow": "黄色",
+      "green": "绿色",
+      "blue": "蓝色",
+      "indigo": "靛蓝",
+      "purple": "紫色",
+      "pink": "粉色"
+    },
+    "font": {
+      "sectionPopular": "热门",
+      "sectionSerif": "衬线",
+      "sectionSans": "无衬线字体",
+      "sectionMono": "等宽字体",
+      "sectionDisplay": "展示字体"
+    },
+    "spacing": {
+      "single": "单倍",
+      "preset1_15": "1.15",
+      "preset1_5": "1.5",
+      "double": "双倍",
+      "preset2_5": "2.5",
+      "preset3": "3"
+    }
+  },
+  "statusbar": {
+    "slideCount_one": "第 {{current}} 张，共 {{total}} 张",
+    "slideCount_other": "第 {{current}} 张，共 {{total}} 张",
+    "language": "简体中文",
+    "viewNormal": "普通视图",
+    "viewSorter": "幻灯片分类器 - 即将推出",
+    "notesShow": "显示演讲者备注",
+    "notesHide": "隐藏演讲者备注",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "zoomLabel": "缩放",
+    "zoomValue": "{{percent}}%",
+    "zoomReset": "将缩放重置为 100%",
+    "present": "幻灯片放映",
+    "presentTooltip": "开始幻灯片放映 (F5)",
+    "selectionTooltip": "所选元素的位置和大小",
+    "selectionCount_one": "已选择 {{count}} 个元素",
+    "selectionCount_other": "已选择 {{count}} 个元素",
+    "selectionCountTooltip": "选定元素的数量"
+  },
+  "notes": {
+    "title": "演讲者备注",
+    "hint": "仅供自己参考，不会导出",
+    "closeTooltip": "隐藏备注（视图 → 演讲者备注）",
+    "regionLabel": "演讲者备注",
+    "placeholderActive": "为此幻灯片添加演讲者备注…",
+    "placeholderEmpty": "选择一张幻灯片以添加备注"
+  },
+  "dialogs": {
+    "theme": {
+      "title": "主题",
+      "hint": "适用于每张幻灯片",
+      "ariaLabel": "选择一个主题",
+      "closeTooltip": "关闭（Esc）",
+      "names": {
+        "classic": "经典",
+        "paper": "纸",
+        "sky": "天空",
+        "mint": "薄荷",
+        "sunset": "日落",
+        "lavender": "薰衣草",
+        "graphite": "石墨",
+        "ocean": "海洋"
+      }
+    },
+    "background": {
+      "title": "背景",
+      "ariaLabel": "背景颜色",
+      "presetsLabel": "颜色预设",
+      "custom": "自定义",
+      "apply": "应用",
+      "applyToAll": "应用于所有幻灯片",
+      "close": "关闭",
+      "colors": {
+        "white": "白色",
+        "lightGray": "浅灰色",
+        "gray": "灰色",
+        "darkGray": "深灰色",
+        "nearBlack": "近黑色",
+        "cream": "奶油",
+        "sky": "天空",
+        "mint": "薄荷",
+        "red": "红色",
+        "orange": "橙色",
+        "yellow": "黄色",
+        "green": "绿色",
+        "blue": "蓝色",
+        "indigo": "靛蓝",
+        "purple": "紫色",
+        "pink": "粉色"
+      },
+      "image": "图片"
+    },
+    "layout": {
+      "header": "插入带有布局的幻灯片",
+      "names": {
+        "blank": "空白",
+        "titleSlide": "标题幻灯片",
+        "titleContent": "标题+内容",
+        "twoContent": "两个内容",
+        "comparison": "比较",
+        "sectionHeader": "节标题"
+      },
+      "placeholders": {
+        "clickToAddTitle": "点击添加标题",
+        "clickToAddSubtitle": "点击添加字幕",
+        "clickToAddContent": "点击添加内容",
+        "heading": "标题",
+        "sectionTitle": "章节标题"
+      },
+      "modeInsert": "新建幻灯片",
+      "modeApply": "应用于当前幻灯片",
+      "headerInsert": "插入带有布局的幻灯片",
+      "headerApply": "更改当前幻灯片布局"
+    },
+    "properties": {
+      "title": "属性",
+      "ariaLabel": "演示文稿属性",
+      "closeTooltip": "关闭（Esc）",
+      "close": "关闭",
+      "untitled": "无标题演示文稿",
+      "keys": {
+        "title": "标题",
+        "author": "作者",
+        "created": "创建时间",
+        "modified": "最后修改时间",
+        "lastModifiedBy": "最后修改者",
+        "slides": "幻灯片",
+        "pageSize": "页面尺寸",
+        "elements": "元素",
+        "textLength": "文字长度",
+        "format": "格式"
+      },
+      "values": {
+        "pageSize": "{{width}} × {{height}} px · {{widthIn}} × {{heightIn}} 英寸",
+        "textCharacters_one": "{{count}} 字符",
+        "textCharacters_other": "{{count}} 字符",
+        "format": "PowerPoint (.pptx)"
+      }
+    },
+    "recent": {
+      "title": "最近的文件",
+      "ariaLabel": "最近的文件",
+      "closeTooltip": "关闭（Esc）",
+      "loading": "加载中...",
+      "empty": "暂无最近使用的演示文稿。打开 .pptx 文件后会显示在此处。",
+      "clearAll": "全部清除",
+      "close": "关闭",
+      "openTooltip": "打开{{name}}",
+      "removeTooltip": "从列表中删除",
+      "removeAriaLabel": "删除{{name}}",
+      "entryUnavailable": "此文件已不可用。",
+      "meta": "{{size}} · {{relative}}",
+      "size": {
+        "bytes": "{{value}}B",
+        "kilobytes": "{{value}} KB",
+        "megabytes": "{{value}} MB"
+      },
+      "relative": {
+        "justNow": "刚才",
+        "minutes_one": "{{count}} 分钟前",
+        "minutes_other": "{{count}} 分钟前",
+        "hours_one": "{{count}} 小时前",
+        "hours_other": "{{count}} 小时前",
+        "days_one": "{{count}}天前",
+        "days_other": "{{count}} 天前"
+      },
+      "pinToTop": "置顶",
+      "unpin": "取消置顶",
+      "pinAriaLabel": "置顶 {{name}}",
+      "unpinAriaLabel": "取消置顶 {{name}}"
+    },
+    "about": {
+      "title": "关于Casual Slides",
+      "ariaLabel": "关于Casual Slides",
+      "closeTooltip": "关闭（Esc）",
+      "close": "关闭",
+      "product": "Casual Slides",
+      "tagline": "基于 Web 的 PowerPoint 兼容应用，构建于 Univer OSS，并采用 Apache-2.0 许可证。",
+      "version": "版本",
+      "license": "许可证",
+      "licenseValue": "Apache-2.0",
+      "source": "来源",
+      "sourceLink": "github.com/CasualOffice/slides",
+      "live": "在线演示",
+      "liveLink": "slide.schnsrw.live",
+      "attribTitle": "开源依赖项",
+      "deps": {
+        "univer": {
+          "name": "Univer OSS",
+          "license": "Apache-2.0",
+          "note": "幻灯片画布+数据模型（v0.24.0）。"
+        },
+        "pptxgenjs": {
+          "name": "PptxGenJS",
+          "license": "MIT",
+          "note": ".pptx 导出流程。"
+        },
+        "jszip": {
+          "name": "JSZip",
+          "license": "MIT 或 GPL-3.0（我们使用 MIT）",
+          "note": ".pptx zip 读/写。"
+        },
+        "fastXmlParser": {
+          "name": "fast-xml-parser",
+          "license": "MIT",
+          "note": "OOXML 解析。"
+        },
+        "react": {
+          "name": "React",
+          "license": "MIT",
+          "note": "用户界面外壳。"
+        },
+        "lucide": {
+          "name": "Lucide",
+          "license": "ISC",
+          "note": "内联 SVG 工具栏 + 菜单图标。"
+        },
+        "i18next": {
+          "name": "i18next + react-i18next",
+          "license": "MIT",
+          "note": "UI 本地化框架。"
+        }
+      }
+    },
+    "slideContext": {
+      "newSlide": "新幻灯片",
+      "duplicate": "复制幻灯片",
+      "delete": "删除幻灯片",
+      "moveUp": "向上移动",
+      "moveDown": "下移",
+      "hide": "隐藏幻灯片",
+      "unhide": "取消隐藏幻灯片",
+      "shortcut": {
+        "duplicate": "Ctrl+D",
+        "delete": "Shift+Del"
+      }
+    },
+    "elementContext": {
+      "cut": "切",
+      "copy": "复制",
+      "paste": "粘贴",
+      "duplicate": "复制",
+      "bringForward": "上移一层",
+      "sendBackward": "下移一层",
+      "bringToFront": "置于顶层",
+      "sendToBack": "置于底层",
+      "center": "幻灯片中心",
+      "alignLeft": "左对齐",
+      "alignCenter": "居中对齐",
+      "alignRight": "右对齐",
+      "alignTop": "顶部对齐",
+      "alignMiddle": "中间对齐",
+      "alignBottom": "对齐底部",
+      "distributeH": "水平等距分布",
+      "distributeV": "垂直等距分布",
+      "delete": "删除",
+      "shortcut": {
+        "cut": "Ctrl+X",
+        "copy": "Ctrl+C",
+        "paste": "Ctrl+V",
+        "duplicate": "Ctrl+D",
+        "bringForward": "Ctrl+Shift+]",
+        "sendBackward": "Ctrl+Shift+[",
+        "delete": "Del"
+      }
+    },
+    "shortcuts": {
+      "title": "键盘快捷键",
+      "ariaLabel": "键盘快捷键",
+      "closeTooltip": "关闭（Esc）",
+      "close": "关闭",
+      "searchPlaceholder": "搜索快捷方式",
+      "searchAriaLabel": "搜索快捷方式",
+      "noResults": "没有与您的搜索匹配的快捷方式。",
+      "openHint": "随时按 {{key}} 可打开此列表。",
+      "categories": {
+        "file": "文件",
+        "edit": "编辑",
+        "slides": "幻灯片",
+        "elements": "元素",
+        "view": "视图",
+        "slideshow": "幻灯片",
+        "help": "帮助"
+      },
+      "actions": {
+        "openPptx": "打开.pptx",
+        "savePptx": "保存.pptx",
+        "print": "打印",
+        "undo": "撤消",
+        "redo": "重做",
+        "newSlide": "新幻灯片",
+        "duplicateSlide": "复制幻灯片",
+        "deleteSlide": "删除幻灯片",
+        "moveSlideUp": "向上移动幻灯片",
+        "moveSlideDown": "向下移动幻灯片",
+        "prevSlide": "上一张幻灯片",
+        "nextSlide": "下一张幻灯片",
+        "firstSlide": "跳转到第一张幻灯片",
+        "lastSlide": "跳到最后一张幻灯片",
+        "insertLink": "插入链接",
+        "nudge": "微移选择 1 px",
+        "nudgeBig": "微移选择 10 px",
+        "cycleNext": "选择下一个元素",
+        "cyclePrev": "选择上一个元素",
+        "selectAllOnPage": "选择幻灯片上的所有内容",
+        "copyElement": "复制元素",
+        "cutElement": "切割元件",
+        "pasteElement": "粘贴元素",
+        "duplicateElement": "复制元素",
+        "deleteElement": "删除元素",
+        "bringForward": "上移一层",
+        "sendBackward": "下移一层",
+        "bringToFront": "置于顶层",
+        "sendToBack": "置于底层",
+        "zoomIn": "放大",
+        "zoomOut": "缩小",
+        "resetZoom": "将缩放重置为 100%",
+        "fitToWindow": "适应窗口",
+        "startSlideshow": "开始幻灯片放映",
+        "slideshowNext": "下一张幻灯片",
+        "slideshowPrev": "上一张幻灯片",
+        "slideshowFirst": "第一张幻灯片",
+        "slideshowLast": "最后一张幻灯片",
+        "slideshowToggleNumber": "切换幻灯片编号叠加",
+        "slideshowToggleFullscreen": "切换全屏",
+        "slideshowExit": "退出幻灯片放映",
+        "showShortcuts": "显示键盘快捷键"
+      },
+      "elementsHint": "当在幻灯片上选择某个元素时处于活动状态。",
+      "slideshowHint": "演示时激活 (F5)。"
+    },
+    "format": {
+      "ariaLabel": "格式选项",
+      "title": "格式选项",
+      "emptyHint": "在画布上选择一个元素以设置其格式。",
+      "closeTooltip": "隐藏格式窗格",
+      "expandSection": "展开{{section}}",
+      "collapseSection": "折叠{{section}}",
+      "noSelection": "未选择任何元素",
+      "sections": {
+        "position": "职位",
+        "size": "尺寸",
+        "fill": "填充",
+        "border": "边框",
+        "shadow": "影子",
+        "opacity": "不透明度",
+        "arrange": "安排"
+      },
+      "opacity": {
+        "label": "不透明度",
+        "disabledTooltip": "随下一次升级而来",
+        "disabledHint": "形状不透明度将随着下一次引擎升级而出现 — IShapeProperties 在当前版本中没有 alpha 字段。"
+      },
+      "arrange": {
+        "bringForward": "向前移动 (Ctrl+Shift+])",
+        "sendBackward": "向后发送 (Ctrl+Shift+[)",
+        "bringToFront": "置于最前面 (Ctrl+Alt+])",
+        "sendToBack": "发送到后台 (Ctrl+Alt+[)",
+        "centerH": "在幻灯片上水平居中",
+        "centerV": "在幻灯片上垂直居中",
+        "centerBoth": "幻灯片中心"
+      },
+      "position": {
+        "x": "X",
+        "y": "是",
+        "xAria": "水平位置（像素）",
+        "yAria": "垂直位置（像素）"
+      },
+      "size": {
+        "width": "宽度",
+        "height": "身高",
+        "widthAria": "宽度（像素）",
+        "heightAria": "高度（像素）",
+        "lockAspect": "锁定纵横比",
+        "unlockAspect": "解锁宽高比"
+      },
+      "fill": {
+        "label": "填充颜色",
+        "none": "无"
+      },
+      "border": {
+        "colorLabel": "边框颜色",
+        "none": "无边框",
+        "widthLabel": "边框宽度",
+        "widthAria": "边框宽度（像素）",
+        "dashLabel": "破折号样式",
+        "dash": {
+          "solid": "实线",
+          "dashed": "虚线",
+          "dotted": "点状"
+        }
+      },
+      "shadow": {
+        "enable": "投影",
+        "colorLabel": "阴影颜色",
+        "offsetX": "偏移 X",
+        "offsetY": "偏移 Y",
+        "blur": "模糊",
+        "offsetXAria": "阴影水平偏移（px）",
+        "offsetYAria": "阴影垂直偏移 (px)",
+        "blurAria": "阴影模糊半径 (px)"
+      }
+    },
+    "findReplace": {
+      "title": "查找并替换",
+      "ariaLabel": "查找并替换",
+      "closeTooltip": "关闭（Esc）",
+      "close": "关闭",
+      "findPlaceholder": "在甲板上找到",
+      "findAriaLabel": "查找文字",
+      "replacePlaceholder": "替换为",
+      "replaceAriaLabel": "替换文本",
+      "toggleReplace": "显示替换",
+      "hideReplace": "隐藏替换",
+      "matchCase": "火柴盒",
+      "matchWholeWord": "匹配整个单词",
+      "useRegex": "使用正则表达式",
+      "previous": "上一个匹配项",
+      "next": "下一个匹配项",
+      "replaceOne": "替换",
+      "replaceAll": "全部替换",
+      "countNone": "没有结果",
+      "countOf": "{{current}} / {{total}}",
+      "regexInvalid": "正则表达式无效",
+      "replacedCount_one": "替换 {{count}} 匹配",
+      "replacedCount_other": "替换 {{count}} 匹配项"
+    },
+    "pageSetup": {
+      "title": "页面设置",
+      "ariaLabel": "页面设置",
+      "close": "关闭（Esc）",
+      "cancel": "取消",
+      "apply": "应用",
+      "widescreen": "宽屏 16:9",
+      "widescreen1610": "宽屏 16:10",
+      "standard": "标准4:3",
+      "a4Landscape": "A4风景",
+      "a4Portrait": "A4肖像",
+      "letterLandscape": "Letter 横向",
+      "custom": "定制",
+      "width": "宽度",
+      "height": "身高",
+      "note": "更改幻灯片大小会重新加载幻灯片以重新适合画布。"
+    }
+  },
+  "slideshow": {
+    "ariaLabel": "幻灯片",
+    "empty": "没有幻灯片可供演示。",
+    "notFound": "未找到幻灯片。",
+    "exit": "退出",
+    "counter": "{{current}} / {{total}}",
+    "tooltips": {
+      "previous": "上一页 ({{key}})",
+      "previousKey": "向左箭头",
+      "next": "下一页 ({{key}})",
+      "nextKey": "右箭头或空格",
+      "fullscreen": "切换全屏 (F)",
+      "exit": "退出（逃脱）",
+      "presenter": "切换演示者视图 (P)",
+      "blackscreen": "切换黑屏 (B)"
+    },
+    "presenter": {
+      "nextLabel": "接下来",
+      "endOfDeck": "甲板末端",
+      "notesLabel": "演讲者笔记",
+      "notesAriaLabel": "当前幻灯片的演讲者备注",
+      "notesEmpty": "这张幻灯片上没有注释。",
+      "resetTimer": "重置",
+      "resetTimerTooltip": "重置已用计时器",
+      "currentLabel": "当前幻灯片",
+      "elapsedAria": "经过时间{{elapsed}}"
+    },
+    "jump": {
+      "title": "转到幻灯片",
+      "label": "幻灯片编号",
+      "hint": "输入数字，然后按 Enter"
+    }
+  },
+  "errors": {
+    "generic": "出了点问题。",
+    "unknown": "未知错误",
+    "notPptx": "仅支持 .pptx 文件",
+    "pptxTooLarge": "文件过大，无法打开（{{size}}）。大小上限为 {{limit}}。",
+    "pptxCorrupt": "此 .pptx 已损坏或不是 PowerPoint 文件。",
+    "pptxEncrypted": "该 .pptx 受密码保护。先在PowerPoint中解密，然后重新打开。",
+    "boundary": {
+      "title": "Casual Slides 遇到意外错误",
+      "lede": "编辑器发现渲染错误并停止以避免损坏您的牌组。重新加载以重新开始。自上次保存以来最近未保存的编辑可能会丢失。",
+      "reload": "重新加载编辑器",
+      "detailsLabel": "技术细节"
+    }
+  }
+}

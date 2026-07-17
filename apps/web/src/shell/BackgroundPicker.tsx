@@ -4,6 +4,7 @@ import { IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { SlideDataModel } from '@univerjs/slides';
 import { PageElementType } from '@univerjs/slides';
 import { dispatchSlideCommand } from '../univer/commands';
+import { useTranslation } from '../i18n';
 import { Icon } from './icons';
 
 // Background color picker — popover anchored to the Toolbar Background
@@ -17,29 +18,29 @@ export interface BackgroundPickerProps {
 }
 
 interface ColorChip {
-  name: string;
+  key: string;
   rgb: string;
 }
 
 // Curated palette inspired by Google Slides' Slide → Background dialog.
 // Two rows of 8: neutrals + accent colors.
 const PALETTE: ColorChip[] = [
-  { name: 'White',       rgb: 'rgb(255, 255, 255)' },
-  { name: 'Light gray',  rgb: 'rgb(243, 244, 246)' },
-  { name: 'Gray',        rgb: 'rgb(156, 163, 175)' },
-  { name: 'Dark gray',   rgb: 'rgb(75, 85, 99)' },
-  { name: 'Near black',  rgb: 'rgb(34, 38, 45)' },
-  { name: 'Cream',       rgb: 'rgb(250, 248, 244)' },
-  { name: 'Sky',         rgb: 'rgb(230, 244, 255)' },
-  { name: 'Mint',        rgb: 'rgb(230, 250, 240)' },
-  { name: 'Red',         rgb: 'rgb(220, 38, 38)' },
-  { name: 'Orange',      rgb: 'rgb(234, 88, 12)' },
-  { name: 'Yellow',      rgb: 'rgb(234, 179, 8)' },
-  { name: 'Green',       rgb: 'rgb(22, 163, 74)' },
-  { name: 'Blue',        rgb: 'rgb(37, 99, 235)' },
-  { name: 'Indigo',      rgb: 'rgb(79, 70, 229)' },
-  { name: 'Purple',      rgb: 'rgb(124, 58, 237)' },
-  { name: 'Pink',        rgb: 'rgb(219, 39, 119)' },
+  { key: 'white',       rgb: 'rgb(255, 255, 255)' },
+  { key: 'lightGray',   rgb: 'rgb(243, 244, 246)' },
+  { key: 'gray',        rgb: 'rgb(156, 163, 175)' },
+  { key: 'darkGray',    rgb: 'rgb(75, 85, 99)' },
+  { key: 'nearBlack',   rgb: 'rgb(34, 38, 45)' },
+  { key: 'cream',       rgb: 'rgb(250, 248, 244)' },
+  { key: 'sky',         rgb: 'rgb(230, 244, 255)' },
+  { key: 'mint',        rgb: 'rgb(230, 250, 240)' },
+  { key: 'red',         rgb: 'rgb(220, 38, 38)' },
+  { key: 'orange',      rgb: 'rgb(234, 88, 12)' },
+  { key: 'yellow',      rgb: 'rgb(234, 179, 8)' },
+  { key: 'green',       rgb: 'rgb(22, 163, 74)' },
+  { key: 'blue',        rgb: 'rgb(37, 99, 235)' },
+  { key: 'indigo',      rgb: 'rgb(79, 70, 229)' },
+  { key: 'purple',      rgb: 'rgb(124, 58, 237)' },
+  { key: 'pink',        rgb: 'rgb(219, 39, 119)' },
 ];
 
 function getModel(): SlideDataModel | null {
@@ -80,6 +81,7 @@ function rgbToHex(rgb: string | null | undefined | void): string {
 }
 
 export function BackgroundPicker({ anchorRect, onClose }: BackgroundPickerProps) {
+  const { t } = useTranslation('dialogs');
   const [applyAll, setApplyAll] = useState(false);
   const [customHex, setCustomHex] = useState('#ffffff');
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -201,29 +203,29 @@ export function BackgroundPicker({ anchorRect, onClose }: BackgroundPickerProps)
       className="cs-bg-picker"
       data-testid="bg-picker"
       role="dialog"
-      aria-label="Background color"
+      aria-label={t('background.ariaLabel')}
       style={{ top, left }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div className="cs-bg-picker__header">
-        <span className="cs-bg-picker__title">Background</span>
+        <span className="cs-bg-picker__title">{t('background.title')}</span>
         <button
           type="button"
           className="cs-bg-picker__nofill"
           onClick={() => imageInputRef.current?.click()}
-          title="Image background"
+          title={t('background.image')}
         >
           <Icon name="image" size={14} />
-          <span>Image</span>
+          <span>{t('background.image')}</span>
         </button>
         <button
           type="button"
           className="cs-bg-picker__nofill"
           onClick={() => void apply('', applyAll)}
-          title="No fill"
+          title={t('toolbar:color.noFill')}
         >
           <Icon name="format_color_reset" size={14} />
-          <span>No fill</span>
+          <span>{t('toolbar:color.noFill')}</span>
         </button>
         <input
           ref={imageInputRef}
@@ -233,22 +235,22 @@ export function BackgroundPicker({ anchorRect, onClose }: BackgroundPickerProps)
           onChange={onImageFile}
         />
       </div>
-      <div className="cs-bg-picker__grid" role="listbox" aria-label="Color presets">
+      <div className="cs-bg-picker__grid" role="listbox" aria-label={t('background.presetsLabel')}>
         {PALETTE.map((chip) => (
           <button
             key={chip.rgb}
             type="button"
             className="cs-bg-picker__chip"
             style={{ background: chip.rgb }}
-            title={chip.name}
-            aria-label={chip.name}
+            title={t(`background.colors.${chip.key}`)}
+            aria-label={t(`background.colors.${chip.key}`)}
             onClick={() => void apply(chip.rgb, applyAll)}
           />
         ))}
       </div>
       <div className="cs-bg-picker__custom">
         <label className="cs-bg-picker__custom-label" htmlFor="bg-custom">
-          <span>Custom</span>
+          <span>{t('background.custom')}</span>
           <input
             id="bg-custom"
             type="color"
@@ -265,7 +267,7 @@ export function BackgroundPicker({ anchorRect, onClose }: BackgroundPickerProps)
             if (rgb) void apply(rgb, applyAll);
           }}
         >
-          Apply
+          {t('background.apply')}
         </button>
       </div>
       <label className="cs-bg-picker__option">
@@ -275,14 +277,14 @@ export function BackgroundPicker({ anchorRect, onClose }: BackgroundPickerProps)
           onChange={(e) => setApplyAll(e.target.checked)}
           data-testid="bg-picker-apply-all"
         />
-        <span>Apply to all slides</span>
+        <span>{t('background.applyToAll')}</span>
       </label>
       <button
         type="button"
         className="cs-bg-picker__close"
         onClick={onClose}
-        title="Close"
-        aria-label="Close"
+        title={t('background.close')}
+        aria-label={t('background.close')}
       >
         <Icon name="close" size={14} />
       </button>

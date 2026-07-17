@@ -11,7 +11,7 @@ import {
   UpdateDocsAttributeType,
   UniverInstanceType,
 } from '@univerjs/core';
-import type { SlideDataModel } from '@univerjs/slides';
+import type { IPageElement, ISlidePage, SlideDataModel } from '@univerjs/slides';
 import { DocSelectionManagerService } from '@univerjs/docs';
 import { CanvasView } from '@univerjs/slides-ui';
 import { printDeck } from '../shell/download-slide';
@@ -159,6 +159,9 @@ export async function dispatchSlideCommand<T extends Record<string, unknown>>(
   }
   if (id === 'casual-slides.command.copy-element') {
     return copySelectedElement();
+  }
+  if (id === 'casual-slides.command.cut-element') {
+    return cutSelectedElement();
   }
   if (id === 'casual-slides.command.paste-element') {
     return pasteElement();
@@ -602,11 +605,7 @@ export function clearCanvasSelection(): boolean {
 // false when no selection is registered, the unit/page/element is gone,
 // or Univer isn't ready. Same TODO(collab) caveat as the other direct-
 // snapshot mutations.
-export function deleteSelectedElement(): boolean {
-  return withUndo(() => _deleteSelectedElement());
-}
-
-function _deleteSelectedElement(): boolean {
+export async function deleteSelectedElement(): Promise<boolean> {
   const univer = getUniver();
   if (!univer) return false;
   const sel = getSelectedElement();
@@ -617,12 +616,26 @@ function _deleteSelectedElement(): boolean {
   const page = model.getPage(sel.pageId);
   const els = page?.pageElements;
   if (!els || !els[sel.elementId]) return false;
-  delete els[sel.elementId];
-  model.incrementRev();
-  const active = model.getActivePage();
-  if (active) model.setActivePage(active);
-  notify('Element deleted');
-  return true;
+  if (model.getActivePage()?.id !== page.id) model.setActivePage(page);
+
+  // Use the engine command instead of directly deleting from the snapshot.
+  // It dispatches slide.mutation.delete-element, removes the live CanvasView
+  // object immediately, and registers the inverse insert mutation for Undo.
+  // The former direct write changed the exported model but could leave the
+  // visible shape on the canvas until a slide reload.
+  try {
+    const commandService = univer.__getInjector().get(ICommandService);
+    const ok = await commandService.executeCommand('slide.operation.delete-element', {
+      unitId: model.getUnitId(),
+      id: sel.elementId,
+    });
+    if (!ok) return false;
+    setSelectedElement(null);
+    notify('Element deleted');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Nudge the selected element by (dx, dy) pixels. Routed through
@@ -680,6 +693,43 @@ export function hasElementClipboard(): boolean {
   return !!elementClipboard;
 }
 
+function insertElementWithUndo(
+  univer: Univer,
+  model: SlideDataModel,
+  page: ISlidePage,
+  element: IPageElement,
+): boolean {
+  const unitId = model.getUnitId();
+  const insertParams = { unitId, pageId: page.id, element };
+  const deleteParams = { unitId, pageId: page.id, elementId: element.id };
+  const commandService = univer.__getInjector().get(ICommandService);
+  const ok = commandService.syncExecuteCommand('slide.mutation.insert-element', insertParams);
+  if (!ok) return false;
+
+  // The mutation persists the element; CanvasView materialises and selects
+  // the live object so the user sees the result immediately and subsequent
+  // keyboard commands operate on the new copy.
+  try {
+    const canvasView = univer.__getInjector().get(CanvasView);
+    const object = canvasView.createObjectToPage(element, page.id, unitId);
+    if (object) canvasView.setObjectActiveByPage(object, page.id, unitId);
+  } catch {
+    // The model write is still valid. A slide remount will paint it.
+  }
+  setSelectedElement({ pageId: page.id, elementId: element.id });
+
+  try {
+    univer.__getInjector().get(IUndoRedoService).pushUndoRedo({
+      unitID: unitId,
+      undoMutations: [{ id: 'slide.mutation.delete-element', params: deleteParams }],
+      redoMutations: [{ id: 'slide.mutation.insert-element', params: insertParams }],
+    });
+  } catch {
+    // Keep the successful insert even if the history service is unavailable.
+  }
+  return true;
+}
+
 // Save a deep clone of the selected element to the in-memory clipboard.
 // Returns false when nothing is selected. The original element is left
 // alone; only paste actually creates a new element on the canvas.
@@ -698,6 +748,19 @@ export function copySelectedElement(): boolean {
   return true;
 }
 
+// Cut = copy the selected element to the in-memory clipboard, then delete it
+// from its page. The clipboard write is a plain assignment (invisible to the
+// command bus); the delete goes through the undoable direct-write path, so a
+// single Ctrl+Z restores the cut element. Returns false when nothing is
+// selected or the copy failed (keeps the element in place — never a silent
+// data loss).
+export async function cutSelectedElement(): Promise<boolean> {
+  if (!copySelectedElement()) return false;
+  const removed = await deleteSelectedElement();
+  if (removed) notify('Element cut');
+  return removed;
+}
+
 // Paste a copy of the clipboard element onto the active page, offset by
 // (16, 16) so it's visually distinct from the source. Re-ids the clone so
 // the transformer treats it as a new object. Routed through
@@ -705,7 +768,7 @@ export function copySelectedElement(): boolean {
 // direct-snapshot fallback. Selecting the new element is left to
 // Univer's createControl$ which fires on insert.
 export function pasteElement(): boolean {
-  return withUndo(() => _pasteElement());
+  return _pasteElement();
 }
 
 function _pasteElement(): boolean {
@@ -729,9 +792,7 @@ function _pasteElement(): boolean {
   const existing = Object.values(page.pageElements ?? {});
   const maxZ = existing.length ? Math.max(...existing.map((e) => e?.zIndex ?? 0)) : 0;
   clone.zIndex = maxZ + 1;
-  page.pageElements[newId] = clone;
-  model.incrementRev();
-  model.setActivePage(page);
+  if (!insertElementWithUndo(univer, model, page, clone as IPageElement)) return false;
   notify('Element pasted');
   return true;
 }
@@ -769,15 +830,17 @@ export async function insertImageFromFile(file: File): Promise<boolean> {
   });
   // Constrain initial size to half the slide so big images don't blow
   // out the canvas. Preserve aspect ratio.
-  const pageSize = model.getPageSize?.() ?? { width: 960, height: 540 };
-  const maxW = pageSize.width * 0.5;
-  const maxH = pageSize.height * 0.5;
+  const pageSize = model.getPageSize?.() ?? {};
+  const pageWidth = pageSize.width ?? 960;
+  const pageHeight = pageSize.height ?? 540;
+  const maxW = pageWidth * 0.5;
+  const maxH = pageHeight * 0.5;
   const scale = Math.min(1, maxW / width, maxH / height);
   const renderW = Math.round(width * scale);
   const renderH = Math.round(height * scale);
   // Centre on the slide.
-  const left = Math.round((pageSize.width - renderW) / 2);
-  const top = Math.round((pageSize.height - renderH) / 2);
+  const left = Math.round((pageWidth - renderW) / 2);
+  const top = Math.round((pageHeight - renderH) / 2);
 
   const stamp = Date.now().toString(36);
   const rand = Math.random().toString(36).slice(2, 6);
@@ -840,14 +903,9 @@ export function duplicateSelectedElement(): boolean {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const maxZ = existing.length ? Math.max(...existing.map((e: any) => e?.zIndex ?? 0)) : 0;
   clone.zIndex = maxZ + 1;
-  return withUndo(() => {
-    sourcePage.pageElements[newId] = clone;
-    model.incrementRev();
-    // Re-emit so subscribers re-render this specific page.
-    model.setActivePage(sourcePage);
-    notify('Element duplicated');
-    return true;
-  });
+  if (!insertElementWithUndo(univer, model, sourcePage, clone as IPageElement)) return false;
+  notify('Element duplicated');
+  return true;
 }
 
 // Center the selected element on the slide. `axis` controls which

@@ -196,6 +196,50 @@ const ICONS: Record<string, IconBody> = {
       </>
     ),
   },
+  content_cut: {
+    outlined: (
+      <>
+        <circle cx="6" cy="6" r="3" />
+        <circle cx="6" cy="18" r="3" />
+        <line x1="8.6" y1="7.5" x2="20" y2="19" />
+        <line x1="8.6" y1="16.5" x2="20" y2="5" />
+      </>
+    ),
+  },
+  content_paste: {
+    outlined: (
+      <>
+        <rect x="5" y="4" width="14" height="17" rx="2" />
+        <path d="M9 4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2H9z" />
+      </>
+    ),
+  },
+  flip_to_front: {
+    outlined: (
+      <>
+        <rect x="9" y="9" width="11" height="11" rx="1" fill="currentColor" stroke="none" opacity="0.85" />
+        <line x1="4" y1="7" x2="4" y2="7.01" />
+        <line x1="4" y1="11" x2="4" y2="11.01" />
+        <line x1="4" y1="15" x2="4" y2="15.01" />
+        <line x1="8" y1="4" x2="8.01" y2="4" />
+        <line x1="12" y1="4" x2="12.01" y2="4" />
+        <line x1="16" y1="4" x2="16.01" y2="4" />
+      </>
+    ),
+  },
+  flip_to_back: {
+    outlined: (
+      <>
+        <rect x="9" y="9" width="11" height="11" rx="1" />
+        <line x1="4" y1="7" x2="4" y2="7.01" />
+        <line x1="4" y1="11" x2="4" y2="11.01" />
+        <line x1="4" y1="15" x2="4" y2="15.01" />
+        <line x1="8" y1="4" x2="8.01" y2="4" />
+        <line x1="12" y1="4" x2="12.01" y2="4" />
+        <line x1="16" y1="4" x2="16.01" y2="4" />
+      </>
+    ),
+  },
   delete: {
     outlined: (
       <>

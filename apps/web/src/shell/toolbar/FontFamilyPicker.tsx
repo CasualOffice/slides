@@ -7,7 +7,6 @@
 // run's `ff`. If no text selection is active inside an editable doc, the
 // command no-ops gracefully (Univer-side guard).
 import { useMemo, useRef, useState } from 'react';
-import { dispatchSlideCommand } from '../../univer/commands';
 import { Icon } from '../icons';
 import { useTranslation } from '../../i18n';
 import { anchorPosition, useDismiss } from './popover-utils';
@@ -37,9 +36,16 @@ const SECTIONS: FontSection[] = [
       { name: 'Helvetica' },
       { name: 'Calibri', family: 'Carlito, Calibri, sans-serif' },
       { name: 'Cambria', family: 'Caladea, Cambria, serif' },
+      { name: 'Aptos' },
+      { name: 'Aptos Display' },
+      { name: 'Segoe UI' },
       { name: 'Times New Roman' },
       { name: 'Georgia' },
       { name: 'Verdana' },
+      { name: 'Tahoma' },
+      { name: 'Trebuchet MS' },
+      { name: 'Arial Narrow' },
+      { name: 'Century Gothic' },
     ],
   },
   {
@@ -72,6 +78,14 @@ const SECTIONS: FontSection[] = [
       { name: 'Oswald' },
       { name: 'Bebas Neue' },
       { name: 'Anton' },
+      { name: 'Noto Sans JP' },
+      { name: 'Yu Gothic' },
+      { name: 'Meiryo' },
+      { name: 'Hiragino Kaku Gothic ProN' },
+      { name: 'Microsoft YaHei' },
+      { name: 'Microsoft JhengHei' },
+      { name: 'PingFang SC' },
+      { name: 'PingFang TC' },
     ],
   },
   {
@@ -128,10 +142,6 @@ export function FontFamilyPicker({ value, onChange }: FontFamilyPickerProps) {
 
   function pick(font: FontEntry) {
     onChange(font.name);
-    // Univer's set-font-family takes `{ value: string }`.
-    void dispatchSlideCommand('doc.command.set-inline-format-font-family', {
-      value: font.family ?? font.name,
-    });
     setAnchor(null);
     setFilter('');
   }

@@ -1,8 +1,8 @@
 import type { ISlideData } from '@univerjs/slides';
 
-// Dynamic font loader. Scans an imported snapshot for every distinct
-// `ff` (font family) value referenced by any text run or text-element
-// fallback, then asks Google Fonts to ship them via a single CSS link.
+// Font scanner for imported decks. The deployed editor uses a self-hosted
+// licensed font pack plus system fonts; imported family metadata is never
+// rewritten and this module deliberately makes no third-party requests.
 //
 // Why dynamic: any curated preload list will miss something — there
 // are thousands of fonts in the Google Fonts catalog and authors pick
@@ -43,22 +43,12 @@ const SKIP_FAMILIES = new Set<string>([
 // Kept in sync with pptx-import.ts's FONT_SUBSTITUTION_MAP; we run the
 // same substitution at injection time so requests for "Calibri" don't
 // 404 on Google Fonts.
-const FONT_SUBSTITUTION: Record<string, string> = {
-  'Calibri': 'Carlito',
-  'Calibri Light': 'Carlito',
-  'Calibri Bold': 'Carlito',
-  'Cambria': 'Caladea',
-  'Cambria Math': 'Caladea',
-};
-
 function normaliseFamily(raw: string): string | null {
   let f = raw.trim();
   if (!f) return null;
   // Strip surrounding quotes some authors include.
   f = f.replace(/^['"]|['"]$/g, '').trim();
   // The truthiness check on the indexed access also narrows it to string.
-  const sub = FONT_SUBSTITUTION[f];
-  if (sub) f = sub;
   if (SKIP_FAMILIES.has(f)) return null;
   // Reject anything with characters Google Fonts can't accept in the
   // family= URL param — only Latin letters, digits, spaces and `+`.
@@ -117,50 +107,9 @@ export function collectFontsFromSnapshot(snapshot: ISlideData): Set<string> {
   return out;
 }
 
-// Build a Google Fonts CSS2 URL for a set of family names. Each family
-// is requested in 400 + 700 weights, italic + roman; the renderer
-// synthesises additional weights via canvas font-weight resolution.
-//
-// Google Fonts CSS2 caps URL length around ~8 KB; chunk to be safe.
-export function buildGoogleFontsUrls(fonts: Set<string>): string[] {
-  if (fonts.size === 0) return [];
-  const families = Array.from(fonts);
-  const chunks: string[][] = [];
-  // Aim for ~20 families per chunk — each `family=` param is ~60 chars
-  // (with weight axes), so 20 × 60 = 1.2 KB, well under any URL limit.
-  for (let i = 0; i < families.length; i += 20) chunks.push(families.slice(i, i + 20));
-  return chunks.map((chunk) => {
-    const params = chunk
-      .map((f) => `family=${encodeURIComponent(f.replace(/ /g, '+'))}:ital,wght@0,400;0,700;1,400;1,700`)
-      .join('&');
-    return `https://fonts.googleapis.com/css2?${params}&display=swap`;
-  });
-}
-
-// Inject <link rel="stylesheet"> tags for each font URL. Idempotent —
-// existing identical hrefs are skipped, and previous dynamic loaders
-// from a prior import are replaced (their families may have changed
-// across decks).
-export function injectFontLinks(urls: string[]): void {
-  if (typeof document === 'undefined') return;
-  // Wipe previous dynamic loaders before adding new ones.
-  for (const el of Array.from(document.querySelectorAll('link[data-casual-slides-fonts]'))) {
-    el.remove();
-  }
-  for (const url of urls) {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = url;
-    link.setAttribute('data-casual-slides-fonts', 'dynamic');
-    document.head.appendChild(link);
-  }
-}
-
-// Convenience: scan snapshot + inject in one go. Returns the set of
-// families requested so callers can log / debug.
+// Convenience scanner retained for diagnostics and future local font-pack
+// expansion. It performs no network or DOM mutation.
 export function loadFontsForSnapshot(snapshot: ISlideData): Set<string> {
   const fonts = collectFontsFromSnapshot(snapshot);
-  if (fonts.size === 0) return fonts;
-  injectFontLinks(buildGoogleFontsUrls(fonts));
   return fonts;
 }

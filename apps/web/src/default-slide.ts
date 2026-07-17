@@ -1,5 +1,38 @@
 import type { ISlideData } from '@univerjs/slides';
 import { PageElementType, PageType } from '@univerjs/slides';
+import { appLocale } from './i18n';
+
+// PowerPoint-style localized deck title + placeholder prompts. Keyed by the
+// app's active locale (resolved synchronously before React mounts). Exported
+// so LayoutPicker templates (shell/layouts.ts) share one source of truth.
+type DeckStrKey = 'deckTitle' | 'addTitle' | 'addSubtitle' | 'addContent';
+const DECK_STRINGS: Record<DeckStrKey, Record<string, string>> = {
+  deckTitle: {
+    en: 'Untitled presentation', ja: '無題のプレゼンテーション',
+    'zh-cn': '无标题演示文稿', 'zh-tw': '未命名簡報',
+    fr: 'Présentation sans titre', es: 'Presentación sin título',
+  },
+  addTitle: {
+    en: 'Click to add title', ja: 'タイトルを入力',
+    'zh-cn': '单击此处添加标题', 'zh-tw': '按一下以新增標題',
+    fr: 'Cliquez pour ajouter un titre', es: 'Haz clic para agregar un título',
+  },
+  addSubtitle: {
+    en: 'Click to add subtitle', ja: 'サブタイトルを入力',
+    'zh-cn': '单击此处添加副标题', 'zh-tw': '按一下以新增副標題',
+    fr: 'Cliquez pour ajouter un sous-titre', es: 'Haz clic para agregar un subtítulo',
+  },
+  addContent: {
+    en: 'Click to add content', ja: 'コンテンツを入力',
+    'zh-cn': '单击此处添加内容', 'zh-tw': '按一下以新增內容',
+    fr: 'Cliquez pour ajouter du contenu', es: 'Haz clic para agregar contenido',
+  },
+};
+
+export function deckString(key: DeckStrKey): string {
+  const table = DECK_STRINGS[key];
+  return table[appLocale] ?? table.en ?? '';
+}
 
 // Single blank starting slide — matches the "open the app, see one
 // empty title slide" defaults of Google Slides and PowerPoint Online.
@@ -14,7 +47,7 @@ import { PageElementType, PageType } from '@univerjs/slides';
 
 export const DEFAULT_SLIDE_DATA: ISlideData = {
   id: 'untitled-deck',
-  title: 'Untitled presentation',
+  title: deckString('deckTitle'),
   pageSize: { width: 960, height: 540 },
   body: {
     pageOrder: ['page-1'],
@@ -38,8 +71,9 @@ export const DEFAULT_SLIDE_DATA: ISlideData = {
             description: '',
             type: PageElementType.TEXT,
             richText: {
-              text: 'Click to add title',
+              text: deckString('addTitle'),
               fs: 60,
+              ff: 'Calibri',
               cl: { rgb: 'rgb(156, 163, 175)' },
               bl: 1,
             },
@@ -55,8 +89,9 @@ export const DEFAULT_SLIDE_DATA: ISlideData = {
             description: '',
             type: PageElementType.TEXT,
             richText: {
-              text: 'Click to add subtitle',
+              text: deckString('addSubtitle'),
               fs: 28,
+              ff: 'Calibri',
               cl: { rgb: 'rgb(156, 163, 175)' },
             },
           },
