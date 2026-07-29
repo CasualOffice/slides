@@ -227,11 +227,23 @@ export function TitleBar({
 
   useEffect(() => {
     if (!openMenu) return;
-    const handler = (e: MouseEvent) => {
+    const onMouseDown = (e: MouseEvent) => {
       if (!menuStripRef.current?.contains(e.target as Node)) setOpenMenu(null);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const trigger = menuStripRef.current?.querySelector<HTMLButtonElement>('.cs-menu__trigger.is-open');
+      e.preventDefault();
+      e.stopPropagation();
+      setOpenMenu(null);
+      trigger?.focus();
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [openMenu]);
 
   const handleMenuItem = useCallback(
