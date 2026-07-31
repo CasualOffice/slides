@@ -59,14 +59,24 @@ describe('storage/autosave', () => {
     expect(await loadAutosave()).toBeNull();
   });
 
+  test('overlapping save and clear preserve invocation order', async () => {
+    const saving = saveAutosave(makeSnapshot('queued'), 'Queued.pptx');
+    const clearing = clearAutosave();
+
+    await Promise.all([saving, clearing]);
+
+    expect(await loadAutosave()).toBeNull();
+  });
+
   test('saveAutosave deep-clones the snapshot (no live reference held)', async () => {
     const snapshot = makeSnapshot('clone');
-    await saveAutosave(snapshot, 'Clone.pptx');
+    const saving = saveAutosave(snapshot, 'Clone.pptx');
 
     // Mutate the original in place. If autosave held a reference instead
     // of a clone, the next loadAutosave would observe the mutation.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (snapshot as any).title = 'MUTATED AFTER SAVE';
+    await saving;
 
     const record = await loadAutosave();
     expect(record?.snapshot.title).toBe('Test deck clone');

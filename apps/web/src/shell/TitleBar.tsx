@@ -382,7 +382,11 @@ export function TitleBar({
 
   return (
     <header className="cs-titlebar">
-      <a className="cs-titlebar__brand" href="#" aria-label={t('titlebar.brand')}>
+      <a
+        className="cs-titlebar__brand"
+        href={import.meta.env.BASE_URL}
+        aria-label={t('titlebar.brand')}
+      >
         <img
           src={`${import.meta.env.BASE_URL}brand.svg`}
           alt={t('titlebar.brand')}

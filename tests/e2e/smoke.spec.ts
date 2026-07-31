@@ -15,7 +15,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
       if (msg.type() === 'error') errors.push(msg.text());
     });
 
-    await page.goto('/');
+    await page.goto('/#editor');
     await expect(page.locator('.cs-titlebar')).toBeVisible();
     await expect(page.locator('.univer-mount')).toBeVisible();
 
@@ -45,7 +45,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     //
     // This test asserts the import is wired correctly by checking that at
     // least one render-canvas has a non-trivial height.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __slideRevProbe?: unknown }).__slideRevProbe === 'function',
       null,
@@ -65,7 +65,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
   });
 
   test('title bar exposes Save and Open actions', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/#editor');
     await expect(page.getByRole('button', { name: /^save$/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /^open$/i })).toBeVisible();
   });
@@ -77,7 +77,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
       if (msg.type() === 'error') errors.push(`console.error: ${msg.text()}`);
     });
 
-    await page.goto('/');
+    await page.goto('/#editor');
     // The rev probe is set after Univer's UI plugin finishes wiring — wait
     // on that instead of an arbitrary sleep.
     await page.waitForFunction(() => typeof (window as { __slideRevProbe?: unknown }).__slideRevProbe === 'function', null, { timeout: 15_000 });
@@ -126,7 +126,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
       if (msg.type() === 'error') errors.push(`console.error: ${msg.text()}`);
     });
 
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __slideRevProbe?: unknown }).__slideRevProbe === 'function',
       null,
@@ -194,7 +194,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     //   slide.operation.append-slide      → slide.mutation.insert-page     (round 2)
     // This single test drives all four and asserts each produces the
     // expected wire-format mutation id in window.__capturedMutations.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
       null,
@@ -246,7 +246,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // a SlideInsertElementMutation and dispatches that, which IS broadcast
     // eligible. UniverSlide subscribes to the hook at bootstrap and stashes
     // every mutation id on window.__capturedMutations.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
       null,
@@ -289,7 +289,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // The toolbar's "Text box" button should dispatch slide.command.add-text
     // → slide.mutation.insert-element. Regression guard for the toolbar
     // wiring layer (apps/web/src/univer/commands.ts).
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
       null,
@@ -317,7 +317,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // handler pushes onto IUndoRedoService should produce a
     // slide.mutation.delete-element on undo. Catches regressions in the
     // mutation-pair scaffolding and the Univer undo wiring.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
       null,
@@ -345,7 +345,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
   });
 
   test('Right-click on slide thumbnail opens context menu + Duplicate dispatches', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
       null,
@@ -386,7 +386,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
   });
 
   test('Background picker → preset chip dispatches update-page', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
       null,
@@ -420,7 +420,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Build an ISlideData snapshot with one IMAGE element that carries a
     // 1×1 transparent PNG as a data: URI. Export via the pptx client and
     // verify the produced zip contains a `ppt/media/image1.png` entry.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -498,7 +498,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Round-trip a deck with a styled text frame and an image, then
     // assert the importer extracted the rich-text props and the image
     // bytes back out. Catches fidelity regressions in pptx-import.ts.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -598,7 +598,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
   test('pptx import wave 2 — bg fill + font family survives round-trip', async ({ page }) => {
     // A2 + B3 in one round-trip. PptxGenJS export honors `background`
     // and per-text `fontFace`; the new importer reads them back.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -668,7 +668,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // pptx by hand. The group's xfrm offsets the child by (1in, 1in)
     // with a child-coord-space matching its content rect, so the
     // shape's slide-space top-left lands at exactly 96 px, 96 px.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -759,7 +759,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // at 0,0 size 0. Post-fix `indexUnderAllKeys` stores the layout
     // rect under `title|0`, `title|`, and `|0` so the slide's lookup
     // for `title|` hits.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -851,7 +851,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // with NO <a:xfrm>; the slideLayout supplies the geometry. Before
     // I3 this resulted in a 0×0 element at (0, 0); after, the title
     // lands at the layout-declared rect.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -981,7 +981,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Hand-roll a deck where a shape's fill is `<a:schemeClr val="accent1"/>`
     // and the theme defines accent1 = #E84B6A. After J2, the import
     // should resolve to that hex; before J2, the fill was dropped (null).
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -1116,7 +1116,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Shape with rot=45deg, flipH=1, fill = schemeClr accent1 with
     // lumMod=60000 + lumOff=40000 (PowerPoint's "Accent 1, Lighter 60%").
     // Without modifiers the fill would be raw accent1 — too dark.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -1256,7 +1256,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Pre-wave-6 the importer collapsed both paras to first-run style.
     // After wave 6, richText.rich holds an IDocumentData with separate
     // textRuns per <a:r> and per-paragraph horizontalAlign.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -1365,7 +1365,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     //   2) <a:buChar char="•"/> bulleted, level 1 (nested)
     //   3) <a:buAutoNum type="arabicPeriod"/> numbered, level 0
     //      with <a:lnSpc>150%, marL=720000 (75px), indent=-360000 (-37.5px)
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -1458,7 +1458,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Shape with <a:gradFill> (0% red → 100% blue) → degraded to first
     // stop = red. Outline uses <a:prstDash val="dash"/> → DASHED (4).
     // Text frame has a paragraph with spcBef 12pt + spcAft 6pt.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -1560,7 +1560,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
   test('pptx import wave 7b — bodyPr insets + vertical anchor (C10 + C11)', async ({ page }) => {
     // Text frame with custom bodyPr insets and anchor="ctr".
     // lIns/tIns/rIns/bIns are EMU; anchor=ctr → VerticalAlign.MIDDLE (2).
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -1643,7 +1643,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // image.cropProperties offsets (normalised 0..1).
     const PNG_1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -1746,7 +1746,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     //      stroke renders instead of being clipped to a zero-height bbox.
     // B4 — `<a:ea typeface="SimSun"/>` without `<a:latin>` populates the
     //      element's ff (CJK / complex-script fallback chain).
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -1860,7 +1860,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // size — beneath authored content (which starts at z=1).
     const PNG_1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -1942,7 +1942,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     //  • E2 — <p:pic> with <a:blip r:link="rId2"/>; rels rId2 →
     //         "https://example.com/img.png" passes through to
     //         imageProperties.contentUrl directly (no fetch).
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -2046,7 +2046,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     //         Slide 2 omits @show → no slideProperties block.
     //  • C14 — slide 2's text frame has <a:bodyPr wrap="none"/> → renderConfig.wrapStrategy
     //          equals WrapStrategy.OVERFLOW (1).
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -2145,7 +2145,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     //          paragraphStyle.direction === TextDirection.RIGHT_TO_LEFT (2).
     const PNG_1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -2265,7 +2265,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // <a:rPr><a:hlinkClick r:id="rId5"/></a:rPr> → ICustomRange on the
     // text frame's IDocumentBody.customRanges with rangeType=HYPERLINK (0)
     // and properties.url set to the rels Target.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -2354,7 +2354,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // <a:bodyPr rot="5400000"> (90°) → documentStyle.renderConfig.centerAngle = 90.
     // <a:bodyPr><a:normAutofit fontScale="80000"/></a:bodyPr> shrinks the
     // run's fs by 0.8 at import: <a:rPr sz="2400"/> (24 pt) → 19.2 pt.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -2445,7 +2445,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     //  • D16 — <a:ln cap="rnd"> → outline.cap = 'rnd'.
     //  • I1/I2/J1 — every layout/master/theme part is harvested from the
     //    zip into ISlideData.resources[].data under name CASUAL_SLIDES_PPTX_RAW.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -2564,7 +2564,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // existing `readColor` helper handles every colour-choice child
     // (srgbClr / schemeClr / prstClr / sysClr) uniformly, so no per-
     // variant test is needed here.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -2641,7 +2641,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     //  • D17 — line shape with <a:ln><a:headEnd type="triangle"/><a:tailEnd type="arrow"/></a:ln> → outline.headEnd/tailEnd.
     //  • D18 — shape with <a:effectLst><a:outerShdw blurRad="50800" dist="38100" dir="2700000"><a:srgbClr val="000000"/></a:outerShdw> → effectLst.outerShdw.
     //  • D19 — same shape adds <a:glow rad="63500"><a:srgbClr val="FF0000"/></a:glow> → effectLst.glow.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -2776,7 +2776,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // categories. After re-exporting, the produced zip should contain
     // them at their original paths (since PptxGenJS doesn't generate
     // these categories, restorePassthrough can safely inject them back).
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -2875,7 +2875,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // ppt/embeddings/ (chart-data xlsx / OLE) need base64 encoding to
     // ride the JSON-stringified resources slot. restorePassthrough
     // decodes back to bytes before writing them to the exported zip.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -2973,7 +2973,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     //    full row × cell structure including the colSpan.
     //  • Chart element (type 7 = PageElementType.CHART) holds the rId
     //    reference, and the chart XML is captured in CASUAL_SLIDES_PPTX_RAW.charts.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -3112,7 +3112,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     //       2. type="body" idx="1" — should pick up the minor font
     // After J3, parseRunProps falls back to the theme's font scheme; before,
     // both runs landed with no ff and rendered in the default browser font.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -3264,7 +3264,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
   test('pptx import wave 8c — deck metadata from docProps/core.xml (K1)', async ({ page }) => {
     // Hand-roll a deck with docProps/core.xml carrying dc:title. After
     // import, snapshot.title comes from the XML, not from the filename.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -3334,7 +3334,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Hand-roll a deck with docProps/custom.xml. After import, the
     // resources passthrough carries the bytes; after re-export, the
     // produced zip still contains the original docProps/custom.xml.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -3420,7 +3420,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Before K3, runs landed without any style. With K3, the deck-level
     // `<p:defaultTextStyle><p:lvl1pPr><a:defRPr sz="2200" b="1">...`
     // supplies the lowest-priority defaults.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -3508,7 +3508,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // and `<p:ph type="sldNum">` (with text "‹#›"). After import, both
     // should land as TEXT elements with the layout/master-supplied
     // geometry, so the renderer doesn't drop the footer / slide number.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -3633,7 +3633,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Master declares both ftr and sldNum service placeholders. Slide
     // sets `<p:hf sldNum="0"/>`, opting out of the page number. After
     // import, the footer survives but the slide-number is skipped.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -3750,7 +3750,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // entry). Theme's bgFillStyleLst[1] is <a:solidFill><a:srgbClr
     // val="3366CC"/>. After import the slide's pageBackgroundFill
     // should be #3366CC.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -3887,7 +3887,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // After import the shape's shapeProperties.shapeBackgroundFill
     // keeps the first-stop hex (existing degradation) AND a new
     // gradientFill payload carries kind + angle + stops.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -3979,7 +3979,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // is a <c:barChart> with categories [A, B, C] and series Sales
     // [10, 20, 30]. After import, the CHART element's `chart` payload
     // carries chartType='bar' + categories + series.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -4086,7 +4086,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     //   <a:effectLst><a:outerShdw blurRad="50800" dist="38100"><a:srgbClr val="000000"/></a:outerShdw></a:effectLst>
     // After import, imageProperties carries brightness, contrast,
     // grayscale, duotone, and effectLst.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -4189,7 +4189,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Slide carries a freeform <a:custGeom> path (triangle, normalised
     // to fractional coords). After import the shape's
     // shapeProperties.pathData should hold the SVG-equivalent string.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -4281,7 +4281,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // Build a deck with a non-text SHAPE (ellipse, green fill, blue
     // outline). Export → re-import → assert prstGeom + fill survive.
     // Pre-patch, every shape came back as a white rect.
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
@@ -4355,7 +4355,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
   });
 
   test('Toolbar → Layout dropdown inserts slide with template placeholders', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
       null,
@@ -4429,7 +4429,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
   });
 
   test('Help → About shows version + license + dependencies', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
       null,
@@ -4459,7 +4459,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
   });
 
   test('File → Properties shows deck metadata', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
       null,
@@ -4485,7 +4485,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
     // 1. Save the default deck, 2. Open it (writes to IndexedDB),
     // 3. Reload (clears in-memory state but not IDB), 4. File → Recent
     // files, 5. Click the entry → status reads "Loaded · N slides".
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => Array.isArray((window as { __capturedMutations?: unknown }).__capturedMutations),
       null,
@@ -4552,7 +4552,7 @@ test.describe('Casual Slides — P0 spike smoke', () => {
   });
 
   test('rev-tracking patch is live (Gap 1)', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(() => typeof (window as { __slideRevProbe?: unknown }).__slideRevProbe === 'function', null, { timeout: 15_000 });
 
     // Pre-patch SlideDataModel.getRev() returned 0 forever and incrementRev

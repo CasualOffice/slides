@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ISlideData, SlideDataModel } from '@univerjs/slides';
 import { ICommandService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import type { Univer } from '@univerjs/core';
@@ -30,6 +30,7 @@ import { useCollabBridge } from './collab/CollabProvider';
 import { addRecent } from './storage/recent-files';
 import { type AutosaveRecord, clearAutosave, loadAutosave, saveAutosave } from './storage/autosave';
 import { AutosaveRestoreBanner } from './shell/AutosaveRestoreBanner';
+import { WelcomePage } from './shell/WelcomePage';
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -95,12 +96,17 @@ export function App() {
   // unmount + remount UniverSlide, which spins up a fresh Univer instance
   // against the new snapshot. swapDeck via disposeUnit + createUnit
   // doesn't reliably rebind the canvas to our container; remount does.
-  const [snapshot, setSnapshot] = useState<ISlideData>(DEFAULT_SLIDE_DATA);
+  const [snapshot, setSnapshot] = useState<ISlideData>(() => structuredClone(DEFAULT_SLIDE_DATA));
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
   const [saving, setSaving] = useState(false);
   const [opening, setOpening] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [slideshowOpen, setSlideshowOpen] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(() => window.location.hash !== '#editor');
+  const welcomeOpenRef = useRef(welcomeOpen);
+  welcomeOpenRef.current = welcomeOpen;
   // Speaker notes default to hidden — most users never write them on a
   // fresh deck. Once the user enables them, we persist via localStorage
   // so reload restores the preference. Key is intentionally narrow
@@ -127,6 +133,8 @@ export function App() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [pageSetupOpen, setPageSetupOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importRequestRef = useRef(0);
+  const deckChosenRef = useRef(false);
 
   // Active slide index — driven by Univer's `SlideDataModel.activePage$`.
   // Falls back to 0 until the model is wired (first paint).
@@ -143,6 +151,38 @@ export function App() {
   // cleared on a successful Save. Listens to `onMutationExecutedForCollab`
   // — same hook the collab bridge uses, so it fires for every dirty op.
   const [dirty, setDirty] = useState(false);
+  const [autosaveRevision, setAutosaveRevision] = useState(0);
+  const markDirty = useCallback(() => {
+    deckChosenRef.current = true;
+    setDirty(true);
+    setAutosaveRevision((revision) => revision + 1);
+  }, []);
+
+  useEffect(() => {
+    const syncWelcomeFromLocation = () => {
+      const showWelcome = window.location.hash !== '#editor';
+      if (showWelcome === welcomeOpenRef.current) return;
+      if (showWelcome && dirty) {
+        if (!window.confirm('You have unsaved changes. Leave this presentation?')) {
+          window.history.pushState(null, '', '#editor');
+          welcomeOpenRef.current = false;
+          setWelcomeOpen(false);
+          return;
+        }
+        const liveSnapshot = getCurrentSnapshot(snapshotRef.current);
+        setSnapshot(liveSnapshot);
+        void saveAutosave(liveSnapshot, deckTitle(liveSnapshot));
+      }
+      welcomeOpenRef.current = showWelcome;
+      setWelcomeOpen(showWelcome);
+    };
+    window.addEventListener('popstate', syncWelcomeFromLocation);
+    window.addEventListener('hashchange', syncWelcomeFromLocation);
+    return () => {
+      window.removeEventListener('popstate', syncWelcomeFromLocation);
+      window.removeEventListener('hashchange', syncWelcomeFromLocation);
+    };
+  }, [dirty]);
 
   // === DRAG-AND-DROP IMPORT ===
   // Tracks whether a file is currently hovered over the workspace so we
@@ -174,7 +214,7 @@ export function App() {
       if (!record) return;
       // Don't pester the user if they already opened a different deck
       // before the IDB read returned (race on slow disks).
-      if (snapshot.id !== DEFAULT_SLIDE_DATA.id) return;
+      if (deckChosenRef.current || snapshotRef.current.id !== DEFAULT_SLIDE_DATA.id) return;
       setAutosaveOffer(record);
     })();
     // Intentionally only on mount — re-checking after every snapshot
@@ -206,10 +246,11 @@ export function App() {
   useEffect(() => {
     if (!dirty) return;
     const handle = window.setTimeout(() => {
-      void saveAutosave(getCurrentSnapshot(snapshot), fileName);
+      const liveSnapshot = getCurrentSnapshot(snapshotRef.current);
+      void saveAutosave(liveSnapshot, deckTitle(liveSnapshot));
     }, 30_000);
     return () => window.clearTimeout(handle);
-  }, [dirty, snapshot, fileName]);
+  }, [dirty, autosaveRevision]);
 
   // beforeunload guard — block the tab close / refresh if the user has
   // unsaved work. Browsers ignore the returnValue text these days and
@@ -294,7 +335,7 @@ export function App() {
         // until the upstream fork-patch lands.
         const cs = univer.__getInjector().get(ICommandService);
         const m1 = cs.onMutationExecutedForCollab(() => {
-          if (!disposed) setDirty(true);
+          if (!disposed) markDirty();
         });
         const m2 = cs.onCommandExecuted((info) => {
           if (disposed) return;
@@ -310,7 +351,7 @@ export function App() {
           ) {
             return;
           }
-          setDirty(true);
+          markDirty();
         });
         mutationDisposer = {
           dispose: () => {
@@ -333,7 +374,7 @@ export function App() {
       unsub?.();
       mutationDisposer?.dispose?.();
     };
-  }, [snapshot.id]);
+  }, [snapshot.id, markDirty]);
 
   // Re-apply the zoom whenever it changes OR the deck remounts. The
   // SlideRenderController centers + sets scale=1 on each mount, so we
@@ -832,6 +873,39 @@ export function App() {
     fileInputRef.current?.click();
   }
 
+  function enterEditor() {
+    deckChosenRef.current = true;
+    if (window.location.hash !== '#editor') {
+      window.history.pushState(null, '', '#editor');
+    }
+    welcomeOpenRef.current = false;
+    setWelcomeOpen(false);
+  }
+
+  function handleNewPresentation() {
+    importRequestRef.current += 1;
+    setSnapshot(structuredClone(DEFAULT_SLIDE_DATA));
+    setOpening(false);
+    setDirty(false);
+    setError(null);
+    setStatus(null);
+    setAutosaveOffer(null);
+    enterEditor();
+  }
+
+  function handleRestoreAutosave(record: AutosaveRecord) {
+    importRequestRef.current += 1;
+    setOpening(false);
+    const restored = {
+      ...record.snapshot,
+      id: `${record.snapshot.id || 'restored'}-restored-${Date.now().toString(36)}`,
+    };
+    setSnapshot(restored);
+    markDirty();
+    setAutosaveOffer(null);
+    enterEditor();
+  }
+
   // Shared import path. `persist` controls whether we save the bytes to
   // IndexedDB — true for disk opens, also true for recent-list opens so
   // openedAt refreshes (addRecent de-dups on name+size).
@@ -840,21 +914,28 @@ export function App() {
   // input ArrayBuffer to a worker, which detaches it. Snapshot a copy
   // BEFORE handing the original to the importer so the IDB persist (or
   // any other consumer) gets durable bytes.
-  async function importBuffer(buffer: ArrayBuffer, name: string, persist: boolean) {
+  async function importBuffer(
+    source: ArrayBuffer | (() => Promise<ArrayBuffer>),
+    name: string,
+    persist: boolean,
+  ) {
+    const requestId = ++importRequestRef.current;
     setError(null);
     setStatus(null);
     setOpening(true);
-    const persistCopy = persist ? buffer.slice(0) : null;
     try {
+      const buffer = typeof source === 'function' ? await source() : source;
+      if (requestId !== importRequestRef.current) return;
+      const persistCopy = persist ? buffer.slice(0) : null;
       const imported = await getPptxClient().import(buffer, name);
+      if (requestId !== importRequestRef.current) return;
       const pageCount = imported.body?.pageOrder.length ?? 0;
       setSnapshot(imported);
+      enterEditor();
+      setRecentOpen(false);
       // Newly-imported deck is clean by definition.
       setDirty(false);
-      // The deck the user just opened replaces whatever crash-recovery
-      // record may have been pending. If they want both, they'll save
-      // the new one explicitly.
-      void clearAutosave();
+      // Retain prior crash recovery until explicit dismissal or export.
       setAutosaveOffer(null);
       const w = window as unknown as { __pptxImportedSnapshot?: unknown };
       w.__pptxImportedSnapshot = imported;
@@ -870,11 +951,14 @@ export function App() {
           /* swallow — failure is "won't show in recent", not data loss */
         }
       }
+      if (requestId !== importRequestRef.current) return;
       setStatus(`Loaded · ${pageCount} slide${pageCount === 1 ? '' : 's'}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (requestId === importRequestRef.current) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
-      setOpening(false);
+      if (requestId === importRequestRef.current) setOpening(false);
     }
   }
 
@@ -882,8 +966,7 @@ export function App() {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    const buffer = await file.arrayBuffer();
-    await importBuffer(buffer, file.name, /* persist */ true);
+    await importBuffer(() => file.arrayBuffer(), file.name, /* persist */ true);
   }
 
   async function handleOpenRecent(buffer: ArrayBuffer, name: string) {
@@ -896,7 +979,7 @@ export function App() {
     setSnapshot({ ...snapshot, title: next });
     // Filename edits are saved with the next export — mark dirty so the
     // indicator reflects the pending change.
-    setDirty(true);
+    markDirty();
   }
 
   // Page setup. Univer caches the slide rect at mount, so changing pageSize
@@ -966,7 +1049,7 @@ export function App() {
       id: `${live.id || 'deck'}-${Date.now().toString(36)}`,
       pageSize: { ...live.pageSize, width, height },
     });
-    setDirty(true);
+    markDirty();
   }
 
   // File → Make a copy. Clones the live deck snapshot under a fresh id +
@@ -979,7 +1062,7 @@ export function App() {
     cloned.id = `${live.id || 'deck'}-copy-${Date.now().toString(36)}`;
     cloned.title = `${(live.title || 'Untitled deck').trim()} (copy)`;
     setSnapshot(cloned);
-    setDirty(true);
+    markDirty();
     setStatus(`Created a copy · ${cloned.title}`);
   }
 
@@ -1063,8 +1146,7 @@ export function App() {
       file.type ===
         'application/vnd.openxmlformats-officedocument.presentationml.presentation';
     if (isPptx) {
-      const buffer = await file.arrayBuffer();
-      await importBuffer(buffer, file.name, /* persist */ true);
+      await importBuffer(() => file.arrayBuffer(), file.name, /* persist */ true);
       return;
     }
     // Drag-drop images insert directly onto the active slide. PowerPoint
@@ -1076,6 +1158,50 @@ export function App() {
       return;
     }
     setError('Drop a .pptx file or an image');
+  }
+
+  const autosaveBanner = (
+    <AutosaveRestoreBanner
+      offer={autosaveOffer}
+      onRestore={handleRestoreAutosave}
+      onDismiss={() => {
+        void clearAutosave();
+        setAutosaveOffer(null);
+      }}
+    />
+  );
+
+  if (welcomeOpen) {
+    return (
+      <>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+          style={{ display: 'none' }}
+          onChange={handleOpenPptx}
+        />
+        <WelcomePage
+          onNew={handleNewPresentation}
+          onOpen={handleOpenClick}
+          onOpenRecent={() => setRecentOpen(true)}
+          opening={opening}
+          error={error}
+        />
+        <Suspense fallback={null}>
+          {recentOpen && (
+            <RecentFilesDialog
+              open={recentOpen}
+              onClose={() => setRecentOpen(false)}
+              onOpen={(bytes, name) => {
+                void handleOpenRecent(bytes, name);
+              }}
+            />
+          )}
+        </Suspense>
+        {autosaveBanner}
+      </>
+    );
   }
 
   return (
@@ -1187,31 +1313,7 @@ export function App() {
         )}
       </Suspense>
       <SlideContextMenu />
-      <AutosaveRestoreBanner
-        offer={autosaveOffer}
-        onRestore={(record) => {
-          // UniverSlide is keyed on snapshot.id; the autosaved snapshot
-          // typically still carries the default-deck id ('untitled-deck'),
-          // identical to the current React state's id. Without a fresh id
-          // React skips the remount and the Univer model never receives the
-          // restored body — visible as "Restore" click + no change. Mint a
-          // session-unique id so the key flips and UniverSlide remounts
-          // against the restored snapshot.
-          const restored = {
-            ...record.snapshot,
-            id: `${record.snapshot.id || 'restored'}-restored-${Date.now().toString(36)}`,
-          };
-          setSnapshot(restored);
-          // Restored deck is unsaved — mark dirty so the next Save
-          // promotes it to a real .pptx on disk.
-          setDirty(true);
-          setAutosaveOffer(null);
-        }}
-        onDismiss={() => {
-          void clearAutosave();
-          setAutosaveOffer(null);
-        }}
-      />
+      {autosaveBanner}
     </>
   );
 }

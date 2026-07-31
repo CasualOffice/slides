@@ -46,29 +46,40 @@ function awaitRequest<T>(req: IDBRequest<T>): Promise<T> {
   });
 }
 
-export async function saveAutosave(snapshot: ISlideData, fileName: string): Promise<void> {
-  try {
-    const db = await openDb();
-    const row: AutosaveRecord = {
-      key: KEY,
-      // Structured-clone the snapshot so we don't accidentally store a
-      // live reference Univer mutates afterwards.
-      snapshot: JSON.parse(JSON.stringify(snapshot)) as ISlideData,
-      fileName,
-      savedAt: Date.now(),
-    };
-    await awaitRequest(tx(db, 'readwrite').put(row));
-    db.close();
-  } catch (e) {
-    // Quota / private-mode failures are non-fatal. Surface to the
-    // console so a dev can see why the recovery banner won't appear,
-    // but don't tell the user — the foreground save path is untouched.
-    // eslint-disable-next-line no-console
-    console.warn('[autosave] save failed', e);
-  }
+let pendingWrite: Promise<void> = Promise.resolve();
+
+function serializeWrite(operation: () => Promise<void>): Promise<void> {
+  const next = pendingWrite.then(operation);
+  pendingWrite = next.catch(() => undefined);
+  return next;
+}
+
+export function saveAutosave(snapshot: ISlideData, fileName: string): Promise<void> {
+  const row: AutosaveRecord = {
+    key: KEY,
+    // Clone at invocation time; Univer may mutate the live object while
+    // an earlier IndexedDB write is still queued.
+    snapshot: JSON.parse(JSON.stringify(snapshot)) as ISlideData,
+    fileName,
+    savedAt: Date.now(),
+  };
+  return serializeWrite(async () => {
+    try {
+      const db = await openDb();
+      await awaitRequest(tx(db, 'readwrite').put(row));
+      db.close();
+    } catch (e) {
+      // Quota / private-mode failures are non-fatal. Surface to the
+      // console so a dev can see why the recovery banner won't appear,
+      // but don't tell the user — the foreground save path is untouched.
+      // eslint-disable-next-line no-console
+      console.warn('[autosave] save failed', e);
+    }
+  });
 }
 
 export async function loadAutosave(): Promise<AutosaveRecord | null> {
+  await pendingWrite;
   try {
     const db = await openDb();
     const row = await awaitRequest(tx(db, 'readonly').get(KEY));
@@ -81,13 +92,15 @@ export async function loadAutosave(): Promise<AutosaveRecord | null> {
   }
 }
 
-export async function clearAutosave(): Promise<void> {
-  try {
-    const db = await openDb();
-    await awaitRequest(tx(db, 'readwrite').delete(KEY));
-    db.close();
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[autosave] clear failed', e);
-  }
+export function clearAutosave(): Promise<void> {
+  return serializeWrite(async () => {
+    try {
+      const db = await openDb();
+      await awaitRequest(tx(db, 'readwrite').delete(KEY));
+      db.close();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[autosave] clear failed', e);
+    }
+  });
 }

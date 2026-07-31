@@ -108,7 +108,7 @@ for (const fixtureName of fixtures) {
       console.log(`Ground-truth generation failed for ${fixtureName}: ${(e as Error).message}`);
     }
 
-    await page.goto('/');
+    await page.goto('/#editor');
     await page.waitForFunction(
       () => typeof (window as { __casualSlides_getPptxClient?: unknown }).__casualSlides_getPptxClient === 'function',
       null,
