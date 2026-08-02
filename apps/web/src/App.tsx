@@ -893,7 +893,11 @@ export function App() {
   }
 
   function handleFileNameChange(next: string) {
-    setSnapshot({ ...snapshot, title: next });
+    const w = window as unknown as { univer?: Univer };
+    const instances = w.univer?.__getInjector().get(IUniverInstanceService);
+    const model = instances?.getCurrentUnitOfType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+    model?.setName(next);
+    setSnapshot((current) => ({ ...current, title: next }));
     // Filename edits are saved with the next export — mark dirty so the
     // indicator reflects the pending change.
     setDirty(true);
