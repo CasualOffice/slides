@@ -10,22 +10,19 @@ const base = process.env.PAGES_BASE ?? '/';
 // The engine is consumed from source via the univer-revamp submodule, and its
 // DI (@wendellhu/redi) uses legacy TS decorators + property injection. The old
 // npm packages shipped these already compiled away; the source does not, so
-// esbuild (Vite's transform + dep pre-bundle) must allow them in dev.
-const decoratorTsconfig = {
-  compilerOptions: {
-    experimentalDecorators: true,
-    useDefineForClassFields: false,
-  },
-};
+// Vite's Oxc transform must preserve the legacy decorator/class-field semantics.
 
 export default defineConfig({
   base,
-  esbuild: {
-    tsconfigRaw: decoratorTsconfig as unknown as string,
-  },
-  optimizeDeps: {
-    esbuildOptions: {
-      tsconfigRaw: decoratorTsconfig as unknown as string,
+  oxc: {
+    decorator: {
+      legacy: true,
+    },
+    typescript: {
+      removeClassFieldsWithoutInitializer: true,
+    },
+    assumptions: {
+      setPublicClassFields: true,
     },
   },
   // Inject the package.json version into the bundle as a compile-time
