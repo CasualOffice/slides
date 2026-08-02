@@ -15,7 +15,7 @@ test('prod build mounts Univer without TypeError', async ({ page }) => {
     if (msg.type() === 'error') errors.push(`console.error: ${msg.text()}`);
   });
 
-  await page.goto('/');
+  await page.goto('/#editor');
   await page.waitForTimeout(2000);
 
   const fatal = errors.filter((e) => !e.includes('fonts.googleapis') && !e.includes('favicon'));

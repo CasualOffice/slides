@@ -150,7 +150,7 @@ export function RecentFilesDialog({ open, onClose, onOpen }: RecentFilesDialogPr
         )}
 
         {entries && entries.length === 0 && !error && (
-          <p className="cs-recent__empty">
+          <p className="cs-recent__empty" role="status" aria-live="polite">
             No recent decks yet. Open a .pptx and it'll appear here.
           </p>
         )}

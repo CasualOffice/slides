@@ -133,6 +133,82 @@ button:disabled { cursor: not-allowed; }
    wide actions cluster can't bleed past the right edge. */
 .cs-titlebar > * { min-width: 0; }
 
+.cs-welcome {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  overflow-y: auto;
+  background: var(--cs-bg);
+}
+
+.cs-welcome__content {
+  width: min(900px, 100%);
+  display: grid;
+  gap: 10px;
+}
+
+.cs-welcome__brand,
+.cs-welcome h1,
+.cs-welcome h2 {
+  margin: 0;
+  color: var(--cs-text);
+}
+
+.cs-welcome__brand {
+  color: var(--cs-text-mute);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cs-welcome h1 { font-size: 28px; }
+
+.cs-welcome__actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.cs-welcome__card {
+  min-height: 136px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 20px;
+  color: var(--cs-text);
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border);
+  border-radius: 8px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cs-welcome__card:hover { background: var(--cs-hover); border-color: var(--cs-border); }
+.cs-welcome__card:focus-visible { outline: 2px solid var(--cs-focus); outline-offset: 2px; }
+.cs-welcome__card:disabled { cursor: progress; opacity: var(--cs-disabled-opacity); }
+.cs-welcome__card strong { font-size: 15px; }
+.cs-welcome__card span { color: var(--cs-text-mute); font-size: 12px; line-height: 1.4; }
+
+.cs-welcome__feedback {
+  margin: 6px 0 0;
+  color: var(--cs-text-mute);
+  font-size: 12px;
+}
+
+.cs-welcome__feedback--error { color: var(--cs-error); }
+
+@media (max-width: 680px) {
+  .cs-welcome__actions { grid-template-columns: 1fr; }
+}
+
+@media (max-height: 600px) {
+  .cs-welcome { place-items: start center; }
+}
+
 .cs-titlebar__brand {
   display: inline-flex;
   align-items: center;
